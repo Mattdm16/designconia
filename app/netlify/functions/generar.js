@@ -4,7 +4,7 @@
 // (ver app/scripts/inline-asistentes.js): lo versionado en git es lo que se ejecuta.
 import { BASE_COMUN, ASISTENTES } from "../shared/asistentes.bundle.js";
 
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
 const MAX_ANEXO_BYTES = 4 * 1024 * 1024; // 4 MB por archivo (límite efectivo Netlify con base64)
 const MAX_TOTAL_BYTES = 5 * 1024 * 1024;
 

@@ -22,7 +22,7 @@ netlify dev          # sirve frontend + functions con las env de Netlify
    (base `app`, publish `dist`, functions `netlify/functions`).
 2. En **Site settings → Environment variables** define:
    - `GEMINI_API_KEY` (obligatoria; de Google AI Studio)
-   - `GEMINI_MODEL` (opcional; por defecto `gemini-2.5-flash`)
+   - `GEMINI_MODEL` (opcional; por defecto `gemini-3.6-flash`)
 3. Deploy. La app llama a `/.netlify/functions/generar`.
 
 ## Notas
