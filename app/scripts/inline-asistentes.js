@@ -17,7 +17,7 @@ export const ASISTENTES = {
 };
 `;
 
-const outDir = join(repoRoot, "app", "netlify", "functions");
+const outDir = join(repoRoot, "app", "netlify", "shared");
 mkdirSync(outDir, { recursive: true });
 writeFileSync(join(outDir, "asistentes.bundle.js"), bundle);
 console.log("asistentes.bundle.js generado");

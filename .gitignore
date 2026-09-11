@@ -3,7 +3,7 @@ node_modules/
 
 # Build (se regenera en cada deploy)
 app/dist/
-app/netlify/functions/asistentes.bundle.js
+app/netlify/shared/asistentes.bundle.js
 
 # Netlify local
 .netlify/

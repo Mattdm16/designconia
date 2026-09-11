@@ -2,7 +2,7 @@
 // La clave (GEMINI_API_KEY) vive solo en variables de entorno del servidor.
 // Las instrucciones se incrustan en tiempo de construcción desde asistentes/*.md
 // (ver app/scripts/inline-asistentes.js): lo versionado en git es lo que se ejecuta.
-import { BASE_COMUN, ASISTENTES } from "./asistentes.bundle.js";
+import { BASE_COMUN, ASISTENTES } from "../shared/asistentes.bundle.js";
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const MAX_ANEXO_BYTES = 4 * 1024 * 1024; // 4 MB por archivo (límite efectivo Netlify con base64)
