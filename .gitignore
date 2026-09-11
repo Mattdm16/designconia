@@ -1,0 +1,13 @@
+# Dependencias
+node_modules/
+
+# Build (se regenera en cada deploy)
+app/dist/
+app/netlify/functions/asistentes.bundle.js
+
+# Netlify local
+.netlify/
+
+# Secretos locales (la key real vive en Netlify, nunca aquí)
+.env
+.env.local

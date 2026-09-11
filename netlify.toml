@@ -1,0 +1,8 @@
+# Netlify: la app vive en app/
+[build]
+  base = "app"
+  publish = "dist"
+  command = "npm run build"
+
+[functions]
+  directory = "netlify/functions"

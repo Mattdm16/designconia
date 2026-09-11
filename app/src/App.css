@@ -1,0 +1,153 @@
+.wizard {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 16px;
+  text-align: left;
+}
+
+.wizard header {
+  margin-bottom: 16px;
+}
+
+.wizard header h1 {
+  margin: 0 0 4px;
+}
+
+.wizard header p {
+  margin: 0;
+  color: var(--text);
+}
+
+.pasos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.pasos button {
+  flex: 1 1 auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--social-bg);
+  color: var(--text-h);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.pasos button.activo {
+  background: var(--accent-bg);
+  border: 2px solid var(--accent-border);
+}
+
+.wizard section h2 {
+  margin-top: 0;
+}
+
+.wizard label {
+  display: block;
+  margin: 12px 0;
+  font-weight: 600;
+  color: var(--text-h);
+  font-size: 15px;
+}
+
+.wizard input,
+.wizard select,
+.wizard textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+  padding: 10px;
+  font: inherit;
+  font-weight: 400;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.wizard textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.wizard textarea.resultado {
+  min-height: 320px;
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 150%;
+}
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.acciones button {
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.acciones button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.acciones button.peligro {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.error {
+  background: rgba(220, 38, 38, 0.1);
+  border: 1px solid rgba(220, 38, 38, 0.4);
+  color: #dc2626;
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+.nota {
+  font-size: 15px;
+}
+
+.wizard ul {
+  font-size: 14px;
+}
+
+@media (max-width: 640px) {
+  .wizard {
+    padding: 12px;
+  }
+
+  .pasos button {
+    flex: 1 1 calc(50% - 8px);
+    font-size: 13px;
+  }
+}
+
+@media print {
+  .pasos,
+  .acciones,
+  .wizard header p {
+    display: none;
+  }
+
+  .wizard input,
+  .wizard select,
+  .wizard textarea {
+    border: none;
+    padding: 0;
+  }
+}
