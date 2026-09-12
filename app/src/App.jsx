@@ -1,733 +1,855 @@
-import { useEffect, useState, useRef, useCallback } from "react";
-import Markdown from "react-markdown";
+import { useState, useEffect, useRef, useCallback } from 'react'
+import Markdown from 'react-markdown'
 import {
-  Bold,
-  Italic,
+  Building2,
+  GraduationCap,
+  RotateCcw,
+  Cloud,
+  Sparkles,
+  Route,
+  ClipboardCheck,
+  FileText,
+  Copy,
+  Download,
+  Upload,
+  Info,
+  ArrowRight,
+  ArrowLeft,
   List,
-  Table,
-  Heading2,
-  Eye,
-  Pencil,
-  ChevronDown,
-} from "lucide-react";
-import "./App.css";
+  Code,
+  ExternalLink,
+  Paperclip,
+  LayoutDashboard,
+  Pen,
+  Maximize2,
+  Trash2
+} from 'lucide-react'
+import './App.css'
 
-const LS_KEY = "diseno-curricular-ia-v1";
-const LS_TEMA = "diseno-curricular-ia-tema";
-const PASOS = [
-  "Datos Básicos",
-  "Programa y Mapa",
-  "Secuencias",
-  "Instrumentos",
-  "Coherencia y Exportar",
-];
-const TIPS = [
-  "Completa la ficha y anexa tu programa oficial si lo tienes. Todo se guarda en tu navegador.",
-  "Genera el programa y edítalo: lo que valides aquí alimenta los siguientes pasos.",
-  "Genera una subcompetencia por vez. Las horas de la secuencia deben sumar las del cuadro.",
-  "Cada instrumento debe valorar las evidencias declaradas y cuadrar con el % del cuadro.",
-  "Revisa horas y porcentajes antes de exportar. Imprimir genera un PDF limpio.",
-];
-const MAX_ANEXO_BYTES = 4 * 1024 * 1024;
+const APP_NAME = 'Diseño Curricular con IA'
+const DEFAULT_ASSISTANT_KEY = 'planeador-unidad'
 
-const inicial = {
-  unidad: "",
-  semestre: "",
-  hpc: "",
-  hps: "",
-  modo: "desde-cero",
-  programa: "",
-  secuencias: "",
-  instrumentos: "",
-};
+const TABS = [
+  { key: 1, label: 'Básicos', tag: null },
+  { key: 2, label: 'Prog. & Mapa', tag: { text: 'Núcleo Curricular', color: 'green' } },
+  { key: 3, label: 'Secuencias', tag: { text: 'Sesiones de Clase', color: 'blue' } },
+  { key: 4, label: 'Instrumentos', tag: { text: 'Evaluación', color: 'purple' } },
+  { key: 5, label: 'Exportar', tag: { text: 'Listo', color: 'amber' } }
+]
 
-function cargar() {
-  try {
-    return { ...inicial, ...JSON.parse(localStorage.getItem(LS_KEY) || "{}") };
-  } catch {
-    return { ...inicial };
-  }
-}
+const SEMESTRES = [1, 2, 3, 4, 5, 6, 7, 8]
 
-function leerArchivo(file) {
-  return new Promise((resolve, reject) => {
-    if (file.size > MAX_ANEXO_BYTES) {
-      reject(new Error(`${file.name} supera los 4 MB`));
-      return;
+function App() {
+  const [step, setStep] = useState(1)
+  const [asistente, setAsistente] = useState(DEFAULT_ASSISTANT_KEY)
+  const [nombreUnidad, setNombreUnidad] = useState('')
+  const [carpeta, setCarpeta] = useState('')
+  const [competencias, setCompetencias] = useState('')
+  const [archivos, setArchivos] = useState([])
+  const [resultados, setResultados] = useState({ programa: '', secuencias: '', instrumentos: '' })
+  const [error, setError] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [darkMode, setDarkMode] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [previewAssistant, setPreviewAssistant] = useState(false)
+  const fileInputRef = useRef(null)
+
+  // Canvas state
+  const [canvasContent, setCanvasContent] = useState(null)
+  const [canvasZoom, setCanvasZoom] = useState(100)
+
+  // Load saved project
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('proyecto_curricular')
+      if (saved) {
+        const data = JSON.parse(saved)
+        setAsistente(data.asistente || DEFAULT_ASSISTANT_KEY)
+        setNombreUnidad(data.nombreUnidad || '')
+        setCarpeta(data.carpeta || '')
+        setCompetencias(data.competencias || '')
+        setResultados(data.resultados || { programa: '', secuencias: '', instrumentos: '' })
+      }
+    } catch { /* ignore */ }
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+    setDarkMode(prefersDark)
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', darkMode)
+  }, [darkMode])
+
+  // Persist on change
+  useEffect(() => {
+    const data = { asistente, nombreUnidad, carpeta, competencias, resultados }
+    localStorage.setItem('proyecto_curricular', JSON.stringify(data))
+  }, [asistente, nombreUnidad, carpeta, competencias, resultados])
+
+  const handleFiles = useCallback((e) => {
+    const selected = Array.from(e.target.files || [])
+    const valid = selected.filter(f => {
+      if (f.size > 4 * 1024 * 1024) {
+        setError(`${f.name}: excede 4 MB`)
+        return false
+      }
+      const ext = f.name.split('.').pop().toLowerCase()
+      return ['pdf', 'docx', 'png', 'jpg', 'jpeg', 'webp'].includes(ext)
+    })
+    setArchivos(prev => [...prev, ...valid])
+  }, [])
+
+  const removeFile = useCallback((idx) => {
+    setArchivos(prev => prev.filter((_, i) => i !== idx))
+  }, [])
+
+  const saveProject = useCallback(async () => {
+    setSaving(true)
+    setSaved(false)
+    try {
+      const data = { asistente, nombreUnidad, carpeta, competencias, resultados }
+      localStorage.setItem('proyecto_curricular', JSON.stringify(data))
+      await new Promise(r => setTimeout(r, 600))
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } finally {
+      setSaving(false)
     }
-    const r = new FileReader();
-    r.onload = () => {
-      const [, base64] = String(r.result).split(",");
-      resolve({
-        nombre: file.name,
-        mime: file.type || "application/octet-stream",
-        base64,
-      });
-    };
-    r.onerror = () => reject(new Error(`No se pudo leer ${file.name}`));
-    r.readAsDataURL(file);
-  });
-}
+  }, [asistente, nombreUnidad, carpeta, competencias, resultados])
 
-function descargar(nombre, texto) {
-  const blob = new Blob([texto], { type: "text/markdown;charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = nombre;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
+  const resetAll = useCallback(() => {
+    if (!confirm('¿Estás seguro? Se borrarán todos los datos de la sesión actual.')) return
+    setAsistente(DEFAULT_ASSISTANT_KEY)
+    setNombreUnidad('')
+    setCarpeta('')
+    setCompetencias('')
+    setResultados({ programa: '', secuencias: '', instrumentos: '' })
+    setArchivos([])
+    setError(null)
+    setStep(1)
+    setCanvasContent(null)
+    setPreviewAssistant(false)
+  }, [])
 
-/* ── Editor con toolbar ── */
-function EditorMD({ value, onChange, placeholder }) {
-  const [mode, setMode] = useState("edit");
-  const ref = useRef(null);
+  const copyAll = useCallback(() => {
+    const parts = []
+    if (resultados.programa) parts.push(`# PROGRAMA DESCRIPTIVO\n\n${resultados.programa}`)
+    if (resultados.secuencias) parts.push(`# SECUENCIAS DIDÁCTICAS\n\n${resultados.secuencias}`)
+    if (resultados.instrumentos) parts.push(`# INSTRUMENTOS DE EVALUACIÓN\n\n${resultados.instrumentos}`)
+    if (parts.length === 0) {
+      alert('No hay contenido generado para copiar')
+      return
+    }
+    navigator.clipboard.writeText(parts.join('\n\n---\n\n')).then(() => {
+      alert('Todo el contenido curricular copiado al portapapeles')
+    })
+  }, [resultados])
 
-  const wrap = useCallback(
-    (before, after) => {
-      const ta = ref.current;
-      if (!ta) return;
-      const start = ta.selectionStart;
-      const end = ta.selectionEnd;
-      const sel = value.slice(start, end);
-      const replacement = `${before}${sel || "texto"}${after}`;
-      const next = value.slice(0, start) + replacement + value.slice(end);
-      onChange({ target: { value: next } });
-      requestAnimationFrame(() => {
-        ta.focus();
-        ta.selectionStart = start + before.length;
-        ta.selectionEnd = start + before.length + (sel || "texto").length;
-      });
-    },
-    [value, onChange]
-  );
+  const downloadMarkdown = useCallback(() => {
+    const parts = []
+    if (resultados.programa) parts.push(`# PROGRAMA DESCRIPTIVO\n\n${resultados.programa}`)
+    if (resultados.secuencias) parts.push(`# SECUENCIAS DIDÁCTICAS\n\n${resultados.secuencias}`)
+    if (resultados.instrumentos) parts.push(`# INSTRUMENTOS DE EVALUACIÓN\n\n${resultados.instrumentos}`)
+    if (parts.length === 0) {
+      alert('No hay contenido generado para descargar')
+      return
+    }
+    const blob = new Blob([parts.join('\n\n---\n\n')], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${nombreUnidad || 'diseno_curricular'}.md`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }, [resultados, nombreUnidad])
 
-  const insertar = useCallback(
-    (text) => {
-      const ta = ref.current;
-      if (!ta) return;
-      const start = ta.selectionStart;
-      const next = value.slice(0, start) + text + value.slice(start);
-      onChange({ target: { value: next } });
-      requestAnimationFrame(() => {
-        ta.focus();
-        ta.selectionStart = ta.selectionEnd = start + text.length;
-      });
-    },
-    [value, onChange]
-  );
+  const printContent = useCallback(() => {
+    window.print()
+  }, [])
 
-  return (
-    <div className="editor-wrap">
-      <div className="editor-toolbar">
-        <button
-          type="button"
-          onClick={() => wrap("**", "**")}
-          aria-label="Negrita"
-          title="Negrita"
-        >
-          <Bold size={15} />
-        </button>
-        <button
-          type="button"
-          onClick={() => wrap("*", "*")}
-          aria-label="Cursiva"
-          title="Cursiva"
-        >
-          <Italic size={15} />
-        </button>
-        <span className="sep" />
-        <button
-          type="button"
-          onClick={() => insertar("\n- ")}
-          aria-label="Lista"
-          title="Lista"
-        >
-          <List size={15} />
-        </button>
-        <button
-          type="button"
-          onClick={() => insertar("\n## ")}
-          aria-label="Título"
-          title="Título"
-        >
-          <Heading2 size={15} />
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            insertar("\n| Columna 1 | Columna 2 |\n| --- | --- |\n| celda | celda |\n")
-          }
-          aria-label="Tabla"
-          title="Tabla"
-        >
-          <Table size={15} />
-        </button>
-        <div className="editor-mode">
-          <button
-            type="button"
-            className={mode === "edit" ? "active" : ""}
-            onClick={() => setMode("edit")}
-          >
-            <Pencil size={13} /> Editar
-          </button>
-          <button
-            type="button"
-            className={mode === "preview" ? "active" : ""}
-            onClick={() => setMode("preview")}
-          >
-            <Eye size={13} /> Vista previa
-          </button>
+  const handleGenerate = useCallback(async (tipo) => {
+    setGenerating(true)
+    setError(null)
+    try {
+      const config = { asistente, nombreUnidad, carpeta, competencias, archivos, tipo, contenidoPrevio: resultados }
+      const response = await fetch('/.netlify/functions/generar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      })
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}))
+        throw new Error(errData.error || `Error del servidor: ${response.status}`)
+      }
+      const data = await response.json()
+      const text = data.texto || 'No se recibió respuesta del asistente.'
+      setResultados(prev => ({ ...prev, [tipo]: text }))
+    } catch (err) {
+      setError(err.message || 'Error de conexión con el servidor')
+    } finally {
+      setGenerating(false)
+    }
+  }, [asistente, nombreUnidad, carpeta, competencias, archivos, resultados])
+
+  const showOnCanvas = useCallback((type, title, content) => {
+    const titles = {
+      programa: 'Programa y Mapa Curricular',
+      secuencias: 'Secuencias Didácticas de Clase',
+      instrumentos: 'Instrumentos de Evaluación y Rúbricas'
+    }
+    setCanvasContent({
+      type: titles[type] || type,
+      title: title || nombreUnidad || 'Sin nombre',
+      body: content
+    })
+  }, [nombreUnidad])
+
+  // If previewing assistant instructions
+  if (previewAssistant && step === 6) {
+    return (
+      <div className="app-root">
+        <header className="topbar">
+          <div className="topbar-left">
+            <div className="topbar-brand">
+              <Building2 className="topbar-brand-icon" />
+              <span className="topbar-brand-name">{APP_NAME}</span>
+              <span className="topbar-version">v3.0</span>
+            </div>
+          </div>
+          <div className="topbar-right">
+            <button className="btn-back" onClick={() => { setPreviewAssistant(false); setStep(2) }}>
+              <ArrowLeft size={14} /> Volver al wizard
+            </button>
+          </div>
+        </header>
+        <div style={{ flex: 1, overflow: 'auto', padding: '2rem', maxWidth: 800, margin: '0 auto' }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
+            Instrucciones del asistente: {asistente}
+          </h2>
+          <p style={{ fontSize: 13, color: '#666', marginBottom: 16 }}>
+            Este es el contenido del archivo <code>.md</code> que se envía como instrucción del sistema a Gemini.
+          </p>
+          <pre style={{
+            background: '#f5f5f5',
+            padding: 16,
+            borderRadius: 8,
+            fontSize: 12,
+            fontFamily: 'monospace',
+            whiteSpace: 'pre-wrap',
+            lineHeight: 1.6,
+            border: '1px solid #ddd'
+          }}>
+            {`[Contenido de asistentes/${asistente}.md]\n\nEste contenido se carga automáticamente desde el bundle generado en build time.`}
+          </pre>
         </div>
       </div>
-      {mode === "edit" ? (
-        <textarea
-          ref={ref}
-          className="preview"
-          value={value}
-          onChange={onChange}
-          placeholder={placeholder}
-        />
-      ) : (
-        <div className="markdown-preview">
-          {value ? (
-            <Markdown>{value}</Markdown>
-          ) : (
-            <p style={{ color: "var(--muted)" }}>Sin contenido aún.</p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ── App ── */
-export default function App() {
-  const [paso, setPaso] = useState(0);
-  const [datos, setDatos] = useState(cargar);
-  const [tema, setTema] = useState(
-    () => localStorage.getItem(LS_TEMA) || "claro"
-  );
-  const [anexos, setAnexos] = useState([]);
-  const [pedido, setPedido] = useState("");
-  const [cargando, setCargando] = useState(false);
-  const [error, setError] = useState("");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [llamadas, setLlamadas] = useState(() => {
-    const hoy = new Date().toISOString().slice(0, 10);
-    return Number(localStorage.getItem(`llamadas-${hoy}`) || 0);
-  });
-
-  useEffect(() => {
-    localStorage.setItem(LS_KEY, JSON.stringify(datos));
-  }, [datos]);
-
-  useEffect(() => {
-    localStorage.setItem(LS_TEMA, tema);
-  }, [tema]);
-
-  const set = (k) => (e) => setDatos((d) => ({ ...d, [k]: e.target.value }));
-  const totalHoras = (Number(datos.hpc) || 0) + (Number(datos.hps) || 0);
-
-  async function generar(asistente, contexto, campoDestino) {
-    setError("");
-    if (!pedido.trim() && campoDestino !== "programa") {
-      setError("Describe qué quieres generar antes de pedirlo.");
-      return;
-    }
-    setCargando(true);
-    try {
-      const res = await fetch("/.netlify/functions/generar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ asistente, pedido, contexto, anexos }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
-      setDatos((d) => ({ ...d, [campoDestino]: data.texto }));
-      const hoy = new Date().toISOString().slice(0, 10);
-      const n =
-        Number(localStorage.getItem(`llamadas-${hoy}`) || 0) + 1;
-      localStorage.setItem(`llamadas-${hoy}`, String(n));
-      setLlamadas(n);
-      setAnexos([]);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setCargando(false);
-    }
+    )
   }
-
-  async function onArchivos(e) {
-    setError("");
-    try {
-      const files = await Promise.all([...e.target.files].map(leerArchivo));
-      setAnexos((a) => [...a, ...files]);
-    } catch (err) {
-      setError(err.message);
-    }
-    e.target.value = "";
-  }
-
-  const contextoBase =
-    `Unidad de competencia: ${datos.unidad}\n` +
-    `Semestre/ubicación: ${datos.semestre}\n` +
-    `Horas con docente (HPC): ${datos.hpc || "—"}\n` +
-    `Horas independientes (HPS): ${datos.hps || "—"}\n` +
-    `Modo: ${datos.modo}`;
-
-  const ir = (n) => {
-    setPedido("");
-    setAnexos([]);
-    setError("");
-    setPaso(n);
-  };
 
   return (
-    <div className="app" data-tema={tema}>
-      <a href="#main-content" className="skip-link">
-        Saltar al contenido
-      </a>
-
-      <header className="topbar" role="banner">
-        <div className="brand">
-          <span className="logo" aria-hidden="true">DC</span>
-          <div>
-            <strong>Diseño Curricular con IA</strong>
-            <small>UNACH · LIDTS</small>
+    <div className="app-root">
+      {/* ===== TOP BAR ===== */}
+      <header className="topbar">
+        <div className="topbar-left">
+          <div className="topbar-brand">
+            <Building2 className="topbar-brand-icon" />
+            <span className="topbar-brand-name">{APP_NAME}</span>
+            <span className="topbar-version">v3.0</span>
+          </div>
+          <div className="topbar-divider" />
+          <div className="topbar-course">
+            <GraduationCap size={14} />
+            <span>Asignatura: <strong>{nombreUnidad || 'Nueva Asignatura'}</strong></span>
           </div>
         </div>
-        <div className="meta">
-          <span className="pill ok">
-            <i aria-hidden="true" />
-            Guardado local
-          </span>
-          <span className="pill">
-            Llamadas hoy: <b>{llamadas}</b>
-          </span>
-          <button
-            type="button"
-            className="tema"
-            onClick={() =>
-              setTema((t) => (t === "claro" ? "oscuro" : "claro"))
-            }
-            aria-label={
-              tema === "claro"
-                ? "Cambiar a modo oscuro"
-                : "Cambiar a modo claro"
-            }
-          >
-            {tema === "claro" ? "☾" : "☀"}
+        <div className="topbar-right">
+          <div className="topbar-status">
+            <span className="topbar-status-dot" />
+            <span>Motor de IA listo</span>
+          </div>
+          <button className="btn-icon" onClick={resetAll} title="Reiniciar sesión">
+            <RotateCcw size={16} />
+            <span>Reiniciar</span>
+          </button>
+          <button className="btn-primary" onClick={saveProject} disabled={saving}>
+            <Cloud size={14} />
+            {saving ? 'Guardando…' : saved ? 'Guardado' : 'Guardar Proyecto'}
           </button>
         </div>
       </header>
 
-      <nav className="stepper" aria-label="Pasos del wizard">
-        {PASOS.map((p, i) => (
-          <div
-            key={p}
-            className={`stepper-item ${i === paso ? "active" : ""} ${i < paso ? "done" : ""}`}
-          >
-            <button
-              type="button"
-              className="stepper-btn"
-              onClick={() => ir(i)}
-              aria-current={i === paso ? "step" : undefined}
-            >
-              <span className="stepper-num" aria-hidden="true">
-                {i < paso ? "✓" : i + 1}
-              </span>
-              <span className="stepper-lbl">{p}</span>
-            </button>
-            {i < PASOS.length - 1 && (
-              <span className="stepper-line" aria-hidden="true" />
-            )}
+      {/* ===== MAIN LAYOUT ===== */}
+      <div className="app-layout">
+        {/* LEFT PANEL */}
+        <aside className="left-panel">
+          {/* Stepper Header */}
+          <div className="stepper-header">
+            <div>
+              <h2>Flujo Curricular en 5 Pasos</h2>
+              <p>Completa o edita cada fase para estructurar tu asignatura</p>
+            </div>
+            <span className="step-counter-badge">Paso {step} de 5</span>
           </div>
-        ))}
-      </nav>
 
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
+          {/* Tab Bar */}
+          <div className="tab-bar">
+            {TABS.map(t => (
+              <button
+                key={t.key}
+                className={`tab-btn${step === t.key ? ' active' : ''}`}
+                onClick={() => setStep(t.key)}
+              >
+                <span className="tab-number">{t.key}</span>
+                <span className="tab-label">{t.label}</span>
+              </button>
+            ))}
+          </div>
 
-      <div className="layout" id="main-content">
-        <main className="card">
-          {paso === 0 && (
-            <>
-              <h2>Ficha Técnica de la Unidad</h2>
-              <p className="desc">
-                Datos institucionales para contextualizar las propuestas de la
-                IA.
-              </p>
-              <label htmlFor="unidad">
-                Nombre de la Unidad de Competencia (Asignatura) *
-              </label>
-              <input
-                id="unidad"
-                value={datos.unidad}
-                onChange={set("unidad")}
-                placeholder="Fundamentos de matemáticas"
-                required
-              />
-              <div className="fila">
-                <div>
-                  <label htmlFor="semestre">Semestre / Nivel *</label>
-                  <input
-                    id="semestre"
-                    value={datos.semestre}
-                    onChange={set("semestre")}
-                    placeholder="Primer semestre"
-                    required
-                  />
+          {/* Step Content */}
+          <div className="step-content custom-scrollbar">
+            {/* ===== PASO 1: DATOS BÁSICOS ===== */}
+            <div className={`step-panel${step !== 1 ? ' hidden' : ''}`}>
+              <div className="step-header">
+                <div className="step-header-left">
+                  <span className="step-header-number">1</span>
+                  <div>
+                    <h3>Paso 1. Datos Básicos</h3>
+                    <p>Configura los parámetros iniciales de la materia</p>
+                  </div>
                 </div>
-                <div>
-                  <label htmlFor="hpc">Horas con Docente (HPC)</label>
-                  <input
-                    id="hpc"
-                    type="number"
-                    min="0"
-                    value={datos.hpc}
-                    onChange={set("hpc")}
-                    placeholder="48"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="hps">Horas Independientes (HPS)</label>
-                  <input
-                    id="hps"
-                    type="number"
-                    min="0"
-                    value={datos.hps}
-                    onChange={set("hps")}
-                    placeholder="32"
-                  />
+                <span className="step-tag neutral">Sin generación IA en este paso</span>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Modo de inicio</label>
+                <div className="radio-group">
+                  <label className="radio-option selected">
+                    <input type="radio" name="mode" defaultChecked />
+                    <span>Desde cero</span>
+                  </label>
+                  <label className="radio-option">
+                    <input type="radio" name="mode" />
+                    <span>Partir de programa existente</span>
+                  </label>
                 </div>
               </div>
-              <span className="etiqueta">Modalidad de Creación Curricular</span>
-              <div className="fila">
-                <label
-                  className={`opcion ${datos.modo === "desde-cero" ? "sel" : ""}`}
-                >
-                  <input
-                    type="radio"
-                    name="modo"
-                    checked={datos.modo === "desde-cero"}
-                    onChange={() =>
-                      setDatos((d) => ({ ...d, modo: "desde-cero" }))
-                    }
-                  />
-                  <div>
-                    <b>Desde Cero con IA</b>
-                    <small>
-                      Generación completa. El resultado sale como borrador.
-                    </small>
-                  </div>
-                </label>
-                <label
-                  className={`opcion ${datos.modo === "partir-de" ? "sel" : ""}`}
-                >
-                  <input
-                    type="radio"
-                    name="modo"
-                    checked={datos.modo === "partir-de"}
-                    onChange={() =>
-                      setDatos((d) => ({ ...d, modo: "partir-de" }))
-                    }
-                  />
-                  <div>
-                    <b>Partir de Programa Oficial</b>
-                    <small>
-                      Respeta tu documento y completa lo faltante.
-                    </small>
-                  </div>
-                </label>
-              </div>
-              <label className="drop">
-                <b>Archivos o Documentos Base</b>
-                <small>PDF, DOCX o imagen · máximo 4 MB por archivo</small>
+
+              <div className="form-group">
+                <label className="form-label">Nombre de la asignatura</label>
                 <input
+                  className="form-input"
+                  placeholder="Ej. Inteligencia Artificial, Cálculo II…"
+                  value={nombreUnidad}
+                  onChange={e => setNombreUnidad(e.target.value)}
+                />
+              </div>
+
+              <div className="form-grid-3">
+                <div className="form-group">
+                  <label className="form-label">Semestre</label>
+                  <select className="form-select" defaultValue={5}>
+                    {SEMESTRES.map(s => <option key={s} value={s}>Semestre {s}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Carpeta (opcional)</label>
+                  <input
+                    className="form-input"
+                    placeholder="Ej. ISW-501"
+                    value={carpeta}
+                    onChange={e => setCarpeta(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Competencias</label>
+                  <input
+                    className="form-input"
+                    placeholder="Ej. Competencias clave"
+                    value={competencias}
+                    onChange={e => setCompetencias(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">
+                  Archivos de referencia <span className="form-label-sub">(PDF, DOCX, imagen; máx. 4 MB c/u)</span>
+                </label>
+                <div className="dropzone" onClick={() => fileInputRef.current?.click()}>
+                  <Upload size={24} className="dropzone-icon" />
+                  <p className="dropzone-title">Haz clic o arrastra un archivo aquí</p>
+                  <p className="dropzone-subtitle">Syllabus previo, programa analítico o normativas</p>
+                </div>
+                <input
+                  ref={fileInputRef}
                   type="file"
                   multiple
                   accept=".pdf,.docx,.png,.jpg,.jpeg,.webp"
-                  onChange={onArchivos}
-                  aria-label="Subir archivos base"
+                  style={{ display: 'none' }}
+                  onChange={handleFiles}
                 />
-              </label>
-              {anexos.length > 0 && (
-                <ul className="files">
-                  {anexos.map((a) => (
-                    <li key={a.nombre}>{a.nombre}</li>
-                  ))}
-                </ul>
-              )}
-            </>
-          )}
+                {archivos.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+                    {archivos.map((f, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, padding: '4px 8px', background: '#f5f5f5', borderRadius: 4 }}>
+                        <span>{f.name} ({(f.size / 1024).toFixed(0)} KB)</span>
+                        <button onClick={() => removeFile(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', fontSize: 14 }}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-          {paso === 1 && (
-            <>
-              <h2>Programa y Mapa</h2>
-              <p className="desc">
-                Genera el programa descriptivo y edítalo: lo validado alimenta
-                los siguientes pasos.
-              </p>
-              <label htmlFor="pedido-programa">
-                Pedido al planeador (opcional si anexaste programa)
-              </label>
-              <textarea
-                id="pedido-programa"
-                value={pedido}
-                onChange={(e) => setPedido(e.target.value)}
-                placeholder="Genera el programa descriptivo y el mapa de la unidad…"
-              />
-              <div className="acciones">
-                <button
-                  type="button"
-                  className="primario"
-                  disabled={cargando}
-                  onClick={() =>
-                    generar("planeador-unidad", contextoBase, "programa")
-                  }
-                >
-                  {cargando ? "Generando…" : "Generar programa"}
+              <div className="info-banner">
+                <Info size={16} />
+                <p><strong>Nota:</strong> En este paso no se genera contenido. Los datos ingresados servirán como base estructural para los siguientes pasos.</p>
+              </div>
+
+              <div className="step-nav">
+                <div />
+                <button className="btn-next" onClick={() => setStep(2)}>
+                  Continuar a Paso 2 <ArrowRight size={14} />
                 </button>
               </div>
-              <span className="etiqueta">Programa (edítalo antes de continuar)</span>
-              <EditorMD
-                value={datos.programa}
-                onChange={set("programa")}
-                placeholder="El programa aparecerá aquí después de generarlo…"
-              />
-            </>
-          )}
+            </div>
 
-          {paso === 2 && (
-            <>
-              <h2>Secuencias</h2>
-              <p className="desc">
-                Genera una subcompetencia por vez; puedes acumular varias sin
-                perder lo anterior.
-              </p>
-              <label htmlFor="pedido-seq">
-                Subcompetencia a planear (número, propósito, resultados y horas)
-              </label>
-              <textarea
-                id="pedido-seq"
-                value={pedido}
-                onChange={(e) => setPedido(e.target.value)}
-                placeholder="Subcompetencia 1… Resultados 1.1 (5 h)…"
-              />
-              <label className="drop">
-                <b>Material de apoyo para este paso (opcional)</b>
-                <small>PDF, DOCX o imagen · máximo 4 MB por archivo</small>
-                <input
-                  type="file"
-                  multiple
-                  accept=".pdf,.docx,.png,.jpg,.jpeg,.webp"
-                  onChange={onArchivos}
-                  aria-label="Subir material de apoyo"
+            {/* ===== PASO 2: PROGRAMA Y MAPA ===== */}
+            <div className={`step-panel${step !== 2 ? ' hidden' : ''}`}>
+              <div className="step-header">
+                <div className="step-header-left">
+                  <span className="step-header-number">2</span>
+                  <div>
+                    <h3>Paso 2. Programa y Mapa</h3>
+                    <p>Generación descriptiva y malla de competencias</p>
+                  </div>
+                </div>
+                <span className="step-tag green">Núcleo Curricular</span>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">
+                  ¿Qué se requiere en este programa? <span className="form-label-sub">(Prompt del docente)</span>
+                </label>
+                <textarea
+                  className="form-textarea"
+                  placeholder="Describe el enfoque general, competencias clave deseadas y requisitos institucionales…"
+                  rows={3}
                 />
-              </label>
-              {anexos.length > 0 && (
-                <ul className="files">
-                  {anexos.map((a) => (
-                    <li key={a.nombre}>{a.nombre}</li>
-                  ))}
-                </ul>
-              )}
-              <div className="acciones">
-                <button
-                  type="button"
-                  className="primario"
-                  disabled={cargando}
-                  onClick={() =>
-                    generar(
-                      "secuencias-subcompetencia",
-                      `${contextoBase}\n\nPrograma validado:\n${datos.programa}`,
-                      "secuencias"
-                    )
-                  }
-                >
-                  {cargando ? "Generando…" : "Generar secuencia"}
-                </button>
               </div>
-              <span className="etiqueta">Secuencias acumuladas (edítalas)</span>
-              <EditorMD
-                value={datos.secuencias}
-                onChange={set("secuencias")}
-                placeholder="Las secuencias aparecerán aquí después de generarlas…"
-              />
-            </>
-          )}
 
-          {paso === 3 && (
-            <>
-              <h2>Instrumentos de Evaluación</h2>
-              <p className="desc">
-                Rúbricas, listas de cotejo o pruebas alineadas a tus evidencias
-                y porcentajes.
-              </p>
-              <label htmlFor="pedido-inst">
-                Resultado(s) a evaluar (actividades, evidencias y % del cuadro)
-              </label>
-              <textarea
-                id="pedido-inst"
-                value={pedido}
-                onChange={(e) => setPedido(e.target.value)}
-                placeholder="Resultado 1.3… Evidencias… %: 5…"
-              />
-              <div className="acciones">
-                <button
-                  type="button"
-                  className="primario"
-                  disabled={cargando}
-                  onClick={() =>
-                    generar(
-                      "instrumentos-evaluacion",
-                      `${contextoBase}\n\nPrograma validado:\n${datos.programa}\n\nSecuencias validadas:\n${datos.secuencias}`,
-                      "instrumentos"
-                    )
-                  }
-                >
-                  {cargando ? "Generando…" : "Generar instrumento"}
-                </button>
-              </div>
-              <span className="etiqueta">Instrumentos acumulados (edítalos)</span>
-              <EditorMD
-                value={datos.instrumentos}
-                onChange={set("instrumentos")}
-                placeholder="Los instrumentos aparecerán aquí después de generarlos…"
-              />
-            </>
-          )}
+              <button className="btn-generate" onClick={() => handleGenerate('programa')} disabled={generating}>
+                <Sparkles size={16} />
+                {generating ? 'Generando…' : 'Generar Programa y Mapa con IA'}
+              </button>
 
-          {paso === 4 && (
-            <>
-              <h2>Coherencia y Exportar</h2>
-              <p className="desc">
-                Verifica antes de entregar: ¿las horas suman? ¿los % cuadran? ¿toda
-                evidencia tiene instrumento?
-              </p>
-              <div className="acciones">
-                <button
-                  type="button"
-                  className="primario"
-                  onClick={() => window.print()}
-                >
-                  Imprimir / PDF
+              <div className="form-group">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label className="form-label">Resultado editable (Programa + Mapa)</label>
+                </div>
+                <div className="editor-container">
+                  <div className="editor-toolbar">
+                    <button title="Negrita"><strong>B</strong></button>
+                    <button title="Cursiva"><em>I</em></button>
+                    <span className="divider" />
+                    <button title="Lista"><List size={14} /></button>
+                    <button title="Código"><Code size={14} /></button>
+                    <button
+                      className="send-btn"
+                      title="Enviar al pizarrón"
+                      onClick={() => showOnCanvas('programa', nombreUnidad, resultados.programa)}
+                    >
+                      <ExternalLink size={14} />
+                    </button>
+                  </div>
+                  <textarea
+                    className="editor-textarea"
+                    rows={7}
+                    placeholder="El programa descriptivo generado aparecerá aquí…"
+                    value={resultados.programa}
+                    onChange={e => setResultados(prev => ({ ...prev, programa: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="step-nav">
+                <button className="btn-back" onClick={() => setStep(1)}>
+                  <ArrowLeft size={14} /> Anterior
                 </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    navigator.clipboard.writeText(
-                      `# ${datos.unidad}\n\n${datos.programa}\n\n${datos.secuencias}\n\n${datos.instrumentos}`
-                    )
-                  }
-                >
-                  Copiar todo
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    descargar(
-                      "paquete-curricular.md",
-                      `# ${datos.unidad}\n\n${datos.programa}\n\n${datos.secuencias}\n\n${datos.instrumentos}`
-                    )
-                  }
-                >
-                  Descargar .md
+                <button className="btn-next" onClick={() => setStep(3)}>
+                  Continuar a Paso 3 <ArrowRight size={14} />
                 </button>
               </div>
-              <div className="acciones">
-                <button
-                  type="button"
-                  className="peligro"
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        "¿Empezar de nuevo? Se borra todo lo guardado."
-                      )
-                    ) {
-                      localStorage.removeItem(LS_KEY);
-                      setDatos({ ...inicial });
-                      ir(0);
-                    }
-                  }}
-                >
+            </div>
+
+            {/* ===== PASO 3: SECUENCIAS ===== */}
+            <div className={`step-panel${step !== 3 ? ' hidden' : ''}`}>
+              <div className="step-header">
+                <div className="step-header-left">
+                  <span className="step-header-number">3</span>
+                  <div>
+                    <h3>Paso 3. Secuencias Didácticas</h3>
+                    <p>Diseño de secuencia de clases y actividades</p>
+                  </div>
+                </div>
+                <span className="step-tag blue">Sesiones de Clase</span>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">
+                  Descripción de la subcompetencia o tema específico
+                </label>
+                <textarea
+                  className="form-textarea"
+                  placeholder="Especifica el resultado de aprendizaje o subcompetencia de la unidad…"
+                  rows={3}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">
+                  Material de apoyo / bibliografía <span className="form-label-sub">(opcional)</span>
+                </label>
+                <div className="dropzone" onClick={() => fileInputRef.current?.click()}>
+                  <Paperclip size={20} className="dropzone-icon" />
+                  <p className="dropzone-title">Adjuntar lecturas, diapositivas o guías</p>
+                  <p className="dropzone-subtitle">PDF, DOCX o URLs de referencia</p>
+                </div>
+              </div>
+
+              <button className="btn-generate" onClick={() => handleGenerate('secuencias')} disabled={generating}>
+                <Route size={16} />
+                {generating ? 'Generando…' : 'Generar Secuencia Didáctica con IA'}
+              </button>
+
+              <div className="form-group">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label className="form-label">Secuencia de clases resultante (Editable)</label>
+                  <button
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#002cb6' }}
+                    onClick={() => showOnCanvas('secuencias', nombreUnidad, resultados.secuencias)}
+                  >
+                    Enviar al pizarrón
+                  </button>
+                </div>
+                <div className="editor-container">
+                  <div className="editor-toolbar">
+                    <button title="Negrita"><strong>B</strong></button>
+                    <button title="Cursiva"><em>I</em></button>
+                    <span className="divider" />
+                    <button title="Lista"><List size={14} /></button>
+                    <button title="Código"><Code size={14} /></button>
+                    <button
+                      className="send-btn"
+                      title="Enviar al pizarrón"
+                      onClick={() => showOnCanvas('secuencias', nombreUnidad, resultados.secuencias)}
+                    >
+                      <ExternalLink size={14} />
+                    </button>
+                  </div>
+                  <textarea
+                    className="editor-textarea"
+                    rows={6}
+                    placeholder="La secuencia didáctica generada aparecerá aquí…"
+                    value={resultados.secuencias}
+                    onChange={e => setResultados(prev => ({ ...prev, secuencias: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="step-nav">
+                <button className="btn-back" onClick={() => setStep(2)}>
+                  <ArrowLeft size={14} /> Anterior
+                </button>
+                <button className="btn-next" onClick={() => setStep(4)}>
+                  Continuar a Paso 4 <ArrowRight size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* ===== PASO 4: INSTRUMENTOS ===== */}
+            <div className={`step-panel${step !== 4 ? ' hidden' : ''}`}>
+              <div className="step-header">
+                <div className="step-header-left">
+                  <span className="step-header-number">4</span>
+                  <div>
+                    <h3>Paso 4. Instrumentos de Evaluación</h3>
+                    <p>Rúbricas, listas de cotejo y pruebas objetivas</p>
+                  </div>
+                </div>
+                <span className="step-tag purple">Evaluación</span>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">
+                  Resultados de aprendizaje, evidencias y ponderaciones (%)
+                </label>
+                <textarea
+                  className="form-textarea"
+                  placeholder="Pega aquí los RACs, evidencias requeridas y porcentajes de ponderación…"
+                  rows={3}
+                />
+              </div>
+
+              <div className="checkbox-group">
+                <span style={{ color: '#757686', fontSize: 11 }}>Tipo de instrumento:</span>
+                <label className="checkbox-option">
+                  <input type="checkbox" defaultChecked /> <span>Rúbrica analítica</span>
+                </label>
+                <label className="checkbox-option">
+                  <input type="checkbox" defaultChecked /> <span>Lista de cotejo</span>
+                </label>
+                <label className="checkbox-option">
+                  <input type="checkbox" /> <span>Prueba</span>
+                </label>
+              </div>
+
+              <button className="btn-generate" onClick={() => handleGenerate('instrumentos')} disabled={generating}>
+                <ClipboardCheck size={16} />
+                {generating ? 'Generando…' : 'Generar Instrumentos de Evaluación'}
+              </button>
+
+              <div className="form-group">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label className="form-label">Rúbrica / Instrumento editable</label>
+                  <button
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#002cb6' }}
+                    onClick={() => showOnCanvas('instrumentos', nombreUnidad, resultados.instrumentos)}
+                  >
+                    Enviar al pizarrón
+                  </button>
+                </div>
+                <div className="editor-container">
+                  <div className="editor-toolbar">
+                    <button title="Negrita"><strong>B</strong></button>
+                    <button title="Cursiva"><em>I</em></button>
+                    <span className="divider" />
+                    <button title="Lista"><List size={14} /></button>
+                    <button title="Código"><Code size={14} /></button>
+                    <button
+                      className="send-btn"
+                      title="Enviar al pizarrón"
+                      onClick={() => showOnCanvas('instrumentos', nombreUnidad, resultados.instrumentos)}
+                    >
+                      <ExternalLink size={14} />
+                    </button>
+                  </div>
+                  <textarea
+                    className="editor-textarea"
+                    rows={6}
+                    placeholder="Los instrumentos de evaluación generados aparecerán aquí…"
+                    value={resultados.instrumentos}
+                    onChange={e => setResultados(prev => ({ ...prev, instrumentos: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="step-nav">
+                <button className="btn-back" onClick={() => setStep(3)}>
+                  <ArrowLeft size={14} /> Anterior
+                </button>
+                <button className="btn-next" onClick={() => setStep(5)}>
+                  Continuar a Paso 5 <ArrowRight size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* ===== PASO 5: EXPORTAR ===== */}
+            <div className={`step-panel${step !== 5 ? ' hidden' : ''}`}>
+              <div className="step-header">
+                <div className="step-header-left">
+                  <span className="step-header-number">5</span>
+                  <div>
+                    <h3>Paso 5. Exportar y Finalizar</h3>
+                    <p>Descarga, comparte o exporta tu diseño curricular</p>
+                  </div>
+                </div>
+                <span className="step-tag amber">Listo</span>
+              </div>
+
+              <div className="export-summary">
+                <div className="export-summary-row">
+                  <span className="label">Asignatura generada:</span>
+                  <strong className="value">{nombreUnidad || 'Sin nombre'}</strong>
+                </div>
+                <div className="export-summary-row">
+                  <span className="label">Componentes procesados:</span>
+                  <span className="value green">
+                    {[resultados.programa && 'Programa', resultados.secuencias && 'Secuencias', resultados.instrumentos && 'Rúbricas'].filter(Boolean).join(' · ') || 'Ninguno aún'}
+                  </span>
+                </div>
+                <div className="export-summary-row">
+                  <span className="label">Alineación pedagógica:</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', color: '#757686' }}>CBL + ABET SO-1 & SO-2</span>
+                </div>
+              </div>
+
+              <div className="export-actions">
+                <label className="form-label">Opciones de exportación rápida</label>
+                <button className="export-btn" onClick={printContent}>
+                  <div className="export-btn-left">
+                    <FileText size={20} />
+                    <div>
+                      <div className="export-btn-title">Imprimir / Guardar en PDF</div>
+                      <div className="export-btn-subtitle">Formato institucional con encabezados oficiales</div>
+                    </div>
+                  </div>
+                  <ArrowRight size={16} className="arrow" />
+                </button>
+                <button className="export-btn" onClick={copyAll}>
+                  <div className="export-btn-left">
+                    <Copy size={20} />
+                    <div>
+                      <div className="export-btn-title">Copiar al portapapeles</div>
+                      <div className="export-btn-subtitle">Texto formateado para pegar en Word, Docs o LMS</div>
+                    </div>
+                  </div>
+                  <ArrowRight size={16} className="arrow" />
+                </button>
+                <button className="export-btn" onClick={downloadMarkdown}>
+                  <div className="export-btn-left">
+                    <Download size={20} />
+                    <div>
+                      <div className="export-btn-title">Descargar como .md (Markdown)</div>
+                      <div className="export-btn-subtitle">Archivo portable estructurado con todo el contenido</div>
+                    </div>
+                  </div>
+                  <ArrowRight size={16} className="arrow" />
+                </button>
+              </div>
+
+              <div style={{ borderTop: '1px solid var(--outline-variant)', paddingTop: 16 }}>
+                <button className="btn-danger-outline" onClick={resetAll}>
+                  <RotateCcw size={16} />
                   Empezar de nuevo
                 </button>
               </div>
-            </>
-          )}
 
-          <footer className="navpaso">
-            <button
-              type="button"
-              disabled={paso === 0}
-              onClick={() => ir(paso - 1)}
-            >
-              ← Atrás
-            </button>
-            <span>
-              Paso {paso + 1} de {PASOS.length}
-            </span>
-            {paso < PASOS.length - 1 && (
-              <button
-                type="button"
-                className="primario"
-                onClick={() => ir(paso + 1)}
-              >
-                Continuar →
-              </button>
-            )}
-          </footer>
-        </main>
-
-        <aside className="lateral">
-          <button
-            type="button"
-            className={`sidebar-toggle ${sidebarOpen ? "open" : ""}`}
-            onClick={() => setSidebarOpen((o) => !o)}
-            aria-expanded={sidebarOpen}
-            aria-controls="sidebar-content"
-          >
-            Resumen y ayuda
-            <ChevronDown size={16} className="arrow" aria-hidden="true" />
-          </button>
-          <div
-            id="sidebar-content"
-            className={sidebarOpen ? "open" : ""}
-          >
-            <div className="panel resumen">
-              <h3>Resumen de carga horaria</h3>
-              <dl>
-                <div>
-                  <dt>Horas con Docente (HPC)</dt>
-                  <dd>{datos.hpc || "—"}</dd>
-                </div>
-                <div>
-                  <dt>Horas Independientes (HPS)</dt>
-                  <dd>{datos.hps || "—"}</dd>
-                </div>
-                <div className="total">
-                  <dt>Total semestre</dt>
-                  <dd>{totalHoras ? `${totalHoras} hrs` : "—"}</dd>
-                </div>
-              </dl>
-            </div>
-            <div className="panel ayuda">
-              <h3>En este paso</h3>
-              <p>{TIPS[paso]}</p>
-              {datos.unidad && (
-                <p className="ctx">
-                  <b>Unidad:</b> {datos.unidad}
-                </p>
-              )}
+              <div className="step-nav">
+                <button className="btn-back" onClick={() => setStep(4)}>
+                  <ArrowLeft size={14} /> Volver a Instrumentos
+                </button>
+              </div>
             </div>
           </div>
+
+          {/* Left Panel Footer */}
+          <div className="left-panel-footer">
+            <span>Curricular AI Core · v3.0</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--on-surface-variant)', fontWeight: 500 }}>
+              <span className="status-dot" />
+              Modo Modular
+            </span>
+          </div>
         </aside>
+
+        {/* ===== RIGHT CANVAS ===== */}
+        <main className="canvas-area">
+          {/* Canvas Controls */}
+          <div className="canvas-controls">
+            <div className="canvas-controls-label">
+              <Pen size={16} />
+              <span>Pizarrón de Trabajo</span>
+            </div>
+            <div className="canvas-controls-divider" />
+            <div className="zoom-controls">
+              <button className="zoom-btn" onClick={() => setCanvasZoom(z => Math.max(50, z - 10))}>-</button>
+              <span className="zoom-value">{canvasZoom}%</span>
+              <button className="zoom-btn" onClick={() => setCanvasZoom(z => Math.min(150, z + 10))}>+</button>
+            </div>
+            <div className="canvas-controls-divider" />
+            <button className="canvas-action-btn" onClick={() => setCanvasZoom(100)} title="Centrar pizarra">
+              <Maximize2 size={14} />
+            </button>
+            <button className="canvas-action-btn danger" onClick={() => setCanvasContent(null)} title="Limpiar pizarrón">
+              <Trash2 size={14} />
+            </button>
+          </div>
+
+          {/* Empty State */}
+          {!canvasContent && (
+            <div className="canvas-empty">
+              <div className="canvas-empty-icon">
+                <LayoutDashboard size={32} />
+              </div>
+              <h3>Pizarrón listo para generar</h3>
+              <p>
+                El diseño curricular, el mapa descriptivo y las secuencias aparecerán aquí conforme utilices el panel de 5 pasos a la izquierda.
+              </p>
+              <div className="canvas-empty-badge">
+                <span className="dot" />
+                <span>Selecciona un paso del panel para comenzar</span>
+              </div>
+            </div>
+          )}
+
+          {/* Dynamic Canvas Content */}
+          {canvasContent && (
+            <div className="canvas-dynamic custom-scrollbar">
+              <div
+                className="canvas-card"
+                style={{
+                  transform: `scale(${canvasZoom / 100})`,
+                  transformOrigin: 'center top'
+                }}
+              >
+                <div className="canvas-card-header">
+                  <div>
+                    <div className="canvas-card-type">{canvasContent.type}</div>
+                    <h2 className="canvas-card-title">{canvasContent.title}</h2>
+                    <p className="canvas-card-subtitle">Generado y sincronizado desde {APP_NAME}</p>
+                  </div>
+                  <button
+                    className="btn-back"
+                    onClick={() => setCanvasContent(null)}
+                    style={{ flexShrink: 0 }}
+                  >
+                    Limpiar lienzo
+                  </button>
+                </div>
+                <div className="canvas-card-body">
+                  {canvasContent.body ? (
+                    <Markdown>{canvasContent.body}</Markdown>
+                  ) : (
+                    <span style={{ color: '#999', fontStyle: 'italic' }}>Sin contenido generado aún</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </main>
       </div>
+
+      {/* Error Toast */}
+      {error && (
+        <div style={{
+          position: 'fixed',
+          bottom: 20,
+          right: 20,
+          background: '#dc2626',
+          color: 'white',
+          padding: '12px 16px',
+          borderRadius: 8,
+          fontSize: 13,
+          zIndex: 9999,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          maxWidth: 420
+        }}>
+          <span>{error}</span>
+          <button
+            onClick={() => setError(null)}
+            style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: 18, padding: '0 4px' }}
+          >
+            ×
+          </button>
+        </div>
+      )}
     </div>
-  );
+  )
 }
+
+export default App
