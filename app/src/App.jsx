@@ -210,14 +210,32 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config)
       })
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}))
-        throw new Error(errData.error || `Error del servidor: ${response.status}`)
-      }
+
       const data = await response.json()
-      const text = data.texto || 'No se recibió respuesta del asistente.'
+
+      if (!response.ok) {
+        throw new Error(data.error || `Error del servidor: ${response.status}`)
+      }
+
+      const text = data.texto || ''
+      if (!text.trim()) {
+        throw new Error('Gemini devolvió una respuesta vacía. Verifica tu GEMINI_API_KEY en Netlify.')
+      }
+
       setResultados(prev => ({ ...prev, [tipo]: text }))
+
+      const titles = {
+        programa: 'Programa y Mapa Curricular',
+        secuencias: 'Secuencias Didácticas de Clase',
+        instrumentos: 'Instrumentos de Evaluación y Rúbricas'
+      }
+      setCanvasContent({
+        type: titles[tipo] || tipo,
+        title: nombreUnidad || 'Sin nombre',
+        body: text
+      })
     } catch (err) {
+      console.error('Error en generación:', err)
       setError(err.message || 'Error de conexión con el servidor')
     } finally {
       setGenerating(false)
