@@ -47,6 +47,7 @@ function App() {
   const [competencias, setCompetencias] = useState('')
   const [archivos, setArchivos] = useState([])
   const [resultados, setResultados] = useState({ programa: '', secuencias: '', instrumentos: '' })
+  const [prompts, setPrompts] = useState({ programa: '', secuencias: '', instrumentos: '' })
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -166,7 +167,44 @@ function App() {
     setGenerating(true)
     setError(null)
     try {
-      const config = { asistente, nombreUnidad, carpeta, competencias, archivos, tipo, contenidoPrevio: resultados }
+      const contexto = [
+        nombreUnidad && `Asignatura: ${nombreUnidad}`,
+        carpeta && `Clave: ${carpeta}`,
+        competencias && `Competencias: ${competencias}`
+      ].filter(Boolean).join('\n') || ''
+
+      const pedidos = {
+        programa: prompts.programa || `Genera el programa descriptivo y mapa de la unidad de competencia para "${nombreUnidad || 'Asignatura Nueva'}". Incluye: propósito, competencias, mapa de subcompetencias con resultados de aprendizaje, horas y contenidos.`,
+        secuencias: prompts.secuencias || `Genera la secuencia de clases detallada para la subcompetencia de "${nombreUnidad || 'Asignatura Nueva'}". Incluye: apertura, desarrollo, cierre, actividades, recursos y tiempo estimado por clase.`,
+        instrumentos: prompts.instrumentos || `Genera los instrumentos de evaluación (rúbricas analíticas y listas de cotejo) para "${nombreUnidad || 'Asignatura Nueva'}". Incluye: criterios, escalas de valoración y evidencias de aprendizaje.`
+      }
+
+      const anexos = []
+      for (const archivo of archivos) {
+        const base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => {
+            const result = reader.result
+            const base64Data = result.split(',')[1]
+            resolve(base64Data)
+          }
+          reader.onerror = reject
+          reader.readAsDataURL(archivo)
+        })
+        anexos.push({
+          nombre: archivo.name,
+          mime: archivo.type,
+          base64
+        })
+      }
+
+      const config = {
+        asistente,
+        pedido: pedidos[tipo] || pedidos.programa,
+        contexto,
+        anexos
+      }
+
       const response = await fetch('/.netlify/functions/generar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -184,7 +222,7 @@ function App() {
     } finally {
       setGenerating(false)
     }
-  }, [asistente, nombreUnidad, carpeta, competencias, archivos, resultados])
+  }, [asistente, nombreUnidad, carpeta, competencias, archivos, prompts])
 
   const showOnCanvas = useCallback((type, title, content) => {
     const titles = {
@@ -429,6 +467,8 @@ function App() {
                   className="form-textarea"
                   placeholder="Describe el enfoque general, competencias clave deseadas y requisitos institucionales…"
                   rows={3}
+                  value={prompts.programa}
+                  onChange={e => setPrompts(prev => ({ ...prev, programa: e.target.value }))}
                 />
               </div>
 
@@ -497,6 +537,8 @@ function App() {
                   className="form-textarea"
                   placeholder="Especifica el resultado de aprendizaje o subcompetencia de la unidad…"
                   rows={3}
+                  value={prompts.secuencias}
+                  onChange={e => setPrompts(prev => ({ ...prev, secuencias: e.target.value }))}
                 />
               </div>
 
@@ -582,6 +624,8 @@ function App() {
                   className="form-textarea"
                   placeholder="Pega aquí los RACs, evidencias requeridas y porcentajes de ponderación…"
                   rows={3}
+                  value={prompts.instrumentos}
+                  onChange={e => setPrompts(prev => ({ ...prev, instrumentos: e.target.value }))}
                 />
               </div>
 
