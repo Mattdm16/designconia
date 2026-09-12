@@ -1,7 +1,5 @@
-/* Geist font loaded via index.html */
-
 /* ============================================
-   CSS VARIABLES — Material Design 3 Palette
+   CSS VARIABLES — Material Design 3 (Stitch)
    ============================================ */
 :root {
   --surface: #f8f9ff;
@@ -20,29 +18,37 @@
   --error: #ba1a1a;
   --outline: #757686;
   --outline-variant: #c5c5d7;
-  --font-sans: 'Geist', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 }
 
 /* ============================================
-   GLOBAL RESET & BASE
+   GLOBAL RESET & BASE — fill viewport exactly
    ============================================ */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html, body, #root {
+html {
   height: 100%;
-  font-family: var(--font-sans);
+  overflow: hidden;
+}
+
+body {
+  height: 100%;
+  font-family: 'Geist', system-ui, sans-serif;
   color: var(--on-surface);
-  background: var(--background, var(--surface));
+  background: var(--surface);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
   overflow: hidden;
 }
 
 .app-root {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   overflow: hidden;
 }
 
@@ -60,13 +66,13 @@ html, body, #root {
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #b5bcc9; }
 
 /* ============================================
-   TOP BAR
+   TOP BAR — exact from Stitch
    ============================================ */
 .topbar {
   height: 56px;
   width: 100%;
   background: var(--surface-container-lowest);
-  border-bottom: 1px solid color-mix(in srgb, var(--outline-variant) 60%, transparent);
+  border-bottom: 1px solid rgba(197, 197, 215, 0.6);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -103,10 +109,10 @@ html, body, #root {
 .topbar-version {
   margin-left: 4px;
   font-size: 11px;
-  font-family: var(--font-mono);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
   padding: 2px 8px;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--primary-container) 10%, transparent);
+  background: rgba(37, 70, 215, 0.1);
   color: var(--primary);
   font-weight: 600;
 }
@@ -114,7 +120,7 @@ html, body, #root {
 .topbar-divider {
   width: 1px;
   height: 16px;
-  background: color-mix(in srgb, var(--outline-variant) 60%, transparent);
+  background: rgba(197, 197, 215, 0.6);
 }
 
 .topbar-course {
@@ -141,7 +147,7 @@ html, body, #root {
   padding: 4px 12px;
   border-radius: 9999px;
   background: var(--surface-container-low);
-  border: 1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent);
+  border: 1px solid rgba(197, 197, 215, 0.5);
   font-size: 12px;
   color: var(--on-surface-variant);
 }
@@ -171,7 +177,7 @@ html, body, #root {
   background: none;
   cursor: pointer;
   transition: all 0.15s ease;
-  font-family: var(--font-sans);
+  font-family: 'Geist', system-ui, sans-serif;
 }
 
 .btn-icon:hover {
@@ -194,25 +200,24 @@ html, body, #root {
   cursor: pointer;
   box-shadow: 0 1px 2px rgba(0,0,0,0.1);
   transition: all 0.15s ease;
-  font-family: var(--font-sans);
+  font-family: 'Geist', system-ui, sans-serif;
 }
 
 .btn-primary:hover { background: var(--primary-container); }
 .btn-primary:active { transform: scale(0.98); }
 
 /* ============================================
-   MAIN LAYOUT — Left Panel + Right Canvas
+   MAIN LAYOUT — flex row filling remaining space
    ============================================ */
 .app-layout {
   display: flex;
   flex: 1;
   overflow: hidden;
   position: relative;
-  min-height: 0;
 }
 
 /* ============================================
-   LEFT PANEL — Stepper + Step Content
+   LEFT PANEL — fixed width, exact from Stitch
    ============================================ */
 .left-panel {
   width: 490px;
@@ -221,7 +226,7 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   background: var(--surface-container-lowest);
-  border-right: 1px solid color-mix(in srgb, var(--outline-variant) 60%, transparent);
+  border-right: 1px solid rgba(197, 197, 215, 0.6);
   z-index: 20;
   flex-shrink: 0;
 }
@@ -233,8 +238,8 @@ html, body, #root {
 /* Stepper Header */
 .stepper-header {
   padding: 14px 20px;
-  border-bottom: 1px solid color-mix(in srgb, var(--outline-variant) 60%, transparent);
-  background: color-mix(in srgb, var(--surface-container-low) 30%, transparent);
+  border-bottom: 1px solid rgba(197, 197, 215, 0.6);
+  background: rgba(239, 243, 255, 0.3);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -254,7 +259,7 @@ html, body, #root {
 
 .step-counter-badge {
   font-size: 11px;
-  font-family: var(--font-mono);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-weight: 500;
   padding: 2px 8px;
   border-radius: 4px;
@@ -262,15 +267,13 @@ html, body, #root {
   color: var(--on-surface-variant);
 }
 
-/* Tab Bar */
+/* Tab Bar — exact from Stitch */
 .tab-bar {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  border-bottom: 1px solid color-mix(in srgb, var(--outline-variant) 60%, transparent);
+  border-bottom: 1px solid rgba(197, 197, 215, 0.6);
   background: var(--surface-container-lowest);
   text-align: center;
-  font-size: 12px;
-  font-weight: 500;
 }
 
 .tab-btn {
@@ -284,7 +287,7 @@ html, body, #root {
   align-items: center;
   gap: 2px;
   color: var(--on-surface-variant);
-  font-family: var(--font-sans);
+  font-family: 'Geist', system-ui, sans-serif;
   font-size: 12px;
   font-weight: 500;
   transition: color 0.15s ease;
@@ -341,7 +344,7 @@ html, body, #root {
   align-items: center;
   justify-content: space-between;
   padding-bottom: 8px;
-  border-bottom: 1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent);
+  border-bottom: 1px solid rgba(197, 197, 215, 0.5);
 }
 
 .step-header-left {
@@ -354,7 +357,7 @@ html, body, #root {
   width: 24px;
   height: 24px;
   border-radius: 6px;
-  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  background: rgba(0, 44, 182, 0.1);
   color: var(--primary);
   font-weight: 700;
   font-size: 12px;
@@ -376,7 +379,7 @@ html, body, #root {
 
 .step-tag {
   font-size: 10px;
-  font-family: var(--font-mono);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
   padding: 2px 8px;
   border-radius: 4px;
   font-weight: 600;
@@ -414,7 +417,7 @@ html, body, #root {
   border: 1px solid var(--outline-variant);
   background: var(--surface-container-lowest);
   color: var(--on-surface);
-  font-family: var(--font-sans);
+  font-family: 'Geist', system-ui, sans-serif;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -423,17 +426,12 @@ html, body, #root {
 .form-textarea:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 15%, transparent);
+  box-shadow: 0 0 0 2px rgba(0, 44, 182, 0.15);
 }
 
 .form-input::placeholder,
 .form-textarea::placeholder {
   color: var(--outline);
-}
-
-.form-input.mono,
-.form-textarea.mono {
-  font-family: var(--font-mono);
 }
 
 .form-textarea {
@@ -474,7 +472,7 @@ html, body, #root {
 
 .radio-option.selected {
   border-color: var(--primary);
-  background: color-mix(in srgb, var(--primary) 5%, transparent);
+  background: rgba(0, 44, 182, 0.05);
   color: var(--primary);
 }
 
@@ -545,7 +543,7 @@ html, body, #root {
   padding: 12px;
   border-radius: 8px;
   background: var(--surface-container-low);
-  border: 1px solid color-mix(in srgb, var(--outline-variant) 60%, transparent);
+  border: 1px solid rgba(197, 197, 215, 0.6);
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -575,7 +573,7 @@ html, body, #root {
   gap: 4px;
   padding: 6px 10px;
   background: var(--surface);
-  border-bottom: 1px solid color-mix(in srgb, var(--outline-variant) 60%, transparent);
+  border-bottom: 1px solid rgba(197, 197, 215, 0.6);
   font-size: 12px;
   color: var(--on-surface-variant);
 }
@@ -611,7 +609,7 @@ html, body, #root {
   width: 100%;
   font-size: 12px;
   padding: 12px;
-  font-family: var(--font-mono);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
   color: var(--on-surface);
   background: transparent;
   border: none;
@@ -620,7 +618,6 @@ html, body, #root {
 }
 
 .editor-textarea:focus { outline: none; }
-
 .editor-textarea::placeholder { color: var(--outline); }
 
 /* ============================================
@@ -642,7 +639,7 @@ html, body, #root {
   cursor: pointer;
   box-shadow: 0 1px 2px rgba(0,0,0,0.1);
   transition: all 0.15s ease;
-  font-family: var(--font-sans);
+  font-family: 'Geist', system-ui, sans-serif;
 }
 
 .btn-generate:hover { background: var(--primary-container); }
@@ -661,7 +658,7 @@ html, body, #root {
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
-  font-family: var(--font-sans);
+  font-family: 'Geist', system-ui, sans-serif;
 }
 
 .btn-back:hover { color: var(--on-surface); }
@@ -679,7 +676,7 @@ html, body, #root {
   border: none;
   cursor: pointer;
   transition: all 0.15s ease;
-  font-family: var(--font-sans);
+  font-family: 'Geist', system-ui, sans-serif;
 }
 
 .btn-next:hover { background: var(--primary-container); }
@@ -741,7 +738,7 @@ html, body, #root {
   font-weight: 500;
   color: var(--on-surface);
   transition: all 0.15s ease;
-  font-family: var(--font-sans);
+  font-family: 'Geist', system-ui, sans-serif;
 }
 
 .export-btn:hover {
@@ -788,11 +785,11 @@ html, body, #root {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
-  font-family: var(--font-sans);
+  font-family: 'Geist', system-ui, sans-serif;
 }
 
 .btn-danger-outline:hover {
-  background: color-mix(in srgb, var(--error) 5%, transparent);
+  background: rgba(186, 26, 26, 0.05);
   border-color: var(--error);
 }
 
@@ -801,8 +798,8 @@ html, body, #root {
    ============================================ */
 .left-panel-footer {
   padding: 12px;
-  border-top: 1px solid color-mix(in srgb, var(--outline-variant) 60%, transparent);
-  background: color-mix(in srgb, var(--surface-container-low) 40%, transparent);
+  border-top: 1px solid rgba(197, 197, 215, 0.6);
+  background: rgba(239, 243, 255, 0.4);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -818,7 +815,7 @@ html, body, #root {
 }
 
 /* ============================================
-   RIGHT CANVAS — Drafting Board
+   RIGHT CANVAS — Drafting Board (exact from Stitch)
    ============================================ */
 .canvas-area {
   flex: 1;
@@ -843,11 +840,11 @@ html, body, #root {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: color-mix(in srgb, var(--surface-container-lowest) 95%, transparent);
+  background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(8px);
   padding: 6px 12px;
   border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--outline-variant) 70%, transparent);
+  border: 1px solid rgba(197, 197, 215, 0.7);
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
 
@@ -860,13 +857,12 @@ html, body, #root {
 }
 
 .canvas-controls-label svg { color: var(--primary); }
-
 .canvas-controls-label span { font-weight: 500; color: var(--on-surface); }
 
 .canvas-controls-divider {
   width: 1px;
   height: 14px;
-  background: color-mix(in srgb, var(--outline-variant) 60%, transparent);
+  background: rgba(197, 197, 215, 0.6);
   margin: 0 4px;
 }
 
@@ -886,7 +882,7 @@ html, body, #root {
   border: none;
   background: none;
   cursor: pointer;
-  font-family: var(--font-mono);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 12px;
   color: var(--on-surface-variant);
   transition: background 0.15s ease;
@@ -896,7 +892,7 @@ html, body, #root {
 
 .zoom-value {
   font-size: 12px;
-  font-family: var(--font-mono);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
   padding: 0 4px;
   font-weight: 500;
   color: var(--on-surface);
@@ -935,7 +931,7 @@ html, body, #root {
   height: 64px;
   border-radius: 16px;
   background: var(--surface-container);
-  border: 1px solid color-mix(in srgb, var(--outline-variant) 60%, transparent);
+  border: 1px solid rgba(197, 197, 215, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -967,7 +963,7 @@ html, body, #root {
   padding: 6px 12px;
   border-radius: 9999px;
   background: var(--surface-container-lowest);
-  border: 1px solid color-mix(in srgb, var(--outline-variant) 60%, transparent);
+  border: 1px solid rgba(197, 197, 215, 0.6);
   font-size: 12px;
   color: var(--on-surface-variant);
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
@@ -998,7 +994,7 @@ html, body, #root {
   max-width: 896px;
   background: var(--surface-container-lowest);
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--outline-variant) 70%, transparent);
+  border: 1px solid rgba(197, 197, 215, 0.7);
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   padding: 32px;
 }
@@ -1008,12 +1004,12 @@ html, body, #root {
   align-items: center;
   justify-content: space-between;
   padding-bottom: 16px;
-  border-bottom: 1px solid color-mix(in srgb, var(--outline-variant) 60%, transparent);
+  border-bottom: 1px solid rgba(197, 197, 215, 0.6);
 }
 
 .canvas-card-type {
   font-size: 11px;
-  font-family: var(--font-mono);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--primary);
@@ -1037,33 +1033,12 @@ html, body, #root {
   font-size: 12px;
   color: var(--on-surface);
   line-height: 1.6;
-  font-family: var(--font-mono);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
   white-space: pre-wrap;
   background: var(--surface);
   padding: 20px;
   border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent);
-}
-
-/* ============================================
-   DARK MODE
-   ============================================ */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --surface: #1a1b2e;
-    --surface-container-lowest: #0e0f1a;
-    --surface-container-low: #151626;
-    --surface-container: #1e1f33;
-    --surface-container-high: #282940;
-    --surface-dim: #121320;
-    --primary: #6b8cff;
-    --primary-container: #4a6bff;
-    --on-primary: #ffffff;
-    --on-surface: #e2e4f0;
-    --on-surface-variant: #a0a2b8;
-    --outline: #6e7089;
-    --outline-variant: #3a3c52;
-  }
+  border: 1px solid rgba(197, 197, 215, 0.5);
 }
 
 /* ============================================

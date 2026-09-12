@@ -50,7 +50,6 @@ function App() {
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [darkMode, setDarkMode] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [previewAssistant, setPreviewAssistant] = useState(false)
   const fileInputRef = useRef(null)
@@ -72,13 +71,7 @@ function App() {
         setResultados(data.resultados || { programa: '', secuencias: '', instrumentos: '' })
       }
     } catch { /* ignore */ }
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    setDarkMode(prefersDark)
   }, [])
-
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', darkMode)
-  }, [darkMode])
 
   // Persist on change
   useEffect(() => {
