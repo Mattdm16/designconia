@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: #FAF5E9;
+  color: #1b1917;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: #E3EB90;
+  color: #1b1917;
+}
+
+:focus-visible {
+  outline: 2px solid #B25D3E;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+textarea,
+input {
+  caret-color: #B25D3E;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #B6B7A5 #FAF5E9;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #B6B7A5;
+  border-radius: 8px;
+  border: 2px solid #FAF5E9;
+}
+*::-webkit-scrollbar-track {
+  background: #FAF5E9;
+}
+
+/* aurora for the CraftGPT-like vacio */
+.aurora {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(56px);
+  opacity: 0.52;
+  pointer-events: none;
+}
+
+@keyframes drawer-in {
+  from { opacity: 0; transform: translateX(-16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes canvas-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes scan-line {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(240%); }
+}
+.anim-drawer { animation: drawer-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.anim-canvas { animation: canvas-rise 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.anim-scan { animation: scan-line 1.4s cubic-bezier(0.16, 1, 0.3, 1) infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .anim-drawer, .anim-canvas, .anim-scan { animation: none; }
+}
+
+u { text-underline-offset: 3px; }
