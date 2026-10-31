@@ -7,6 +7,7 @@ dist
 .env.*.local
 .DS_Store
 *.log
+*.tsbuildinfo
 .impeccable/review
 .impeccable/build
 .impeccable/mocks

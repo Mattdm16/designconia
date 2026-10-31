@@ -1,18 +1,22 @@
-# Surface brief — Generador (split chat/canvas)
+# Surface brief — Microcurrículo universitario
 
-Scope: Generador de planificación DesignConia, ruta `/`. Visitor mode: Operate.
-Audience/job: docentes, directivos y coordinadores que pasan de OA a planificación lista en minutos.
-Action/task: prompt inicial → alcance detectado (Macro/Meso/Micro) → desglose + actividades trazables → edición intensiva en canvas mientras se itera en chat.
-Proof/content: datos sintéticos etiquetados hasta contar con OA oficiales; sin claims comerciales.
-Constraints: web daylight, español, Next.js + React + Tailwind; 3 estados (vacío/generando/editando); todo editable; trazabilidad OA visible.
-Memorable moment: el chat central se desliza a tarjetero lateral y la ficha se timbra a la derecha.
-Unresolved: currículum oficial objetivo; datos OA reales; auth/roles; import/export.
+Scope: Generador de microcurrículo de DesignConia, ruta `/`. Visitor mode: Operate.
+Audience/job: docentes universitarios y coordinadores académicos que necesitan el microcurrículo completo de una asignatura —no una sesión— sin escribirlo desde cero.
+Action/task: el asistente abre preguntando qué se quiere hacer hoy → pregunta por la asignatura y su propósito → desde el primer dato real aparece el borrador a un lado y la ficha crece sección por sección → el asistente sigue preguntando (justificación → objetivos → contenido → metodología → evaluación → identificación → bibliografía) → el docente corrige en la ficha, confirma la bibliografía y exporta a Markdown.
+Proof/content: sin datos curriculares oficiales ni claims comerciales; el asistente escribe `[por definir]` en lugar de inventar código, programa, créditos o semestre, y toda referencia bibliográfica nace marcada como sugerencia.
+Constraints: web daylight, español, Next.js 14 + React 18 + Tailwind 3, API de DeepSeek desde un route handler, persistencia en localStorage. Sin auth, sin listas de microcurrículos, sin importación.
+Memorable moment: la ficha aparece por primera vez con solo la asignatura escrita, y a partir de ahí cada respuesta del docente enciende una sección nueva mientras el contador sube de 1/7 a 7/7.
+Unresolved: marco institucional concreto (ninguna universidad en particular), plantilla oficial de microcurrículo de una institución real, exportación distinta de Markdown.
 
 ## Direction contract
 
-THESIS: La planificación se pide por intención, no por formulario. El sistema enruta Macro/Meso/Micro desde el prompt y lo demuestra en un canvas que cambia de forma. Rehúsa el dashboard AI genérico de chat centrado + cards.
-OWN-WORLD: Mundo CodeEase pineado por usuario: fondo beige con ondas, tarjetas flotantes crema de radio grande, burbuja IA oscura, acento naranja durazno, panel biblioteca OA a la derecha. Sin alcance Macro/Meso/Micro, OA en corto, pantalla completa.
-STORY: El docente escribe qué necesita, ve el alcance detectado con confianza, corrige si hace falta, y refina la ficha editable sin perder de qué OA viene cada actividad.
-FIRST VIEWPORT: Vacío centrado con papeleta de pedido. Al enviar, el chat se desliza a 380px a la izquierda y a la derecha aparece la ficha: franja de folio + badge de alcance + sello de estado, pestañas Desglose/Actividades/Evaluación, columna marginal de trazo OA. Primaria: Enviar y Editar.
-FORM: Dirección pineada por usuario desde imagen CodeEase (reemplazo total, sin sorteo), seed key b1d3cbd2 ya descargada por pin. Sin alcance, OA en corto, full-bleed. Ronda de decisión /opciones (A espejo / B centrada / C split): usuario bloqueó COMP A, ya implementado en `/`.
-FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+THESIS: El microcurrículo se conversa, no se rellena por formulario. El asistente pregunta en el orden en que el docente tiene las ideas, y el documento crece visiblemente mientras habla; la ficha no es el premio al final, es el registro del diálogo.
+OWN-WORLD: Mundo CodeEase pineado por el usuario: fondo duna con ondas, tarjetas crema flotantes de radio 18px, burbuja IA Sow, acento Terracotta para actuar. Mora solo identifica lo no verificado; Rainfall solo lo cumplido. Display serif caligráfico (Palatino Linotype) porque el objeto es un documento académico, no un panel de control.
+STORY: El docente abre y ve un chat, no un documento vacío. Cuenta qué asignatura dicta y por qué importa; la ficha aparece con eso. Sigue respondiendo y ve formarse las siete secciones, con su estado visible y el contador n/7. Al final confirma la bibliografía que el asistente le propuso y exporta.
+FIRST VIEWPORT: Solo el chat: cabecera mínima con la marca, «Conversación nueva» y el estado del asistente, hilo centrado a 640px con el saludo de apertura («¿Qué querés hacer hoy?») y tres sugerencias semilla, compositor anclado al fondo. Sin ficha, sin rieles. Primaria: escribir la respuesta.
+FORM: Dirección pineada por el usuario desde imagen CodeEase (reemplazo total, sin sorteo). Ronda de decisión `/opciones` (A espejo / B centrada / C split): el usuario bloqueó COMP A.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance.
+
+## Nota sobre la composición
+
+El usuario eligió COMP A (tres rieles sobre duna) y luego pidió, en dos pasos, un estado inicial de chat limpio y una ficha lateral que crezca con la conversación. Esta entrega **retira el tercer riel**: con el microcurrículo completo, el espacio es del documento y el chat es una columna de 400px a la izquierda. El split de COMP C no se reintrodujo; lo que hay es chat + documento, no chat + lienzo de sesión.

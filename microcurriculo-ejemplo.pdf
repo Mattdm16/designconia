@@ -1,0 +1,269 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R 7 0 R 9 0 R 11 0 R 13 0 R] /Count 5 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 3684 >>
+stream
+BT
+/F2 10.5 Tf 1 0 0 1 56 736 Tm (MICROCURRÍCULO: FUNDAMENTOS DE SOFTWARE) Tj
+/F1 10.5 Tf 1 0 0 1 56 722 Tm (Folio: MC-2026-0001) Tj
+/F2 10.5 Tf 1 0 0 1 56 694 Tm (1. DATOS DE IDENTIFICACIÓN) Tj
+/F1 10.5 Tf 1 0 0 1 56 680 Tm (Asignatura: Fundamentos de Software) Tj
+/F1 10.5 Tf 1 0 0 1 56 666 Tm (Código: ISW-201) Tj
+/F1 10.5 Tf 1 0 0 1 56 652 Tm (Programa académico: Ingeniería de Software) Tj
+/F1 10.5 Tf 1 0 0 1 56 638 Tm (Semestre / nivel: Tercer semestre) Tj
+/F1 10.5 Tf 1 0 0 1 56 624 Tm (Créditos: 4) Tj
+/F1 10.5 Tf 1 0 0 1 56 610 Tm (Horas: 32 teóricas, 32 prácticas, 64 de trabajo independiente \(128 en total\)) Tj
+/F1 10.5 Tf 1 0 0 1 56 596 Tm (Prerrequisitos: Introducción a la Programación) Tj
+/F2 10.5 Tf 1 0 0 1 56 568 Tm (2. JUSTIFICACIÓN) Tj
+/F1 10.5 Tf 1 0 0 1 56 554 Tm (Fundamentos de Software introduce al estudiante de Ingeniería de Software en los conceptos,) Tj
+/F1 10.5 Tf 1 0 0 1 56 540 Tm (procesos y prácticas que estructuran la construcción de productos de software de calidad.) Tj
+/F1 10.5 Tf 1 0 0 1 56 526 Tm (La asignatura conecta la programación aprendida en cursos previos con la disciplina de) Tj
+/F1 10.5 Tf 1 0 0 1 56 512 Tm (ingeniería: el ciclo de vida, las metodologías ágiles y las pruebas. Aporta al perfil de) Tj
+/F1 10.5 Tf 1 0 0 1 56 498 Tm (egreso la capacidad de planificar, gestionar y verificar el desarrollo de software en) Tj
+/F1 10.5 Tf 1 0 0 1 56 484 Tm (equipos, con criterios de calidad y trazabilidad, base necesaria para asignaturas) Tj
+/F1 10.5 Tf 1 0 0 1 56 470 Tm (posteriores de arquitectura, gestión de proyectos y aseguramiento de la calidad.) Tj
+/F2 10.5 Tf 1 0 0 1 56 442 Tm (3. OBJETIVOS O COMPETENCIAS) Tj
+/F2 10.5 Tf 1 0 0 1 56 428 Tm (Generales:) Tj
+/F1 10.5 Tf 1 0 0 1 56 414 Tm (  - Aplicar los fundamentos del ciclo de vida del software, las metodologías ágiles y las) Tj
+/F1 10.5 Tf 1 0 0 1 56 400 Tm (  pruebas para planificar y verificar el desarrollo de un producto de software en equipo.) Tj
+/F2 10.5 Tf 1 0 0 1 56 386 Tm (Específicas:) Tj
+/F1 10.5 Tf 1 0 0 1 56 372 Tm (  - Distinguir las fases y modelos del ciclo de vida del software y seleccionar el más) Tj
+/F1 10.5 Tf 1 0 0 1 56 358 Tm (  adecuado según el contexto del proyecto.) Tj
+/F1 10.5 Tf 1 0 0 1 56 344 Tm (  - Aplicar prácticas de metodologías ágiles, como iteraciones, historias de usuario y) Tj
+/F1 10.5 Tf 1 0 0 1 56 330 Tm (  tableros de gestión, en la planificación de un proyecto.) Tj
+/F1 10.5 Tf 1 0 0 1 56 316 Tm (  - Diseñar y ejecutar pruebas de software, documentando casos y resultados con criterios) Tj
+/F1 10.5 Tf 1 0 0 1 56 302 Tm (  de calidad verificables.) Tj
+/F2 10.5 Tf 1 0 0 1 56 274 Tm (4. CONTENIDO TEMÁTICO) Tj
+/F2 10.5 Tf 1 0 0 1 56 260 Tm (Unidad 1. Ciclo de vida del software) Tj
+/F1 10.5 Tf 1 0 0 1 56 246 Tm (  Resultados de aprendizaje:) Tj
+/F1 10.5 Tf 1 0 0 1 56 232 Tm (    - Distingue los modelos del ciclo de vida del software y justifica la elección de uno) Tj
+/F1 10.5 Tf 1 0 0 1 56 218 Tm (    según las características del proyecto.) Tj
+/F1 10.5 Tf 1 0 0 1 56 204 Tm (  Temas:) Tj
+/F1 10.5 Tf 1 0 0 1 56 190 Tm (    - Modelos de ciclo de vida) Tj
+/F1 10.5 Tf 1 0 0 1 56 176 Tm (        - Modelo en cascada y modelo incremental) Tj
+/F1 10.5 Tf 1 0 0 1 56 162 Tm (        - Modelo en espiral y prototipado) Tj
+/F1 10.5 Tf 1 0 0 1 56 148 Tm (    - Fases y artefactos del proceso) Tj
+/F1 10.5 Tf 1 0 0 1 56 134 Tm (        - Requisitos, análisis, diseño, implementación y mantenimiento) Tj
+/F1 10.5 Tf 1 0 0 1 56 120 Tm (        - Documentación y trazabilidad de artefactos) Tj
+/F2 10.5 Tf 1 0 0 1 56 92 Tm (Unidad 2. Metodologías ágiles) Tj
+/F1 10.5 Tf 1 0 0 1 56 78 Tm (  Resultados de aprendizaje:) Tj
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 8 0 R >>
+endobj
+8 0 obj
+<< /Length 3572 >>
+stream
+BT
+/F1 10.5 Tf 1 0 0 1 56 736 Tm (    - Aplica prácticas ágiles de planificación y seguimiento para organizar el trabajo de) Tj
+/F1 10.5 Tf 1 0 0 1 56 722 Tm (    un equipo de desarrollo.) Tj
+/F1 10.5 Tf 1 0 0 1 56 708 Tm (  Temas:) Tj
+/F1 10.5 Tf 1 0 0 1 56 694 Tm (    - Marco ágil y Scrum) Tj
+/F1 10.5 Tf 1 0 0 1 56 680 Tm (        - Valores y principios del manifiesto ágil) Tj
+/F1 10.5 Tf 1 0 0 1 56 666 Tm (        - Roles, eventos y artefactos de Scrum) Tj
+/F1 10.5 Tf 1 0 0 1 56 652 Tm (    - Gestión del trabajo ágil) Tj
+/F1 10.5 Tf 1 0 0 1 56 638 Tm (        - Historias de usuario y criterios de aceptación) Tj
+/F1 10.5 Tf 1 0 0 1 56 624 Tm (        - Tableros de tareas e iteraciones) Tj
+/F2 10.5 Tf 1 0 0 1 56 596 Tm (Unidad 3. Pruebas de software) Tj
+/F1 10.5 Tf 1 0 0 1 56 582 Tm (  Resultados de aprendizaje:) Tj
+/F1 10.5 Tf 1 0 0 1 56 568 Tm (    - Diseña casos de prueba y registra sus resultados para verificar la calidad de un) Tj
+/F1 10.5 Tf 1 0 0 1 56 554 Tm (    componente de software.) Tj
+/F1 10.5 Tf 1 0 0 1 56 540 Tm (  Temas:) Tj
+/F1 10.5 Tf 1 0 0 1 56 526 Tm (    - Fundamentos de pruebas) Tj
+/F1 10.5 Tf 1 0 0 1 56 512 Tm (        - Niveles de prueba: unitarias, de integración y de sistema) Tj
+/F1 10.5 Tf 1 0 0 1 56 498 Tm (        - Pruebas de caja negra y caja blanca) Tj
+/F1 10.5 Tf 1 0 0 1 56 484 Tm (    - Diseño y documentación de pruebas) Tj
+/F1 10.5 Tf 1 0 0 1 56 470 Tm (        - Casos de prueba y datos de entrada) Tj
+/F1 10.5 Tf 1 0 0 1 56 456 Tm (        - Registro de defectos y trazabilidad de resultados) Tj
+/F2 10.5 Tf 1 0 0 1 56 428 Tm (5. SECUENCIA DIDÁCTICA) Tj
+/F1 10.5 Tf 1 0 0 1 56 414 Tm (Horas planificadas: 1.5 teóricas, 3 prácticas, 0 de trabajo independiente) Tj
+/F2 10.5 Tf 1 0 0 1 56 386 Tm (Sesión 1 - Modelos de ciclo de vida \(90 min, Teórica, Unidad 1\)) Tj
+/F1 10.5 Tf 1 0 0 1 56 372 Tm (  INICIO) Tj
+/F1 10.5 Tf 1 0 0 1 56 358 Tm (    Docente: Presenta un caso de proyecto de software y pregunta qué etapas debería tener) Tj
+/F1 10.5 Tf 1 0 0 1 56 344 Tm (    su desarrollo.) Tj
+/F1 10.5 Tf 1 0 0 1 56 330 Tm (    Estudiante:  Responde y anota las etapas que propone para el caso.) Tj
+/F1 10.5 Tf 1 0 0 1 56 316 Tm (    Recursos:    Diapositivas, Estudio de caso impreso) Tj
+/F1 10.5 Tf 1 0 0 1 56 302 Tm (  DESARROLLO) Tj
+/F1 10.5 Tf 1 0 0 1 56 288 Tm (    Docente: Expone los modelos en cascada, incremental, espiral y prototipado con ejemplos) Tj
+/F1 10.5 Tf 1 0 0 1 56 274 Tm (    y compara sus ventajas.) Tj
+/F1 10.5 Tf 1 0 0 1 56 260 Tm (    Estudiante: Completa una tabla comparativa de los modelos con criterios de riesgo,) Tj
+/F1 10.5 Tf 1 0 0 1 56 246 Tm (    alcance y entregas.) Tj
+/F1 10.5 Tf 1 0 0 1 56 232 Tm (    Recursos:    Diapositivas, Plantilla de tabla comparativa) Tj
+/F1 10.5 Tf 1 0 0 1 56 218 Tm (    Docente: Organiza equipos y asigna a cada uno un escenario de proyecto para elegir un) Tj
+/F1 10.5 Tf 1 0 0 1 56 204 Tm (    modelo.) Tj
+/F1 10.5 Tf 1 0 0 1 56 190 Tm (    Estudiante:  Discute en equipo y justifica el modelo elegido para su escenario.) Tj
+/F1 10.5 Tf 1 0 0 1 56 176 Tm (    Recursos:    Escenarios de proyecto, Jira para registrar la decisión en el backlog) Tj
+/F1 10.5 Tf 1 0 0 1 56 162 Tm (  CIERRE) Tj
+/F1 10.5 Tf 1 0 0 1 56 148 Tm (    Docente: Solicita que cada equipo exponga en un minuto el modelo elegido y su) Tj
+/F1 10.5 Tf 1 0 0 1 56 134 Tm (    justificación.) Tj
+/F1 10.5 Tf 1 0 0 1 56 120 Tm (    Estudiante:  Expone la elección y registra en Jira la decisión del equipo.) Tj
+/F1 10.5 Tf 1 0 0 1 56 106 Tm (    Recursos:    Jira, Cronómetro) Tj
+ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 10 0 R >>
+endobj
+10 0 obj
+<< /Length 3978 >>
+stream
+BT
+/F2 10.5 Tf 1 0 0 1 56 736 Tm (Sesión 2 - Marco ágil y Scrum \(90 min, Práctica, Unidad 2\)) Tj
+/F1 10.5 Tf 1 0 0 1 56 722 Tm (  INICIO) Tj
+/F1 10.5 Tf 1 0 0 1 56 708 Tm (    Docente: Pregunta cómo organizarían el trabajo de un equipo con entregas frecuentes y) Tj
+/F1 10.5 Tf 1 0 0 1 56 694 Tm (    cambios de requisitos.) Tj
+/F1 10.5 Tf 1 0 0 1 56 680 Tm (    Estudiante:  Comparte experiencias previas de trabajo en equipo y propone ideas.) Tj
+/F1 10.5 Tf 1 0 0 1 56 666 Tm (    Recursos:    Pizarra, Tablero en Jira) Tj
+/F1 10.5 Tf 1 0 0 1 56 652 Tm (  DESARROLLO) Tj
+/F1 10.5 Tf 1 0 0 1 56 638 Tm (    Docente: Explica roles, eventos y artefactos de Scrum y modela la creación de un) Tj
+/F1 10.5 Tf 1 0 0 1 56 624 Tm (    backlog de historias de usuario.) Tj
+/F1 10.5 Tf 1 0 0 1 56 610 Tm (    Estudiante: Redacta dos historias de usuario con criterios de aceptación para su) Tj
+/F1 10.5 Tf 1 0 0 1 56 596 Tm (    proyecto.) Tj
+/F1 10.5 Tf 1 0 0 1 56 582 Tm (    Recursos:    Jira, Plantilla de historia de usuario) Tj
+/F1 10.5 Tf 1 0 0 1 56 568 Tm (    Docente: Guía la creación del tablero y la planificación de una iteración de dos) Tj
+/F1 10.5 Tf 1 0 0 1 56 554 Tm (    semanas.) Tj
+/F1 10.5 Tf 1 0 0 1 56 540 Tm (    Estudiante:  Carga las historias en Jira y organiza el tablero con columnas de flujo.) Tj
+/F1 10.5 Tf 1 0 0 1 56 526 Tm (    Recursos:    Jira, Guía de configuración de tablero) Tj
+/F1 10.5 Tf 1 0 0 1 56 512 Tm (  CIERRE) Tj
+/F1 10.5 Tf 1 0 0 1 56 498 Tm (    Docente:     Revisa los tableros y retroalimenta la calidad de las historias.) Tj
+/F1 10.5 Tf 1 0 0 1 56 484 Tm (    Estudiante:  Ajusta las historias según la retroalimentación y deja el tablero listo.) Tj
+/F1 10.5 Tf 1 0 0 1 56 470 Tm (    Recursos:    Jira) Tj
+/F2 10.5 Tf 1 0 0 1 56 442 Tm (Sesión 3 - Diseño y documentación de pruebas \(90 min, Práctica, Unidad 3\)) Tj
+/F1 10.5 Tf 1 0 0 1 56 428 Tm (  INICIO) Tj
+/F1 10.5 Tf 1 0 0 1 56 414 Tm (    Docente: Muestra un defecto real y pregunta cómo lo detectarían antes de liberar el) Tj
+/F1 10.5 Tf 1 0 0 1 56 400 Tm (    software.) Tj
+/F1 10.5 Tf 1 0 0 1 56 386 Tm (    Estudiante:  Propone formas de detección y anota ideas.) Tj
+/F1 10.5 Tf 1 0 0 1 56 372 Tm (    Recursos:    Diapositivas, Ejemplo de defecto) Tj
+/F1 10.5 Tf 1 0 0 1 56 358 Tm (  DESARROLLO) Tj
+/F1 10.5 Tf 1 0 0 1 56 344 Tm (    Docente: Explica el diseño de casos de prueba con datos de entrada y resultados) Tj
+/F1 10.5 Tf 1 0 0 1 56 330 Tm (    esperados.) Tj
+/F1 10.5 Tf 1 0 0 1 56 316 Tm (    Estudiante:  Diseña tres casos de prueba para un componente de su proyecto.) Tj
+/F1 10.5 Tf 1 0 0 1 56 302 Tm (    Recursos:    Plantilla de caso de prueba, Jira) Tj
+/F1 10.5 Tf 1 0 0 1 56 288 Tm (    Docente: Indica cómo registrar casos y defectos en el repositorio y el gestor de) Tj
+/F1 10.5 Tf 1 0 0 1 56 274 Tm (    tareas.) Tj
+/F1 10.5 Tf 1 0 0 1 56 260 Tm (    Estudiante:  Registra los casos en GitHub y los defectos como incidencias en Jira.) Tj
+/F1 10.5 Tf 1 0 0 1 56 246 Tm (    Recursos:    GitHub, Jira) Tj
+/F1 10.5 Tf 1 0 0 1 56 232 Tm (  CIERRE) Tj
+/F1 10.5 Tf 1 0 0 1 56 218 Tm (    Docente: Verifica que los casos estén en GitHub y los defectos en Jira, y da) Tj
+/F1 10.5 Tf 1 0 0 1 56 204 Tm (    retroalimentación.) Tj
+/F1 10.5 Tf 1 0 0 1 56 190 Tm (    Estudiante: Completa el registro y enlaza cada caso con la historia de usuario) Tj
+/F1 10.5 Tf 1 0 0 1 56 176 Tm (    correspondiente.) Tj
+/F1 10.5 Tf 1 0 0 1 56 162 Tm (    Recursos:    GitHub, Jira) Tj
+/F2 10.5 Tf 1 0 0 1 56 134 Tm (6. METODOLOGÍA) Tj
+/F1 10.5 Tf 1 0 0 1 56 120 Tm (- Estudio de caso: El docente presenta escenarios de proyectos de software reales o) Tj
+/F1 10.5 Tf 1 0 0 1 56 106 Tm (verosímiles; los equipos analizan el contexto, eligen modelos y prácticas, y justifican sus) Tj
+/F1 10.5 Tf 1 0 0 1 56 92 Tm (decisiones con criterios técnicos.) Tj
+/F1 10.5 Tf 1 0 0 1 56 78 Tm (- Aprendizaje basado en proyectos: Los equipos desarrollan un proyecto integrador a lo) Tj
+ET
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 12 0 R >>
+endobj
+12 0 obj
+<< /Length 3778 >>
+stream
+BT
+/F1 10.5 Tf 1 0 0 1 56 736 Tm (largo del curso: definen el ciclo de vida, planifican iteraciones en Jira y documentan) Tj
+/F1 10.5 Tf 1 0 0 1 56 722 Tm (pruebas en GitHub, con entregas parciales por corte.) Tj
+/F2 10.5 Tf 1 0 0 1 56 694 Tm (7. SISTEMA DE EVALUACIÓN) Tj
+/F1 10.5 Tf 1 0 0 1 56 680 Tm (Primer corte - 30%) Tj
+/F1 10.5 Tf 1 0 0 1 56 666 Tm (  - Informe de estudio de caso sobre ciclo de vida: Análisis de un escenario de proyecto) Tj
+/F1 10.5 Tf 1 0 0 1 56 652 Tm (  con elección y justificación del modelo de ciclo de vida.) Tj
+/F1 10.5 Tf 1 0 0 1 56 638 Tm (      Instrumento: Rúbrica analítica) Tj
+/F1 10.5 Tf 1 0 0 1 56 624 Tm (      Herramientas: Jira) Tj
+/F1 10.5 Tf 1 0 0 1 56 610 Tm (      Mide: Distingue los modelos del ciclo de vida y justifica la elección de uno según el) Tj
+/F1 10.5 Tf 1 0 0 1 56 596 Tm (      proyecto.) Tj
+/F1 10.5 Tf 1 0 0 1 56 582 Tm (  - Taller de comparación de modelos: Tabla comparativa de modelos con criterios de riesgo,) Tj
+/F1 10.5 Tf 1 0 0 1 56 568 Tm (  alcance y entregas.) Tj
+/F1 10.5 Tf 1 0 0 1 56 554 Tm (      Instrumento: Lista de cotejo) Tj
+/F1 10.5 Tf 1 0 0 1 56 540 Tm (      Mide: Distingue los modelos del ciclo de vida del software.) Tj
+/F1 10.5 Tf 1 0 0 1 56 526 Tm (Segundo corte - 30%) Tj
+/F1 10.5 Tf 1 0 0 1 56 512 Tm (  - Backlog ágil en Jira: Historias de usuario con criterios de aceptación y planificación) Tj
+/F1 10.5 Tf 1 0 0 1 56 498 Tm (  de una iteración en el tablero.) Tj
+/F1 10.5 Tf 1 0 0 1 56 484 Tm (      Instrumento: Rúbrica analítica) Tj
+/F1 10.5 Tf 1 0 0 1 56 470 Tm (      Herramientas: Jira) Tj
+/F1 10.5 Tf 1 0 0 1 56 456 Tm (      Mide: Aplica prácticas ágiles de planificación y seguimiento para organizar el) Tj
+/F1 10.5 Tf 1 0 0 1 56 442 Tm (      trabajo del equipo.) Tj
+/F1 10.5 Tf 1 0 0 1 56 428 Tm (  - Seguimiento de iteración: Registro del avance de la iteración con revisión del tablero) Tj
+/F1 10.5 Tf 1 0 0 1 56 414 Tm (  y ajustes.) Tj
+/F1 10.5 Tf 1 0 0 1 56 400 Tm (      Instrumento: Guía de observación) Tj
+/F1 10.5 Tf 1 0 0 1 56 386 Tm (      Herramientas: Jira) Tj
+/F1 10.5 Tf 1 0 0 1 56 372 Tm (      Mide: Aplica prácticas ágiles de planificación y seguimiento.) Tj
+/F1 10.5 Tf 1 0 0 1 56 358 Tm (Tercer corte - 40%) Tj
+/F1 10.5 Tf 1 0 0 1 56 344 Tm (  - Proyecto integrador en GitHub: Entrega del proyecto con casos de prueba documentados y) Tj
+/F1 10.5 Tf 1 0 0 1 56 330 Tm (  enlace a las incidencias en Jira.) Tj
+/F1 10.5 Tf 1 0 0 1 56 316 Tm (      Instrumento: Rúbrica analítica) Tj
+/F1 10.5 Tf 1 0 0 1 56 302 Tm (      Herramientas: GitHub, Jira) Tj
+/F1 10.5 Tf 1 0 0 1 56 288 Tm (      Mide: Diseña casos de prueba y registra sus resultados para verificar la calidad de) Tj
+/F1 10.5 Tf 1 0 0 1 56 274 Tm (      un componente de software.) Tj
+/F1 10.5 Tf 1 0 0 1 56 260 Tm (  - Defensa del proyecto integrador: Presentación del equipo con justificación de) Tj
+/F1 10.5 Tf 1 0 0 1 56 246 Tm (  decisiones de proceso y pruebas.) Tj
+/F1 10.5 Tf 1 0 0 1 56 232 Tm (      Instrumento: Escala de valoración) Tj
+/F1 10.5 Tf 1 0 0 1 56 218 Tm (      Herramientas: GitHub, Jira) Tj
+/F1 10.5 Tf 1 0 0 1 56 204 Tm (      Mide: Aplica prácticas ágiles y diseña casos de prueba en un proyecto real.) Tj
+/F1 10.5 Tf 1 0 0 1 56 190 Tm (Total: 100%) Tj
+/F2 10.5 Tf 1 0 0 1 56 162 Tm (8. BIBLIOGRAFÍA Y RECURSOS) Tj
+/F2 10.5 Tf 1 0 0 1 56 148 Tm (Obligatorias:) Tj
+/F1 10.5 Tf 1 0 0 1 56 134 Tm (- Sommerville, Ian. Ingeniería de software. Pearson Educación, 2016, 10.ª edición [SIN) Tj
+/F1 10.5 Tf 1 0 0 1 56 120 Tm (CONFIRMAR]) Tj
+/F2 10.5 Tf 1 0 0 1 56 106 Tm (Complementarias:) Tj
+/F1 10.5 Tf 1 0 0 1 56 92 Tm (- Pressman, Roger S. Ingeniería del software: un enfoque práctico. McGraw-Hill, 2015, 8.ª) Tj
+/F1 10.5 Tf 1 0 0 1 56 78 Tm (edición [SIN CONFIRMAR]) Tj
+ET
+endstream
+endobj
+13 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 14 0 R >>
+endobj
+14 0 obj
+<< /Length 478 >>
+stream
+BT
+/F2 10.5 Tf 1 0 0 1 56 736 Tm (Recursos y herramientas:) Tj
+/F1 10.5 Tf 1 0 0 1 56 722 Tm (- GitHub \(usada en 3\)) Tj
+/F1 10.5 Tf 1 0 0 1 56 708 Tm (- Jira \(usada en 8\)) Tj
+/F1 10.5 Tf 1 0 0 1 56 694 Tm (- Repositorios de documentación de proyectos de software \(sin uso declarado\)) Tj
+/F1 10.5 Tf 1 0 0 1 56 666 Tm (NOTA: 2 referencia\(s\) marcadas [SIN CONFIRMAR]. Verificar año, edición e ISBN antes de) Tj
+/F1 10.5 Tf 1 0 0 1 56 652 Tm (presentar el documento.) Tj
+ET
+endstream
+endobj
+xref
+0 15
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000141 00000 n 
+0000000238 00000 n 
+0000000340 00000 n 
+0000000476 00000 n 
+0000004212 00000 n 
+0000004348 00000 n 
+0000007972 00000 n 
+0000008109 00000 n 
+0000012140 00000 n 
+0000012278 00000 n 
+0000016109 00000 n 
+0000016247 00000 n 
+trailer
+<< /Size 15 /Root 1 0 R >>
+startxref
+16777
+%%EOF

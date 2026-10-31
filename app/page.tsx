@@ -1,263 +1,793 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-type Phase = "vacio" | "generando" | "editando";
-type Msg = { role: "user" | "ai"; text: string };
+import { Chat } from "@/components/Chat";
+import { Icono } from "@/components/Icono";
+import { MicrocurriculoFicha } from "@/components/ficha/Microcurriculo";
+import { textoLegible } from "@/lib/errores";
+import { nombreArchivo, textoAPdf } from "@/lib/exportarPdf";
+import { microcurriculoATexto } from "@/lib/exportarTexto";
+import { microcurriculoAMarkdown } from "@/lib/markdown";
+import {
+  SALUDO_APERTURA,
+  SUGERENCIAS_APERTURA,
+  esEstadoGuardado,
+  extraerMensajeParcial,
+  folioNuevo,
+  mergeMicrocurriculo,
+  migrarEstadoV1,
+  parsearRespuesta,
+  validarMicrocurriculo,
+  type ChatMensaje,
+  type Intencion,
+  type Microcurriculo,
+  type SeccionId
+} from "@/lib/schema";
 
-const OAS = [
-  { codigo: "OA-07", corto: "Fracciones en contexto", eje: "Números" },
-  { codigo: "OA-11", corto: "Clasificar triángulos", eje: "Geometría" },
-  { codigo: "OA-14", corto: "Gráficos de barras", eje: "Datos" }
-];
+/** Clave actual: el estado guardado incluye secuencia didáctica y nuevos campos. */
+const CLAVE_ALMACEN = "designconia.micro.v2";
+/** Estado de la entrega anterior: se migra, no se descarta. */
+const CLAVE_ANTERIOR = "designconia.micro.v1";
+/** Claves de la ficha de sesión, mucho más antiguas. No se migran. */
+const CLAVES_VIEJAS = ["designconia.ficha.v3", "designconia.ficha.v2"];
 
-function Icono({ d, cls }: { d: string; cls?: string }) {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={cls ?? "h-4 w-4"}><path d={d} /></svg>;
-}
-const P = {
-  plus: "M12 5v14 M5 12h14",
-  search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14 M21 21l-4.3-4.3",
-  grid: "M4 4h7v7H4z M13 4h7v7h-7z M4 13h7v7H4z M13 13h7v7h-7z",
-  wrench: "M14.5 6.5a4 4 0 0 0-5.6 5L4 16.4V20h3.6l4.9-4.9a4 4 0 0 0 5-5.6l-2.8 2.8-2.4-2.4 2.2-3.4z",
-  gear: "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6 M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.2 3h-4l-.4 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.4 2.7h4l.4-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.06-.4.1-.8.1-1.2z",
-  user: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M4 21a8 8 0 0 1 16 0",
-  logout: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9",
-  share: "M12 3v12 M8 7l4-4 4 4 M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7",
-  dots: "M12 5.5h.01 M12 12h.01 M12 18.5h.01",
-  folder: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
-  send: "M5 12l14-6-4 14-3.5-5.5L5 12z M11.5 14.5L20 6",
-  attach: "M21 11.5a5 5 0 0 1-5 5H8a3 3 0 0 1 0-6h10",
-  check: "M4 12.5l5 5L20 6.5",
-  copy: "M9 9h11v11H9z M5 15V4h11",
-  down: "M12 4v11 M7 11l5 5 5-5 M4 20h16",
-  spark: "M12 2l2.2 6.6L21 11l-6.8 2.4L12 20l-2.2-6.6L3 11l6.8-2.4z"
+type Salud = {
+  conexion: "sin_clave" | "ok" | "clave_invalida" | "sin_saldo" | "red" | "proveedor";
+  ia: boolean;
+  modelo: string;
+  mensaje: string;
 };
 
-export default function Page() {
-  const [phase, setPhase] = useState<Phase>("vacio");
-  const [prompt, setPrompt] = useState("");
-  const [msgs, setMsgs] = useState<Msg[]>([]);
-  const [nav, setNav] = useState("Nuevo chat");
-  const [activeOA, setActiveOA] = useState<string | null>(null);
-  const [lista, setLista] = useState(false);
-  const [tema, setTema] = useState("Fracciones 5° básico");
-  const folio = useRef(`DCN-2026-${String(Math.floor(1000 + Math.random() * 9000))}`);
-  const [desglose, setDesglose] = useState(OAS.map((o) => ({ ...o, hecho: false })));
-  const [acts, setActs] = useState([
-    { oa: "OA-07", texto: "Mercado de fracciones con recta numérica", tiempo: "90'" },
-    { oa: "OA-11", texto: "Detectives de triángulos en plenaria", tiempo: "90'" },
-    { oa: "OA-14", texto: "Encuesta del curso y gráfico de barras", tiempo: "45'" }
-  ]);
-  const [rubrica, setRubrica] = useState([
-    { criterio: "Estrategia", nivel: "La explica con vocabulario del OA" },
-    { criterio: "Precisión", nivel: "3 de 4 correctas" },
-    { criterio: "Cierre", nivel: "Ticket de salida completo" }
-  ]);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-  useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }, [msgs, phase]);
+type Guardado = {
+  version: 2;
+  microcurriculo: Microcurriculo | null;
+  mensajes: ChatMensaje[];
+  sugerencias: string[];
+  intencion: Intencion;
+  seccionActiva: SeccionId | null;
+  crudo: string;
+};
 
-  function enviar(texto: string) {
-    const t = texto.trim();
-    if (!t || phase === "generando") return;
-    setPrompt("");
-    setMsgs((m) => [...m, { role: "user", text: t }]);
-    if (phase === "vacio") {
-      setTema(t.slice(0, 42));
-      setPhase("generando");
-      timer.current = setTimeout(() => {
-        setPhase("editando");
-        setMsgs((m) => [...m, { role: "ai", text: "Listo — ficha generada y editable abajo. Toca un OA del panel para ver su trazo." }]);
-      }, 1300);
-    } else {
-      timer.current = setTimeout(() => {
-        setMsgs((m) => [...m, { role: "ai", text: "Aplicado a la ficha. Todo sigue ligado a su OA." }]);
-      }, 700);
+/* ------------------------------------------------------------------ */
+/* Página                                                              */
+/* ------------------------------------------------------------------ */
+
+export default function Page() {
+  const [micro, setMicro] = useState<Microcurriculo | null>(null);
+  const [mensajes, setMensajes] = useState<ChatMensaje[]>([]);
+  const [sugerencias, setSugerencias] = useState<string[]>(SUGERENCIAS_APERTURA);
+  const [intencion, setIntencion] = useState<Intencion>("entender");
+  const [seccionActiva, setSeccionActiva] = useState<SeccionId | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [salud, setSalud] = useState<Salud | null>(null);
+  const [hidratado, setHidratado] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null);
+  const [pildoraBorrador, setPildoraBorrador] = useState(false);
+  const [chatVisible, setChatVisible] = useState(true);
+
+  const abortRef = useRef<AbortController | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const ultimaPeticion = useRef("");
+  const avisoRef = useRef<number | null>(null);
+
+  /**
+   * El proveedor a veces cierra un turno con finish_reason normal y cero
+   * contenido. En vez de mostrar un error, se reintenta una vez en silencio:
+   * esta bandera le dice al finally que dispare ese reintento cuando la
+   * llamada en curso ya terminó de limpiar su controlador.
+   */
+  const reintentarVacio = useRef(false);
+
+  /**
+   * Contexto de la última falla de parseo. Reintentar con la misma petición
+   * reproduciría el mismo error; con esto, el turno le dice al modelo qué
+   * pasó y le pide cambiar de estrategia.
+   */
+  const ultimoErrorRef = useRef<{ motivo: string; fin: string | null; bruto: string } | null>(null);
+
+  /**
+   * Última respuesta cruda del modelo. Se reinyecta como turno `assistant`
+   * para que la IA recuerde lo que propuso sin tener que volver a describirlo.
+   */
+  const [crudoUltimo, setCrudoUltimo] = useState("");
+  const crudoRef = useRef("");
+
+  /** El microcurrículo vivo, para leerlo dentro de callbacks sin stale state. */
+  const microRef = useRef<Microcurriculo | null>(null);
+  microRef.current = micro;
+
+  const saludRef = useRef<Salud | null>(null);
+  saludRef.current = salud;
+
+  const hayBorrador = micro !== null;
+
+  /* -------- avisos efímeros -------- */
+  const mostrarAviso = useCallback((texto: string) => {
+    setAviso(texto);
+    if (avisoRef.current) window.clearTimeout(avisoRef.current);
+    avisoRef.current = window.setTimeout(() => setAviso(null), 6000);
+  }, []);
+
+  /* -------- persistencia -------- */
+  useEffect(() => {
+    try {
+      // Se lee la clave actual y, si no hay, la de la versión anterior para
+      // migrarla. El trabajo del docente no se descarta por añadir campos.
+      const actual = window.localStorage.getItem(CLAVE_ALMACEN);
+      const anterior = window.localStorage.getItem(CLAVE_ANTERIOR);
+      const crudo = actual ?? anterior;
+
+      if (crudo) {
+        const datos = JSON.parse(crudo) as Record<string, unknown>;
+
+        // Versión previa: se migra normalizando los campos nuevos.
+        if (datos.version !== 2) {
+          const migrado = migrarEstadoV1(datos);
+          if (migrado) {
+            setMicro(migrado.microcurriculo);
+            setMensajes(migrado.mensajes);
+            if (migrado.sugerencias.length) setSugerencias(migrado.sugerencias);
+            setIntencion(migrado.intencion);
+            setSeccionActiva(migrado.seccionActiva);
+            setCrudoUltimo(migrado.crudo);
+            mostrarAviso("Se actualizó tu microcurrículo guardado a la versión nueva. Revisa la secuencia didáctica.");
+          } else {
+            mostrarAviso("Había una conversación guardada ilegible. Empezamos de cero.");
+          }
+          window.localStorage.removeItem(CLAVE_ANTERIOR);
+          if (anterior) window.localStorage.removeItem(CLAVE_ALMACEN);
+        } else if (esEstadoGuardado(datos)) {
+          setMicro(datos.microcurriculo);
+          setMensajes(datos.mensajes);
+          if (datos.sugerencias.length) setSugerencias(datos.sugerencias);
+          setIntencion(datos.intencion);
+          setSeccionActiva(datos.seccionActiva);
+          setCrudoUltimo(datos.crudo);
+        } else {
+          mostrarAviso("Había una conversación guardada incompleta. Empezamos de cero.");
+          window.localStorage.removeItem(CLAVE_ALMACEN);
+        }
+      }
+      for (const clave of CLAVES_VIEJAS) window.localStorage.removeItem(clave);
+    } catch {
+      mostrarAviso("No se pudo leer la conversación guardada en este navegador. Empezamos de cero.");
+    }
+    setHidratado(true);
+  }, [mostrarAviso]);
+
+  useEffect(() => {
+    if (!hidratado) return;
+    const id = window.setTimeout(() => {
+      try {
+        const datos: Guardado = {
+          version: 2,
+          microcurriculo: micro,
+          mensajes,
+          sugerencias,
+          intencion,
+          seccionActiva,
+          crudo: crudoUltimo
+        };
+        window.localStorage.setItem(CLAVE_ALMACEN, JSON.stringify(datos));
+        // Ya migrado: la clave vieja no debe quedar huérfana.
+        window.localStorage.removeItem(CLAVE_ANTERIOR);
+      } catch {
+        /* cuota llena o modo privado: no es motivo para romper la sesión */
+      }
+    }, 400);
+    return () => window.clearTimeout(id);
+  }, [micro, mensajes, sugerencias, intencion, seccionActiva, crudoUltimo, hidratado]);
+
+  useEffect(() => {
+    crudoRef.current = crudoUltimo;
+  }, [crudoUltimo]);
+
+  /* -------- configuración del asistente -------- */
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/salud")
+      .then((r) => r.json() as Promise<Salud>)
+      .then((d) => vivo && setSalud(d))
+      .catch(
+        () =>
+          vivo &&
+          setSalud({
+            conexion: "red",
+            ia: false,
+            modelo: "?",
+            mensaje: "No se pudo comprobar la configuración del asistente."
+          })
+      );
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  /* -------- autoscroll -------- */
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [mensajes, enviando]);
+
+  /* -------- abortar al desmontar -------- */
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  /* -------- edición del microcurrículo -------- */
+  function editarMicro(siguiente: Microcurriculo) {
+    setMicro(siguiente);
+  }
+
+  function nuevo() {
+    if (hayAlgoQueBorrar) {
+      const ok = window.confirm(
+        "¿Descartar este microcurrículo y empezar de cero?\n\nSe borran de este navegador la conversación y la ficha. No se puede deshacer."
+      );
+      if (!ok) return;
+    }
+    abortRef.current?.abort();
+    setMicro(null);
+    setMensajes([]);
+    setSugerencias(SUGERENCIAS_APERTURA);
+    setIntencion("entender");
+    setSeccionActiva(null);
+    setCrudoUltimo("");
+    crudoRef.current = "";
+    setError(null);
+    setPildoraBorrador(false);
+    setChatVisible(true);
+    try {
+      window.localStorage.removeItem(CLAVE_ALMACEN);
+    } catch {
+      /* nada que hacer */
+    }
+    mostrarAviso("Empezamos una conversación nueva. Lo anterior se descartó de este navegador.");
+  }
+
+  /**
+   * El portapapeles sigue entregando Markdown: es lo útil para pegar en un
+   * chat, un correo o un editor. La descarga, en cambio, es PDF de texto plano.
+   */
+  async function copiar() {
+    if (!micro) return;
+    try {
+      await navigator.clipboard.writeText(microcurriculoAMarkdown(micro));
+      mostrarAviso("Microcurrículo copiado como Markdown, listo para pegar.");
+    } catch {
+      mostrarAviso("El navegador no permitió copiar al portapapeles.");
     }
   }
 
-  function markdown(): string {
-    return `# ${tema}\n${folio.current} · ${lista ? "LISTA AULA" : "BORRADOR"}\n\n## Desglose\n${desglose.map((d) => `- [${d.hecho ? "x" : " "}] ${d.codigo} — ${d.corto}`).join("\n")}\n\n## Actividades\n${acts.map((a, i) => `${i + 1}. [${a.oa}] ${a.texto} (${a.tiempo})`).join("\n")}\n\n## Rúbrica\n${rubrica.map((r) => `- ${r.criterio}: ${r.nivel}`).join("\n")}`;
+  /** Descarga el microcurrículo como PDF de texto plano, sin estilos. */
+  function descargarPdf() {
+    if (!micro) return;
+    try {
+      const bytes = textoAPdf(microcurriculoATexto(micro));
+      // Se copia el buffer a un ArrayBuffer propio: Blob no acepta el
+      // ArrayBufferLike que exponen los tipos nuevos de Uint8Array.
+      const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+      const blob = new Blob([buffer], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = nombreArchivo(micro.folio, "pdf");
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      mostrarAviso("No se pudo generar el PDF. Prueba con «Copiar» y pégalo en un documento.");
+    }
   }
-  async function copiar() { try { await navigator.clipboard.writeText(markdown()); } catch { /* portapapeles no disponible */ } }
-  function descargar() { const b = new Blob([markdown()], { type: "text/markdown;charset=utf-8" }); const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = `${folio.current}.md`; a.click(); URL.revokeObjectURL(u); }
-  function trazo(c: string) { return activeOA === c ? "bg-[#E3EB90]/60 ring-1 ring-[#7E7B62]/60" : ""; }
 
-  const NAV = [
-    { n: "Descubrir", icon: P.search }, { n: "Mis fichas", icon: P.grid }, { n: "Biblioteca OA", icon: P.wrench },
-    { n: "Sistema", icon: P.gear }, { n: "Perfil", icon: P.user }
-  ];
+  /* -------- el núcleo: conversar e iterar -------- */
+  const enviar = useCallback(
+    async (texto: string, opciones?: { reintento?: boolean }) => {
+      const t = texto.trim();
+      if (!t || enviando) return;
+      if (saludRef.current && !saludRef.current.ia && saludRef.current.conexion === "sin_clave") {
+        setError(saludRef.current.mensaje);
+        return;
+      }
 
-  return (
-    <div className="relative flex h-screen flex-col gap-3 overflow-hidden bg-[#FAF5E9] p-3 sm:p-4 lg:flex-row">
-      <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox="0 0 1440 900">
-        <path d="M-40 620 C 240 540, 420 700, 720 640 S 1180 560, 1500 640 L1500 940 L-40 940 Z" fill="#B6B7A5" opacity="0.55" />
-        <path d="M-40 700 C 260 630, 480 770, 780 710 S 1200 650, 1500 720 L1500 940 L-40 940 Z" fill="#7E7B62" opacity="0.45" />
-      </svg>
+      ultimaPeticion.current = t;
+      setError(null);
+      setEnviando(true);
 
-      {/* rail izquierda */}
-      <aside className="relative z-10 hidden w-[228px] shrink-0 flex-col gap-3 lg:flex">
-        <div className="rounded-[18px] border border-white/60 bg-[#FFFDF8]/95 p-3 shadow-[0_18px_45px_-22px_rgba(107,50,38,0.45)]">
-          <div className="flex items-center gap-2 px-1">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black text-white"><Icono d={P.spark} cls="h-3.5 w-3.5" /></span>
-            <span className="text-sm font-semibold tracking-tight">DesignConia</span>
-          </div>
-          <button onClick={() => { setNav("Nuevo chat"); setPhase("vacio"); setMsgs([]); setLista(false); }} className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-[#B25D3E] px-3 py-2 text-sm font-medium text-white hover:bg-[#6B3226]">
-            <Icono d={P.plus} /> New chat
+      const idUsuario = `u${Date.now()}`;
+      const idIA = `a${Date.now()}-b`;
+      setMensajes((m) => [...m, { id: idUsuario, role: "usuario", texto: t }, { id: idIA, role: "asistente", texto: "" }]);
+
+      const control = new AbortController();
+      abortRef.current = control;
+
+      /**
+       * La ficha viaja SIEMPRE que exista. Antes se omitía cuando no había
+       * cambiado, para ahorrar tokens, y el modelo quedaba dependiendo de un
+       * JSON enterrado en el historial: por eso a veces contestaba "¿qué
+       * estrategias querés?" como si no supiera la asignatura. La ficha
+       * explícita es la fuente de verdad, y el coste es asumible.
+       */
+      const enviarBorrador = microRef.current;
+
+      const historia: { role: string; content: string }[] = [];
+      if (crudoRef.current) historia.push({ role: "assistant", content: crudoRef.current });
+      for (const m of mensajes.slice(-8)) {
+        historia.push({ role: m.role === "usuario" ? "user" : "assistant", content: m.texto });
+      }
+
+      let bruto = "";
+      let meta: { fin?: string | null; tokens?: number | null; vacio?: boolean; error?: string | null } = {};
+      let respuestaLlego = false;
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: control.signal,
+          body: JSON.stringify({ mensaje: t, microcurriculo: enviarBorrador, historia })
+        });
+        respuestaLlego = true;
+
+        // Un error llega como JSON con estado HTTP, nunca como stream.
+        const tipo = res.headers.get("content-type") ?? "";
+        if (!res.ok || !tipo.includes("text/event-stream")) {
+          // Un 404 aquí significa que la petición no alcanzó el route handler:
+          // o el servidor que responde no es el de esta carpeta, o la pestaña
+          // quedó con un bundle viejo tras una recompilación.
+          if (res.status === 404) {
+            throw new Error(
+              `El servidor respondió 404 en ${res.url || "/api/chat"}. ` +
+                "La petición no llegó al servidor de la app: comprueba que `npm run dev` esté corriendo en el puerto de esta pestaña y recarga con Ctrl+Shift+R."
+            );
+          }
+          let motivo = `El asistente respondió ${res.status}.`;
+          try {
+            const j = (await res.json()) as unknown;
+            const detalle = textoLegible(j);
+            if (detalle) motivo = detalle;
+          } catch {
+            /* respuesta sin JSON: nos quedamos con el estado */
+          }
+          throw new Error(motivo);
+        }
+
+        const lector = res.body!.getReader();
+        const decodificador = new TextDecoder();
+        let buffer = "";
+        /**
+         * ¿El servidor cerró el stream como es debido? Debe mandar `meta` con
+         * `fin` antes del [DONE]. Sin esta comprobación, una conexión cortada
+         * se daba por buena y el usuario veía «Respuesta interrumpida» sin
+         * causa.
+         */
+        let cerradoPorServidor = false;
+
+        for (;;) {
+          const { done, value } = await lector.read();
+          if (done) break;
+          buffer += decodificador.decode(value, { stream: true });
+
+          let corte: number;
+          while ((corte = buffer.indexOf("\n\n")) !== -1) {
+            const evento = buffer.slice(0, corte);
+            buffer = buffer.slice(corte + 2);
+
+            for (const linea of evento.split("\n")) {
+              if (!linea.startsWith("data:")) continue;
+              const carga = linea.slice(5).trim();
+              if (!carga || carga === "[DONE]") continue;
+              try {
+                const trozo = JSON.parse(carga) as { t?: string; meta?: typeof meta };
+                if (trozo.t) bruto += trozo.t;
+                if (trozo.meta) {
+                  meta = trozo.meta;
+                  if (trozo.meta.fin) cerradoPorServidor = true;
+                }
+              } catch {
+                /* un trozo ilegible no invalida lo ya recibido */
+              }
+            }
+
+            // El chat muestra el texto legible del JSON que aún se está formando.
+            const parcial = extraerMensajeParcial(bruto);
+            if (parcial) {
+              setMensajes((m) => m.map((x) => (x.id === idIA ? { ...x, texto: parcial } : x)));
+            }
+          }
+        }
+
+        // Una conexión cortada a mitad no debe pasar por respuesta válida.
+        if (!cerradoPorServidor) {
+          throw new Error(
+            "La conexión se cortó antes de que el asistente terminara de responder. " +
+              "Suele pasar si el servidor se reinició mientras se generaba. Reintenta."
+          );
+        }
+
+        /**
+         * El proveedor a veces cierra un turno con finish_reason normal y
+         * CERO contenido. No es culpa de la petición, y reintentar a mano con
+         * el mismo texto suele funcionar; así que se reintenta solo, una vez,
+         * sin que el docente note nada más que una espera algo más larga.
+         */
+        if (!bruto.trim() && !meta.error) {
+          if (!opciones?.reintento) {
+            reintentarVacio.current = true;
+            return;
+          }
+          throw new Error(
+            "El asistente devolvió un turno vacío dos veces seguidas. Vuelve a intentarlo: si se repite, reformula la petición o continúa desde la ficha."
+          );
+        }
+
+        const resultado = parsearRespuesta(bruto, meta);
+        if (!resultado.ok) {
+          // Si el proveedor reportó un error dentro del stream, es la causa
+          // real y hay que mostrarla antes que cualquier otra explicación.
+          const causaReal = meta.error ? ` El proveedor reportó: ${meta.error}` : "";
+          const motivo = resultado.motivo + causaReal;
+          ultimoErrorRef.current = { motivo, fin: meta.fin ?? null, bruto };
+          throw new Error(motivo);
+        }
+        ultimoErrorRef.current = null;
+
+        setMensajes((m) => m.map((x) => (x.id === idIA ? { ...x, texto: resultado.mensaje } : x)));
+        setSugerencias(resultado.sugerencias);
+        setIntencion(resultado.intencion);
+        setSeccionActiva(resultado.seccionActiva);
+        setCrudoUltimo(bruto);
+        crudoRef.current = bruto;
+
+        // SOLO con borrador se toca la ficha. Un turno conversacional no
+        // puede borrar lo que el docente ya tenía.
+        if (resultado.borrador) {
+          const fusionado = mergeMicrocurriculo(microRef.current, {
+            ...resultado.microcurriculo,
+            folio: microRef.current?.folio ?? folioNuevo()
+          });
+          const problemas = validarMicrocurriculo(fusionado);
+          const primero = microRef.current === null;
+
+          setMicro(fusionado);
+          if (primero) {
+            setPildoraBorrador(true);
+            setChatVisible(true);
+          }
+          if (problemas.length) mostrarAviso(problemas.join(" "));
+        }
+      } catch (e) {
+        const abortado = e instanceof DOMException && e.name === "AbortError";
+        /**
+         * Distinguir "no llegó respuesta" de "llegó vacía" importa: lo primero
+         * es un fallo de red o del servidor, y decir "la IA devolvió una
+         * respuesta vacía" en ese caso manda a buscar el problema al lugar
+         * equivocado.
+         */
+        const falloDeRed = !abortado && !respuestaLlego;
+        const motivo = abortado
+          ? "Detuviste la respuesta. El microcurrículo quedó como estaba."
+          : falloDeRed
+            ? "No se pudo contactar al servidor de la app. Comprueba que `npm run dev` siga corriendo y recarga la página."
+            : e instanceof Error
+              ? e.message
+              : "Ocurrió un error inesperado.";
+
+        setMensajes((m) => m.map((x) => (x.id === idIA ? { ...x, texto: x.texto || motivo, incompleto: true } : x)));
+        if (!abortado) setError(motivo);
+      } finally {
+        setEnviando(false);
+        abortRef.current = null;
+
+        /**
+         * El reintento silencioso se dispara aquí, no dentro del try: así la
+         * llamada en curso ya limpió su controlador y no se pisa el del
+         * reintento. También se quita la burbuja vacía para que el docente no
+         * vea un turno en blanco.
+         */
+        if (reintentarVacio.current) {
+          reintentarVacio.current = false;
+          setMensajes((m) => m.filter((x) => x.id !== idIA));
+          window.setTimeout(() => void enviar(t, { reintento: true }), 0);
+          return;
+        }
+      }
+    },
+    [enviando, mensajes, mostrarAviso]
+  );
+
+  const reintentar = useCallback(() => {
+    const base = ultimaPeticion.current;
+    if (!base) return;
+    const falla = ultimoErrorRef.current;
+    const conContexto = falla
+      ? `${base}\n\n[El intento anterior falló: ${falla.motivo} No repitas la misma respuesta completa; ` +
+        `devuelve algo más acotado y bien formado.]`
+      : base;
+    void enviar(conContexto);
+  }, [enviar]);
+
+  const sinClave = salud !== null && salud.conexion === "sin_clave";
+  const problemaClave =
+    salud !== null &&
+    salud.conexion !== "sin_clave" &&
+    salud.conexion !== "ok" &&
+    salud.conexion !== "proveedor";
+
+  const hayAlgoQueBorrar = mensajes.length > 0 || micro !== null;
+
+  const etiquetaSalud = (() => {
+    if (salud === null) return "Comprobando…";
+    switch (salud.conexion) {
+      case "ok":
+        return `Asistente conectado · ${salud.modelo}`;
+      case "sin_clave":
+        return "Asistente sin configurar";
+      case "clave_invalida":
+        return "Clave rechazada";
+      case "sin_saldo":
+        return "Sin saldo";
+      case "red":
+        return "Sin contacto con DeepSeek";
+      default:
+        return "Asistente conectado";
+    }
+  })();
+
+  /* ------------------------------------------------------------------ */
+  /* Modo conversación: solo el chat. Sin ficha, sin rieles, sin tabs.   */
+  /* ------------------------------------------------------------------ */
+
+  if (!hayBorrador) {
+    return (
+      <div className="relative flex h-screen flex-col overflow-hidden bg-seedling">
+        <Ondas />
+        <header className="relative z-10 flex shrink-0 items-center gap-2.5 px-4 py-3 sm:px-6">
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-sow text-seedling">
+            <Icono nombre="chispa" className="h-4 w-4" />
+          </span>
+          <span className="font-display text-[15px] font-semibold tracking-tight">DesignConia</span>
+          <button
+            type="button"
+            onClick={nuevo}
+            disabled={!hayAlgoQueBorrar}
+            title={
+              hayAlgoQueBorrar
+                ? "Descartar esta conversación y empezar de cero"
+                : "Todavía no hay nada que borrar"
+            }
+            className="ml-1 inline-flex shrink-0 items-center gap-1.5 rounded-full border border-black/10 bg-crema/95 px-3 py-1.5 text-xs font-medium text-black/70 hover:border-black/25 hover:text-black disabled:opacity-40 disabled:hover:border-black/10"
+          >
+            <Icono nombre="deshacer" className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Conversación nueva</span>
+            <span className="sr-only sm:hidden">Conversación nueva</span>
           </button>
-        </div>
-        <nav aria-label="Principal" className="rounded-[18px] border border-white/60 bg-[#FFFDF8]/95 p-2 shadow-[0_18px_45px_-22px_rgba(107,50,38,0.45)]">
-          {NAV.map((x) => (
-            <button key={x.n} onClick={() => setNav(x.n)} aria-pressed={nav === x.n} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm ${nav === x.n ? "bg-black/[0.05] font-medium" : "text-black/70 hover:bg-black/[0.04]"}`}>
-              <Icono d={x.icon} /> {x.n}
-            </button>
-          ))}
-        </nav>
-        <div className="mt-auto flex flex-col gap-3">
-          <div className="rounded-[18px] bg-[#B25D3E] p-4 text-white shadow-[0_18px_45px_-22px_rgba(160,100,40,0.7)]">
-            <p className="text-sm font-semibold">OA oficiales</p>
-            <p className="mt-1 text-xs leading-relaxed text-white/85">Usas datos sintéticos. Conecta el currículum oficial y sal del modo demo.</p>
-            <button onClick={() => setMsgs((m) => [...m, { role: "ai", text: "Para salir del modo demo necesito tu fuente OA: un JSON o CSV con código, nivel, asignatura y descripción. Pégalo aquí o dime dónde vive y lo integro." }])} className="mt-3 w-full rounded-lg bg-black/85 px-3 py-2 text-xs font-medium hover:bg-black">
-              Ver cómo ↑
-            </button>
-          </div>
-          <button onClick={() => setNav("Salir")} className="flex items-center gap-3 rounded-[18px] border border-white/60 bg-[#FFFDF8]/95 px-5 py-3 text-sm text-black/70 shadow-[0_18px_45px_-22px_rgba(107,50,38,0.45)] hover:bg-white">
-            <Icono d={P.logout} /> Log out
-          </button>
-        </div>
-      </aside>
-
-      {/* columna central */}
-      <div className="relative z-10 flex min-w-0 flex-1 flex-col gap-3">
-        <header className="flex items-center gap-2 rounded-[18px] border border-white/60 bg-[#FFFDF8]/95 px-4 py-2.5 shadow-[0_18px_45px_-22px_rgba(107,50,38,0.45)]">
-          <button onClick={() => { setPhase("vacio"); setMsgs([]); }} className="rounded-full bg-[#B25D3E] px-3 py-1.5 text-xs font-medium text-white lg:hidden">Nuevo</button>
-          <input value={tema} onChange={(e) => setTema(e.target.value)} aria-label="Título de la ficha" className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-[15px] font-semibold tracking-tight hover:border-black/10 focus:border-black/20 focus:bg-white focus:outline-none" />
-          <span className={`hidden rounded-full border px-2.5 py-1 text-xs font-medium sm:inline ${lista ? "border-red-200 bg-red-50 text-red-600" : "border-black/10 text-black/50"}`}>{lista ? "Lista aula" : "Borrador"}</span>
-          <button onClick={descargar} className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"><Icono d={P.down} cls="h-3.5 w-3.5" /> Exportar</button>
-          <button onClick={copiar} aria-label="Copiar" className="rounded-full border border-black/10 bg-white p-1.5 hover:border-black/25"><Icono d={P.copy} /></button>
+          <span className="ml-auto flex items-center gap-2 text-[11px] text-black/50">
+            <span
+              className={`h-2 w-2 rounded-full ${sinClave ? "bg-terracotta" : salud === null ? "bg-mist" : "bg-rainfall"}`}
+              aria-hidden="true"
+            />
+            <span className="hidden truncate sm:inline">{etiquetaSalud}</span>
+          </span>
         </header>
 
-        <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-0.5" aria-live="polite">
-          {phase === "vacio" && (
-            <div className="flex flex-col items-center px-2 pt-8 sm:pt-14">
-              <div className="flex items-start gap-2 self-end rounded-2xl rounded-br-sm border border-white/60 bg-[#FFFDF8]/95 px-4 py-2.5 text-sm shadow-[0_14px_35px_-20px_rgba(107,50,38,0.5)]">
-                ¿Me ayudas a planificar mi clase de mañana?
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#6B3226] text-[11px] font-semibold text-white">D</span>
-              </div>
-              <div className="mt-3 w-full max-w-[640px] rounded-2xl bg-[#392525] px-5 py-4 text-[13.5px] leading-relaxed text-[#FAF5E9] shadow-[0_24px_55px_-24px_rgba(57,37,37,0.65)]">
-                Claro — dime nivel, asignatura y OA y te armo la ficha editable aquí mismo, con actividades trazables. Prueba con un ejemplo de abajo.
-              </div>
-              <div className="mt-3 flex w-full max-w-[640px] flex-wrap gap-1.5">
-                {["Clase de fracciones 5° básico", "Unidad de triángulos, 3 sesiones", "Rúbrica de gráficos de barras"].map((ej) => (
-                  <button key={ej} onClick={() => enviar(ej)} className="rounded-full border border-black/10 bg-[#FFFDF8]/95 px-3 py-1.5 text-xs hover:border-black/25">{ej} ›</button>
-                ))}
-              </div>
+        <main className="relative z-10 flex min-h-0 flex-1 flex-col px-3 pb-4 sm:px-6">
+          {/* Con clave presente pero inservible se avisa, y se deja intentar. */}
+          {problemaClave && salud && (
+            <div className="mx-auto w-full max-w-[640px] pb-2">
+              <p className="flex items-start gap-2 rounded-xl bg-terracotta/10 px-3 py-2 text-[12px] leading-relaxed text-black/75">
+                <Icono nombre="alerta" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-terracotta" />
+                <span>
+                  {salud.mensaje} Puedes intentar enviar igual, pero lo más probable es que falle.
+                </span>
+              </p>
             </div>
           )}
+          <Chat
+            mensajes={mensajes}
+            enviando={enviando}
+            error={error}
+            onEnviar={(t) => void enviar(t)}
+            onDetener={() => abortRef.current?.abort()}
+            onReintentar={reintentar}
+            sugerencias={mensajes.length === 0 ? SUGERENCIAS_APERTURA : sugerencias}
+            saludo={SALUDO_APERTURA}
+            variante="limpio"
+            deshabilitado={sinClave}
+            motivoDeshabilitado={salud?.mensaje}
+            scrollRef={scrollRef}
+          />
+        </main>
 
-          {msgs.map((m, i) => (
-            m.role === "user" ? (
-              <div key={i} className="flex items-start justify-end gap-2">
-                <div className="max-w-[75%] rounded-2xl rounded-br-sm border border-white/60 bg-[#FFFDF8]/95 px-4 py-2.5 text-sm shadow-[0_14px_35px_-20px_rgba(107,50,38,0.5)]">{m.text}</div>
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#6B3226] text-[11px] font-semibold text-white">D</span>
-              </div>
-            ) : (
-              <div key={i} className="max-w-[85%] rounded-2xl bg-[#392525] px-5 py-3.5 text-[13.5px] leading-relaxed text-[#FAF5E9] shadow-[0_24px_55px_-24px_rgba(57,37,37,0.65)]">{m.text}</div>
-            )
-          ))}
-          {phase === "generando" && <div className="max-w-[60%] rounded-2xl bg-[#392525] px-5 py-3.5 text-sm text-[#FAF5E9]/70">Armando tu ficha…</div>}
+        {aviso && <Aviso texto={aviso} onCerrar={() => setAviso(null)} />}
+      </div>
+    );
+  }
 
-          {phase === "editando" && (
-            <div className="anim-canvas overflow-hidden rounded-[18px] border border-white/60 bg-[#FFFDF8] shadow-[0_24px_55px_-26px_rgba(107,50,38,0.5)]">
-              <div className="flex flex-wrap items-center gap-2 border-b border-black/[0.07] px-4 py-2.5">
-                <span className="font-mono text-xs text-black/40">{folio.current}</span>
-                <div className="ml-auto flex gap-1.5">
-                  {OAS.map((o) => (
-                    <button key={o.codigo} onClick={() => setActiveOA(activeOA === o.codigo ? null : o.codigo)} aria-pressed={activeOA === o.codigo} className={`rounded-full px-2.5 py-1 font-mono text-xs ${activeOA === o.codigo ? "bg-black text-white" : "bg-black/[0.05] text-black/70 hover:bg-black/[0.09]"}`}>{o.codigo}</button>
-                  ))}
-                </div>
-              </div>
-              <div className="grid gap-4 p-4 sm:grid-cols-2">
-                <section aria-label="Desglose">
-                  <h2 className="text-xs font-semibold uppercase tracking-widest text-black/45">Desglose</h2>
-                  <ul className="mt-2 space-y-1.5">
-                    {desglose.map((d, k) => (
-                      <li key={d.codigo} className={`flex items-center gap-2 rounded-xl border border-black/[0.07] bg-white px-3 py-2 ${trazo(d.codigo)}`}>
-                        <button onClick={() => setDesglose((p) => p.map((x, j) => (j === k ? { ...x, hecho: !x.hecho } : x)))} aria-label={`${d.codigo} listo`} className={`flex h-4 w-4 items-center justify-center rounded-full border ${d.hecho ? "border-black bg-black text-white" : "border-black/25 text-transparent"}`}><Icono d={P.check} cls="h-2.5 w-2.5" /></button>
-                        <span className="font-mono text-xs text-black/50">{d.codigo}</span>
-                        <input value={d.corto} onChange={(e) => setDesglose((p) => p.map((x, j) => (j === k ? { ...x, corto: e.target.value } : x)))} aria-label={`OA ${d.codigo}`} className="min-w-0 flex-1 bg-transparent text-sm focus:outline-none" />
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-                <section aria-label="Actividades">
-                  <h2 className="text-xs font-semibold uppercase tracking-widest text-black/45">Actividades</h2>
-                  <ul className="mt-2 space-y-1.5">
-                    {acts.map((a, k) => (
-                      <li key={k} className={`flex items-center gap-2 rounded-xl border border-black/[0.07] bg-white px-3 py-2 ${trazo(a.oa)}`}>
-                        <span className="rounded-full bg-black/[0.06] px-2 py-0.5 font-mono text-[11px]">{a.oa}</span>
-                        <input value={a.texto} onChange={(e) => setActs((p) => p.map((x, j) => (j === k ? { ...x, texto: e.target.value } : x)))} aria-label={`Actividad ${k + 1}`} className="min-w-0 flex-1 bg-transparent text-sm focus:outline-none" />
-                        <input value={a.tiempo} onChange={(e) => setActs((p) => p.map((x, j) => (j === k ? { ...x, tiempo: e.target.value } : x)))} aria-label="Tiempo" className="w-10 rounded bg-black/[0.05] px-1 py-0.5 text-center text-xs" />
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              </div>
-              <div className="border-t border-black/[0.07] p-4">
-                <h2 className="text-xs font-semibold uppercase tracking-widest text-black/45">Rúbrica</h2>
-                <ul className="mt-2 grid gap-1.5 sm:grid-cols-3">
-                  {rubrica.map((r, k) => (
-                    <li key={k} className="rounded-xl border border-black/[0.07] bg-white px-3 py-2">
-                      <input value={r.criterio} onChange={(e) => setRubrica((p) => p.map((x, j) => (j === k ? { ...x, criterio: e.target.value } : x)))} aria-label="Criterio" className="w-full bg-transparent text-xs font-semibold uppercase tracking-wide focus:outline-none" />
-                      <input value={r.nivel} onChange={(e) => setRubrica((p) => p.map((x, j) => (j === k ? { ...x, nivel: e.target.value } : x)))} aria-label="Nivel logrado" className="mt-0.5 w-full bg-transparent text-sm focus:outline-none" />
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-3 flex items-center gap-2">
-                  <span className="text-xs text-black/45">Datos sintéticos</span>
-                  <button onClick={() => setLista(!lista)} className={`ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium ${lista ? "bg-black text-white" : "bg-[#B25D3E] text-white hover:bg-[#6B3226]"}`}>
-                    <Icono d={P.check} cls="h-3 w-3" /> {lista ? "Lista aula ✓" : "Marcar lista aula"}
-                  </button>
-                </div>
-              </div>
-            </div>
+  /* ------------------------------------------------------------------ */
+  /* Modo borrador: el chat conduce, la ficha crece al lado.             */
+  /* ------------------------------------------------------------------ */
+
+  return (
+    <div className="relative flex h-screen flex-col gap-3 overflow-hidden bg-seedling p-3 sm:p-4 xl:flex-row">
+      <Ondas />
+
+      {/* Chat: conductor de la conversación */}
+      {chatVisible && (
+        <aside
+          className="relative z-10 flex max-h-[38vh] min-h-[11rem] shrink-0 flex-col rounded-[18px] border border-white/60 bg-crema/70 p-2.5 shadow-tarjeta xl:max-h-none xl:w-[480px]"
+          aria-label="Asistente"
+        >
+          <div className="flex shrink-0 items-center gap-2 px-1 pb-1.5">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sow text-seedling">
+              <Icono nombre="chispa" className="h-3.5 w-3.5" />
+            </span>
+            <span className="font-display text-sm font-semibold tracking-tight">DesignConia</span>
+            <button
+              type="button"
+              onClick={nuevo}
+              disabled={!hayAlgoQueBorrar}
+              title="Descartar este microcurrículo y empezar de cero"
+              className="ml-auto inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2 py-1 text-[11px] font-medium text-black/60 hover:border-black/25 hover:text-black disabled:opacity-40"
+            >
+              <Icono nombre="deshacer" className="h-3 w-3" />
+              <span className="hidden sm:inline">Nueva</span>
+              <span className="sr-only sm:hidden">Conversación nueva</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setChatVisible(false)}
+              aria-label="Ocultar el chat y dejar la ficha a pantalla completa"
+              className="rounded-full border border-black/10 bg-white p-1 text-black/55 hover:border-black/25 hover:text-black"
+            >
+              <Icono nombre="chevron" className="h-3.5 w-3.5 rotate-180" />
+            </button>
+          </div>
+
+          <Chat
+            mensajes={mensajes}
+            enviando={enviando}
+            error={error}
+            onEnviar={(t) => void enviar(t)}
+            onDetener={() => abortRef.current?.abort()}
+            onReintentar={reintentar}
+            sugerencias={sugerencias}
+            saludo={SALUDO_APERTURA}
+            variante="lateral"
+            deshabilitado={sinClave}
+            motivoDeshabilitado={salud?.mensaje}
+            scrollRef={scrollRef}
+          />
+        </aside>
+      )}
+
+      {/* Ficha */}
+      <div className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+        <header className="flex shrink-0 flex-wrap items-center gap-2 rounded-[18px] border border-white/60 bg-crema/95 px-3 py-2 shadow-tarjeta">
+          {!chatVisible && (
+            <button
+              type="button"
+              onClick={() => setChatVisible(true)}
+              className="inline-flex items-center gap-1.5 rounded-full bg-terracotta px-3 py-1.5 text-xs font-medium text-white hover:bg-redwood"
+            >
+              <Icono nombre="panel" className="h-3.5 w-3.5" /> Mostrar chat
+            </button>
           )}
+          {!chatVisible && (
+            <button
+              type="button"
+              onClick={nuevo}
+              className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium text-black/70 hover:border-black/25"
+            >
+              <Icono nombre="deshacer" className="h-3.5 w-3.5" /> Nueva
+            </button>
+          )}
+
+          <span className="flex items-center gap-2 text-[11px] text-black/50">
+            <span
+              className={`h-2 w-2 rounded-full ${sinClave ? "bg-terracotta" : problemaClave ? "bg-terracotta" : "bg-rainfall"}`}
+              aria-hidden="true"
+            />
+            <span className="hidden truncate sm:inline">{etiquetaSalud}</span>
+          </span>
+
+          <div className="ml-auto flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={copiar}
+              aria-label="Copiar el microcurrículo como Markdown, para pegar"
+              title="Copiar como Markdown para pegar"
+              className="rounded-full border border-black/10 bg-white p-1.5 hover:border-black/25"
+            >
+              <Icono nombre="copiar" />
+            </button>
+            <button
+              type="button"
+              onClick={descargarPdf}
+              title="Descargar como PDF de texto plano"
+              className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
+            >
+              <Icono nombre="descargar" className="h-3.5 w-3.5" /> Exportar PDF
+            </button>
+          </div>
+        </header>
+
+        {pildoraBorrador && (
+          <div className="flex shrink-0 items-center gap-2.5 rounded-[18px] border border-white/60 bg-sprout/50 px-3 py-2 text-[12px] text-black/75">
+            <Icono nombre="chispa" className="h-4 w-4 shrink-0 text-redwood" />
+            <p className="min-w-0 flex-1">
+              Aquí va tomando forma tu microcurrículo. Sigue conversando: cada dato cae en su sección.
+            </p>
+            <button
+              type="button"
+              onClick={() => setPildoraBorrador(false)}
+              aria-label="Descartar el aviso"
+              className="shrink-0 rounded-full px-2 py-1 text-black/50 hover:text-black"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
+          {micro && (
+            <MicrocurriculoFicha
+              micro={micro}
+              activa={seccionActiva}
+              onChange={editarMicro}
+            />
+          )}
+          <p className="px-1 pb-2 pt-3 text-[11px] leading-relaxed text-black/40">
+            Tu microcurrículo se guarda en este navegador. Lo que genera el asistente es una propuesta:
+            revísalo, confirma la bibliografía y ajústalo antes de presentarlo.
+          </p>
         </div>
-
-        <form onSubmit={(e) => { e.preventDefault(); enviar(prompt); }} className="rounded-[18px] border border-white/60 bg-[#FFFDF8]/95 p-2.5 shadow-[0_18px_45px_-22px_rgba(107,50,38,0.45)]">
-          <div className="flex items-center gap-1.5 px-1 pb-1.5">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-black/[0.05] px-2.5 py-1 text-xs"><Icono d={P.spark} cls="h-3 w-3 text-[#6B3226]" /> DesignConia AI</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <label htmlFor="chat" className="sr-only">Pide o ajusta tu planificación</label>
-            <input id="chat" value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Pide tu planificación…" disabled={phase === "generando"} className="min-w-0 flex-1 rounded-full bg-transparent px-3 py-2 text-sm placeholder:text-black/35 focus:outline-none disabled:opacity-50" />
-            <span className="hidden h-8 w-8 items-center justify-center rounded-full bg-black/[0.05] text-black/50 sm:inline-flex"><Icono d={P.attach} /></span>
-            <button type="submit" aria-label="Enviar" disabled={phase === "generando"} className="flex h-8 w-8 items-center justify-center rounded-full bg-[#B25D3E] text-white hover:bg-[#6B3226] disabled:opacity-50"><Icono d={P.send} cls="h-4 w-4" /></button>
-          </div>
-        </form>
       </div>
 
-      {/* panel derecho */}
-      <aside className="relative z-10 hidden w-[232px] shrink-0 xl:block" aria-label="Biblioteca OA">
-        <div className="flex h-full flex-col rounded-[18px] border border-white/60 bg-[#FFFDF8]/95 p-3 shadow-[0_18px_45px_-22px_rgba(107,50,38,0.45)]">
-          <p className="px-2 text-xs font-semibold uppercase tracking-widest text-black/45">Biblioteca OA</p>
-          <div className="mt-2 space-y-3 overflow-y-auto">
-            {["Números", "Geometría", "Datos"].map((eje) => (
-              <div key={eje}>
-                <p className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-black/60"><Icono d={P.folder} cls="h-3.5 w-3.5 text-[#6B3226]" /> {eje.toLowerCase()}</p>
-                {OAS.filter((o) => o.eje === eje).map((o) => (
-                  <button key={o.codigo} onClick={() => setActiveOA(activeOA === o.codigo ? null : o.codigo)} aria-pressed={activeOA === o.codigo} className={`ml-4 flex w-[calc(100%-1rem)] items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs ${activeOA === o.codigo ? "bg-black text-white" : "hover:bg-black/[0.05]"}`}>
-                    <span className="font-mono">{o.codigo}</span>
-                    <span className={activeOA === o.codigo ? "text-white/80" : "text-black/55"}>{o.corto}</span>
-                  </button>
-                ))}
-              </div>
-            ))}
-          </div>
-          <p className="mt-auto px-2 pt-3 text-[11px] leading-relaxed text-black/40">Toca un OA para ver su trazo en la ficha.</p>
-        </div>
-      </aside>
+      {aviso && <Aviso texto={aviso} onCerrar={() => setAviso(null)} />}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Piezas de la página                                                 */
+/* ------------------------------------------------------------------ */
+
+function Ondas() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 h-full w-full"
+      preserveAspectRatio="none"
+      viewBox="0 0 1440 900"
+    >
+      <path
+        d="M-40 620 C 240 540, 420 700, 720 640 S 1180 560, 1500 640 L1500 940 L-40 940 Z"
+        fill="#B6B7A5"
+        opacity="0.55"
+      />
+      <path
+        d="M-40 700 C 260 630, 480 770, 780 710 S 1200 650, 1500 720 L1500 940 L-40 940 Z"
+        fill="#7E7B62"
+        opacity="0.45"
+      />
+    </svg>
+  );
+}
+
+function Aviso({ texto, onCerrar }: { texto: string; onCerrar: () => void }) {
+  return (
+    <div
+      role="status"
+      className="fixed bottom-4 left-1/2 z-50 flex max-w-[90vw] -translate-x-1/2 items-center gap-2 rounded-full border border-white/60 bg-sow px-4 py-2 text-[12.5px] text-seedling shadow-burbuja"
+    >
+      <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
+      <span className="max-w-[70ch]">{texto}</span>
+      <button
+        type="button"
+        onClick={onCerrar}
+        aria-label="Cerrar el aviso"
+        className="ml-1 opacity-60 hover:opacity-100"
+      >
+        ×
+      </button>
     </div>
   );
 }

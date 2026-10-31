@@ -1,0 +1,357 @@
+{
+  "folio": "MC-2026-0001",
+  "ident": {
+    "asignatura": "Fundamentos de Software",
+    "codigo": "ISW-201",
+    "programa": "Ingeniería de Software",
+    "creditos": 4,
+    "horas": {
+      "teoricas": 32,
+      "practicas": 32,
+      "independientes": 64
+    },
+    "prerrequisitos": [
+      "Introducción a la Programación"
+    ],
+    "semestre": "Tercer semestre"
+  },
+  "justificacion": "Fundamentos de Software introduce al estudiante de Ingeniería de Software en los conceptos, procesos y prácticas que estructuran la construcción de productos de software de calidad. La asignatura conecta la programación aprendida en cursos previos con la disciplina de ingeniería: el ciclo de vida, las metodologías ágiles y las pruebas. Aporta al perfil de egreso la capacidad de planificar, gestionar y verificar el desarrollo de software en equipos, con criterios de calidad y trazabilidad, base necesaria para asignaturas posteriores de arquitectura, gestión de proyectos y aseguramiento de la calidad.",
+  "objetivos": {
+    "generales": [
+      "Aplicar los fundamentos del ciclo de vida del software, las metodologías ágiles y las pruebas para planificar y verificar el desarrollo de un producto de software en equipo."
+    ],
+    "especificas": [
+      "Distinguir las fases y modelos del ciclo de vida del software y seleccionar el más adecuado según el contexto del proyecto.",
+      "Aplicar prácticas de metodologías ágiles, como iteraciones, historias de usuario y tableros de gestión, en la planificación de un proyecto.",
+      "Diseñar y ejecutar pruebas de software, documentando casos y resultados con criterios de calidad verificables."
+    ]
+  },
+  "contenido": {
+    "unidades": [
+      {
+        "numero": 1,
+        "titulo": "Ciclo de vida del software",
+        "resultadosAprendizaje": [
+          "Distingue los modelos del ciclo de vida del software y justifica la elección de uno según las características del proyecto."
+        ],
+        "temas": [
+          {
+            "nombre": "Modelos de ciclo de vida",
+            "subtemas": [
+              "Modelo en cascada y modelo incremental",
+              "Modelo en espiral y prototipado"
+            ]
+          },
+          {
+            "nombre": "Fases y artefactos del proceso",
+            "subtemas": [
+              "Requisitos, análisis, diseño, implementación y mantenimiento",
+              "Documentación y trazabilidad de artefactos"
+            ]
+          }
+        ]
+      },
+      {
+        "numero": 2,
+        "titulo": "Metodologías ágiles",
+        "resultadosAprendizaje": [
+          "Aplica prácticas ágiles de planificación y seguimiento para organizar el trabajo de un equipo de desarrollo."
+        ],
+        "temas": [
+          {
+            "nombre": "Marco ágil y Scrum",
+            "subtemas": [
+              "Valores y principios del manifiesto ágil",
+              "Roles, eventos y artefactos de Scrum"
+            ]
+          },
+          {
+            "nombre": "Gestión del trabajo ágil",
+            "subtemas": [
+              "Historias de usuario y criterios de aceptación",
+              "Tableros de tareas e iteraciones"
+            ]
+          }
+        ]
+      },
+      {
+        "numero": 3,
+        "titulo": "Pruebas de software",
+        "resultadosAprendizaje": [
+          "Diseña casos de prueba y registra sus resultados para verificar la calidad de un componente de software."
+        ],
+        "temas": [
+          {
+            "nombre": "Fundamentos de pruebas",
+            "subtemas": [
+              "Niveles de prueba: unitarias, de integración y de sistema",
+              "Pruebas de caja negra y caja blanca"
+            ]
+          },
+          {
+            "nombre": "Diseño y documentación de pruebas",
+            "subtemas": [
+              "Casos de prueba y datos de entrada",
+              "Registro de defectos y trazabilidad de resultados"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "secuencia": {
+    "sesiones": [
+      {
+        "numero": 1,
+        "unidad": 1,
+        "tema": "Modelos de ciclo de vida",
+        "duracionMin": 90,
+        "tipo": "teorica",
+        "inicio": [
+          {
+            "docente": "Presenta un caso de proyecto de software y pregunta qué etapas debería tener su desarrollo.",
+            "estudiante": "Responde y anota las etapas que propone para el caso.",
+            "recursos": [
+              "Diapositivas",
+              "Estudio de caso impreso"
+            ]
+          }
+        ],
+        "desarrollo": [
+          {
+            "docente": "Expone los modelos en cascada, incremental, espiral y prototipado con ejemplos y compara sus ventajas.",
+            "estudiante": "Completa una tabla comparativa de los modelos con criterios de riesgo, alcance y entregas.",
+            "recursos": [
+              "Diapositivas",
+              "Plantilla de tabla comparativa"
+            ]
+          },
+          {
+            "docente": "Organiza equipos y asigna a cada uno un escenario de proyecto para elegir un modelo.",
+            "estudiante": "Discute en equipo y justifica el modelo elegido para su escenario.",
+            "recursos": [
+              "Escenarios de proyecto",
+              "Jira para registrar la decisión en el backlog"
+            ]
+          }
+        ],
+        "cierre": [
+          {
+            "docente": "Solicita que cada equipo exponga en un minuto el modelo elegido y su justificación.",
+            "estudiante": "Expone la elección y registra en Jira la decisión del equipo.",
+            "recursos": [
+              "Jira",
+              "Cronómetro"
+            ]
+          }
+        ]
+      },
+      {
+        "numero": 2,
+        "unidad": 2,
+        "tema": "Marco ágil y Scrum",
+        "duracionMin": 90,
+        "tipo": "practica",
+        "inicio": [
+          {
+            "docente": "Pregunta cómo organizarían el trabajo de un equipo con entregas frecuentes y cambios de requisitos.",
+            "estudiante": "Comparte experiencias previas de trabajo en equipo y propone ideas.",
+            "recursos": [
+              "Pizarra",
+              "Tablero en Jira"
+            ]
+          }
+        ],
+        "desarrollo": [
+          {
+            "docente": "Explica roles, eventos y artefactos de Scrum y modela la creación de un backlog de historias de usuario.",
+            "estudiante": "Redacta dos historias de usuario con criterios de aceptación para su proyecto.",
+            "recursos": [
+              "Jira",
+              "Plantilla de historia de usuario"
+            ]
+          },
+          {
+            "docente": "Guía la creación del tablero y la planificación de una iteración de dos semanas.",
+            "estudiante": "Carga las historias en Jira y organiza el tablero con columnas de flujo.",
+            "recursos": [
+              "Jira",
+              "Guía de configuración de tablero"
+            ]
+          }
+        ],
+        "cierre": [
+          {
+            "docente": "Revisa los tableros y retroalimenta la calidad de las historias.",
+            "estudiante": "Ajusta las historias según la retroalimentación y deja el tablero listo.",
+            "recursos": [
+              "Jira"
+            ]
+          }
+        ]
+      },
+      {
+        "numero": 3,
+        "unidad": 3,
+        "tema": "Diseño y documentación de pruebas",
+        "duracionMin": 90,
+        "tipo": "practica",
+        "inicio": [
+          {
+            "docente": "Muestra un defecto real y pregunta cómo lo detectarían antes de liberar el software.",
+            "estudiante": "Propone formas de detección y anota ideas.",
+            "recursos": [
+              "Diapositivas",
+              "Ejemplo de defecto"
+            ]
+          }
+        ],
+        "desarrollo": [
+          {
+            "docente": "Explica el diseño de casos de prueba con datos de entrada y resultados esperados.",
+            "estudiante": "Diseña tres casos de prueba para un componente de su proyecto.",
+            "recursos": [
+              "Plantilla de caso de prueba",
+              "Jira"
+            ]
+          },
+          {
+            "docente": "Indica cómo registrar casos y defectos en el repositorio y el gestor de tareas.",
+            "estudiante": "Registra los casos en GitHub y los defectos como incidencias en Jira.",
+            "recursos": [
+              "GitHub",
+              "Jira"
+            ]
+          }
+        ],
+        "cierre": [
+          {
+            "docente": "Verifica que los casos estén en GitHub y los defectos en Jira, y da retroalimentación.",
+            "estudiante": "Completa el registro y enlaza cada caso con la historia de usuario correspondiente.",
+            "recursos": [
+              "GitHub",
+              "Jira"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "metodologia": {
+    "estrategias": [
+      {
+        "nombre": "Estudio de caso",
+        "descripcion": "El docente presenta escenarios de proyectos de software reales o verosímiles; los equipos analizan el contexto, eligen modelos y prácticas, y justifican sus decisiones con criterios técnicos."
+      },
+      {
+        "nombre": "Aprendizaje basado en proyectos",
+        "descripcion": "Los equipos desarrollan un proyecto integrador a lo largo del curso: definen el ciclo de vida, planifican iteraciones en Jira y documentan pruebas en GitHub, con entregas parciales por corte."
+      }
+    ]
+  },
+  "evaluacion": {
+    "cortes": [
+      {
+        "nombre": "Primer corte",
+        "porcentaje": 30,
+        "actividades": [
+          {
+            "nombre": "Informe de estudio de caso sobre ciclo de vida",
+            "descripcion": "Análisis de un escenario de proyecto con elección y justificación del modelo de ciclo de vida.",
+            "instrumento": "Rúbrica analítica",
+            "herramientas": [
+              "Jira"
+            ],
+            "mide": "Distingue los modelos del ciclo de vida y justifica la elección de uno según el proyecto."
+          },
+          {
+            "nombre": "Taller de comparación de modelos",
+            "descripcion": "Tabla comparativa de modelos con criterios de riesgo, alcance y entregas.",
+            "instrumento": "Lista de cotejo",
+            "herramientas": [],
+            "mide": "Distingue los modelos del ciclo de vida del software."
+          }
+        ]
+      },
+      {
+        "nombre": "Segundo corte",
+        "porcentaje": 30,
+        "actividades": [
+          {
+            "nombre": "Backlog ágil en Jira",
+            "descripcion": "Historias de usuario con criterios de aceptación y planificación de una iteración en el tablero.",
+            "instrumento": "Rúbrica analítica",
+            "herramientas": [
+              "Jira"
+            ],
+            "mide": "Aplica prácticas ágiles de planificación y seguimiento para organizar el trabajo del equipo."
+          },
+          {
+            "nombre": "Seguimiento de iteración",
+            "descripcion": "Registro del avance de la iteración con revisión del tablero y ajustes.",
+            "instrumento": "Guía de observación",
+            "herramientas": [
+              "Jira"
+            ],
+            "mide": "Aplica prácticas ágiles de planificación y seguimiento."
+          }
+        ]
+      },
+      {
+        "nombre": "Tercer corte",
+        "porcentaje": 40,
+        "actividades": [
+          {
+            "nombre": "Proyecto integrador en GitHub",
+            "descripcion": "Entrega del proyecto con casos de prueba documentados y enlace a las incidencias en Jira.",
+            "instrumento": "Rúbrica analítica",
+            "herramientas": [
+              "GitHub",
+              "Jira"
+            ],
+            "mide": "Diseña casos de prueba y registra sus resultados para verificar la calidad de un componente de software."
+          },
+          {
+            "nombre": "Defensa del proyecto integrador",
+            "descripcion": "Presentación del equipo con justificación de decisiones de proceso y pruebas.",
+            "instrumento": "Escala de valoración",
+            "herramientas": [
+              "GitHub",
+              "Jira"
+            ],
+            "mide": "Aplica prácticas ágiles y diseña casos de prueba en un proyecto real."
+          }
+        ]
+      }
+    ]
+  },
+  "bibliografia": {
+    "obligatorias": [
+      {
+        "autor": "Sommerville, Ian",
+        "titulo": "Ingeniería de software",
+        "dato": "Pearson Educación",
+        "anio": "2016",
+        "edicion": "10.ª edición",
+        "isbn": "",
+        "confirmada": false
+      }
+    ],
+    "complementarias": [
+      {
+        "autor": "Pressman, Roger S.",
+        "titulo": "Ingeniería del software: un enfoque práctico",
+        "dato": "McGraw-Hill",
+        "anio": "2015",
+        "edicion": "8.ª edición",
+        "isbn": "",
+        "confirmada": false
+      }
+    ],
+    "recursos": [
+      "GitHub",
+      "Jira",
+      "Repositorios de documentación de proyectos de software"
+    ]
+  }
+}
