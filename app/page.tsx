@@ -10,13 +10,31 @@ import { nombreArchivo, textoAPdf } from "@/lib/exportarPdf";
 import { microcurriculoATexto } from "@/lib/exportarTexto";
 import { microcurriculoAMarkdown } from "@/lib/markdown";
 import {
+  aplicarVistaMicroV3,
+  crearEstadoGuardadoV3Vacio,
+  leerVistaMicroV3,
+  vistaMicroVacia,
+  type VistaMicroPersistible
+} from "@/lib/estadoMicro";
+import {
+  CLAVE_MICRO_V1,
+  CLAVE_MICRO_V2,
+  CLAVE_PROYECTO_V3,
+  CLAVE_PROYECTO_V3_RECUPERACION,
+  CLAVE_PROYECTO_V3_RESPALDO,
+  CLAVE_PROYECTO_V3_TEMP,
+  CLAVE_PROYECTO_V3_TEMP_RECUPERACION,
+  cargarEstadoPersistido,
+  guardarEstadoV3
+} from "@/lib/persistencia";
+import { type EstadoGuardadoV3 } from "@/lib/proyecto";
+import {
   SALUDO_APERTURA,
+  SECCIONES,
   SUGERENCIAS_APERTURA,
-  esEstadoGuardado,
   extraerMensajeParcial,
   folioNuevo,
   mergeMicrocurriculo,
-  migrarEstadoV1,
   parsearRespuesta,
   validarMicrocurriculo,
   type ChatMensaje,
@@ -25,28 +43,29 @@ import {
   type SeccionId
 } from "@/lib/schema";
 
-/** Clave actual: el estado guardado incluye secuencia didáctica y nuevos campos. */
-const CLAVE_ALMACEN = "designconia.micro.v2";
-/** Estado de la entrega anterior: se migra, no se descarta. */
-const CLAVE_ANTERIOR = "designconia.micro.v1";
-/** Claves de la ficha de sesión, mucho más antiguas. No se migran. */
-const CLAVES_VIEJAS = ["designconia.ficha.v3", "designconia.ficha.v2"];
+const CLAVES_PERSISTENCIA_PROYECTO = [
+  CLAVE_PROYECTO_V3,
+  CLAVE_PROYECTO_V3_TEMP,
+  CLAVE_PROYECTO_V3_TEMP_RECUPERACION,
+  CLAVE_PROYECTO_V3_RESPALDO,
+  CLAVE_PROYECTO_V3_RECUPERACION,
+  CLAVE_MICRO_V2,
+  CLAVE_MICRO_V1
+] as const;
+
+function esSeccionMicro(valor: string | null): valor is SeccionId {
+  return valor !== null && (SECCIONES as readonly string[]).includes(valor);
+}
+
+function nombreErrorPersistencia(error: unknown): string {
+  return error instanceof Error ? error.message : "Error de almacenamiento no identificado.";
+}
 
 type Salud = {
   conexion: "sin_clave" | "ok" | "clave_invalida" | "sin_saldo" | "red" | "proveedor";
   ia: boolean;
   modelo: string;
   mensaje: string;
-};
-
-type Guardado = {
-  version: 2;
-  microcurriculo: Microcurriculo | null;
-  mensajes: ChatMensaje[];
-  sugerencias: string[];
-  intencion: Intencion;
-  seccionActiva: SeccionId | null;
-  crudo: string;
 };
 
 /* ------------------------------------------------------------------ */
@@ -64,8 +83,18 @@ export default function Page() {
   const [salud, setSalud] = useState<Salud | null>(null);
   const [hidratado, setHidratado] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [avisoPersistencia, setAvisoPersistencia] = useState<string | null>(null);
+  const [persistenciaBloqueada, setPersistenciaBloqueada] = useState(false);
+  const [datosNoRecuperables, setDatosNoRecuperables] = useState(false);
+  const [scopeV3NoSoportado, setScopeV3NoSoportado] = useState(false);
   const [pildoraBorrador, setPildoraBorrador] = useState(false);
   const [chatVisible, setChatVisible] = useState(true);
+
+  const estadoV3Ref = useRef<EstadoGuardadoV3 | null>(null);
+  const idProyectoNuevoRef = useRef<string | null>(null);
+  const bloqueoPersistenciaRef = useRef(false);
+  const scopeV3NoSoportadoRef = useRef(false);
+  const legadosPendientesRef = useRef(false);
 
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -110,59 +139,108 @@ export default function Page() {
     avisoRef.current = window.setTimeout(() => setAviso(null), 6000);
   }, []);
 
-  /* -------- persistencia -------- */
+  /* -------- persistencia V3 -------- */
   useEffect(() => {
     try {
-      // Se lee la clave actual y, si no hay, la de la versión anterior para
-      // migrarla. El trabajo del docente no se descarta por añadir campos.
-      const actual = window.localStorage.getItem(CLAVE_ALMACEN);
-      const anterior = window.localStorage.getItem(CLAVE_ANTERIOR);
-      const crudo = actual ?? anterior;
+      const carga = cargarEstadoPersistido(window.localStorage);
+      if (carga.ok) {
+        estadoV3Ref.current = carga.estado;
+        idProyectoNuevoRef.current = carga.estado.proyecto.id;
+        legadosPendientesRef.current =
+          carga.clavesLegadasPendientes.length > 0 ||
+          carga.clavesTemporalesPendientes.length > 0 ||
+          carga.clavesConflictivas.length > 0;
 
-      if (crudo) {
-        const datos = JSON.parse(crudo) as Record<string, unknown>;
-
-        // Versión previa: se migra normalizando los campos nuevos.
-        if (datos.version !== 2) {
-          const migrado = migrarEstadoV1(datos);
-          if (migrado) {
-            setMicro(migrado.microcurriculo);
-            setMensajes(migrado.mensajes);
-            if (migrado.sugerencias.length) setSugerencias(migrado.sugerencias);
-            setIntencion(migrado.intencion);
-            setSeccionActiva(migrado.seccionActiva);
-            setCrudoUltimo(migrado.crudo);
-            mostrarAviso("Se actualizó tu microcurrículo guardado a la versión nueva. Revisa la secuencia didáctica.");
-          } else {
-            mostrarAviso("Había una conversación guardada ilegible. Empezamos de cero.");
-          }
-          window.localStorage.removeItem(CLAVE_ANTERIOR);
-          if (anterior) window.localStorage.removeItem(CLAVE_ALMACEN);
-        } else if (esEstadoGuardado(datos)) {
-          setMicro(datos.microcurriculo);
-          setMensajes(datos.mensajes);
-          if (datos.sugerencias.length) setSugerencias(datos.sugerencias);
-          setIntencion(datos.intencion);
-          setSeccionActiva(datos.seccionActiva);
-          setCrudoUltimo(datos.crudo);
+        const resultadoVista = leerVistaMicroV3(carga.estado);
+        if (!resultadoVista.ok) {
+          bloqueoPersistenciaRef.current = true;
+          scopeV3NoSoportadoRef.current = true;
+          setPersistenciaBloqueada(true);
+          setScopeV3NoSoportado(true);
+          setAvisoPersistencia(
+            "Este proyecto está guardado, pero esta página todavía no puede abrir ese módulo. No cambié la selección ni el guardado para proteger sus datos."
+          );
         } else {
-          mostrarAviso("Había una conversación guardada incompleta. Empezamos de cero.");
-          window.localStorage.removeItem(CLAVE_ALMACEN);
+          bloqueoPersistenciaRef.current = false;
+          scopeV3NoSoportadoRef.current = false;
+          setPersistenciaBloqueada(false);
+          setScopeV3NoSoportado(false);
+          setDatosNoRecuperables(false);
+          const vista = resultadoVista.vista;
+          const seccion = esSeccionMicro(vista.seccionActiva) ? vista.seccionActiva : null;
+          setMicro(vista.microcurriculo);
+          setMensajes(vista.mensajes);
+          setSugerencias(vista.sugerencias);
+          setIntencion(vista.intencion);
+          setSeccionActiva(seccion);
+          setCrudoUltimo(vista.crudo);
+          crudoRef.current = vista.crudo;
+
+          if (!carga.guardado) {
+            setAvisoPersistencia(
+              "Pude recuperar tu trabajo y está disponible en esta sesión, pero el navegador no confirmó el nuevo guardado. No cierres la pestaña hasta resolverlo."
+            );
+          } else if (carga.clavesLegadasPendientes.length || carga.clavesTemporalesPendientes.length) {
+            setAvisoPersistencia(
+              "El proyecto está abierto; quedaron copias locales pendientes de limpieza y no se eliminaron sin confirmación del almacén."
+            );
+          } else if (carga.clavesConflictivas.length) {
+            setAvisoPersistencia(
+              "El proyecto está abierto. Conservé algunas claves antiguas que no pude validar; no se sobrescribieron."
+            );
+          } else {
+            setAvisoPersistencia(null);
+          }
+          if (carga.migrado && carga.guardado) {
+            mostrarAviso("Tu microcurrículo y conversación se migraron al proyecto V3.");
+          }
         }
+      } else if (carga.estadoCarga === "sin_datos") {
+        estadoV3Ref.current = null;
+        idProyectoNuevoRef.current = null;
+        bloqueoPersistenciaRef.current = false;
+        scopeV3NoSoportadoRef.current = false;
+        legadosPendientesRef.current = false;
+        setPersistenciaBloqueada(false);
+        setScopeV3NoSoportado(false);
+        setDatosNoRecuperables(false);
+        setAvisoPersistencia(null);
+      } else {
+        // No se guarda un estado vacío encima de claves ilegibles o inaccesibles.
+        estadoV3Ref.current = null;
+        bloqueoPersistenciaRef.current = true;
+        legadosPendientesRef.current = false;
+        setPersistenciaBloqueada(true);
+        setDatosNoRecuperables(true);
+        setAvisoPersistencia(
+          carga.estadoCarga === "almacen_inaccesible"
+            ? "No pude leer el almacenamiento de este navegador. No guardé ni borré nada; puedes seguir solo en memoria o elegir explícitamente empezar de cero."
+            : "Encontré datos guardados que no pude leer. Los conservé y bloqueé el guardado automático; puedes elegir explícitamente descartarlos para empezar de cero."
+        );
       }
-      for (const clave of CLAVES_VIEJAS) window.localStorage.removeItem(clave);
     } catch {
-      mostrarAviso("No se pudo leer la conversación guardada en este navegador. Empezamos de cero.");
+      estadoV3Ref.current = null;
+      bloqueoPersistenciaRef.current = true;
+      setPersistenciaBloqueada(true);
+      setDatosNoRecuperables(true);
+      setAvisoPersistencia(
+        "No pude acceder al guardado de este navegador. No se sobrescribió nada; elige explícitamente empezar de cero si quieres descartarlo."
+      );
     }
     setHidratado(true);
   }, [mostrarAviso]);
 
   useEffect(() => {
-    if (!hidratado) return;
+    if (!hidratado || bloqueoPersistenciaRef.current || scopeV3NoSoportadoRef.current) return;
+    // No se escribe un proyecto vacío por el mero hecho de abrir la página.
+    if (micro === null && mensajes.length === 0) return;
+
     const id = window.setTimeout(() => {
       try {
-        const datos: Guardado = {
-          version: 2,
+        if (!idProyectoNuevoRef.current) {
+          idProyectoNuevoRef.current = `proyecto_${folioNuevo()}`;
+        }
+        const vista: VistaMicroPersistible = {
           microcurriculo: micro,
           mensajes,
           sugerencias,
@@ -170,11 +248,52 @@ export default function Page() {
           seccionActiva,
           crudo: crudoUltimo
         };
-        window.localStorage.setItem(CLAVE_ALMACEN, JSON.stringify(datos));
-        // Ya migrado: la clave vieja no debe quedar huérfana.
-        window.localStorage.removeItem(CLAVE_ANTERIOR);
-      } catch {
-        /* cuota llena o modo privado: no es motivo para romper la sesión */
+        const base =
+          estadoV3Ref.current ?? crearEstadoGuardadoV3Vacio(idProyectoNuevoRef.current);
+        const siguiente = aplicarVistaMicroV3(
+          base,
+          vista,
+          idProyectoNuevoRef.current
+        );
+        // Si el almacenamiento falla, se mantiene este estado V3 en memoria y
+        // los siguientes turnos no pierden los documentos/conversaciones hermanos.
+        estadoV3Ref.current = siguiente;
+        const guardado = guardarEstadoV3(window.localStorage, siguiente);
+        if (!guardado.ok) {
+          setAvisoPersistencia(
+            `El proyecto sigue disponible en esta sesión, pero no se pudo guardar en el navegador (${guardado.error}). No cierres la pestaña hasta resolverlo.`
+          );
+          return;
+        }
+
+        estadoV3Ref.current = guardado.estado;
+        const temporalPendiente = guardado.clavesTemporalesPendientes.length > 0;
+        if (legadosPendientesRef.current) {
+          // Una carga migrada en memoria puede guardar V3 en un turno posterior;
+          // volver a cargar verifica V3 y retira solo snapshots legacy reconocidos.
+          const limpieza = cargarEstadoPersistido(window.localStorage);
+          if (limpieza.ok && limpieza.guardado) {
+            estadoV3Ref.current = limpieza.estado;
+            legadosPendientesRef.current =
+              limpieza.clavesLegadasPendientes.length > 0 ||
+              limpieza.clavesTemporalesPendientes.length > 0 ||
+              limpieza.clavesConflictivas.length > 0;
+            if (limpieza.clavesConflictivas.length) {
+              setAvisoPersistencia("El proyecto se guardó; conservé copias antiguas que no pude validar.");
+              return;
+            }
+          }
+        }
+
+        if (temporalPendiente || legadosPendientesRef.current) {
+          setAvisoPersistencia("El proyecto se guardó, pero quedaron claves locales pendientes de limpieza.");
+        } else {
+          setAvisoPersistencia(null);
+        }
+      } catch (errorPersistencia) {
+        setAvisoPersistencia(
+          `El proyecto sigue disponible en esta sesión, pero no se pudo guardar (${nombreErrorPersistencia(errorPersistencia)}). No cierres la pestaña hasta resolverlo.`
+        );
       }
     }, 400);
     return () => window.clearTimeout(id);
@@ -219,28 +338,63 @@ export default function Page() {
   }
 
   function nuevo() {
+    // Esta página solo puede descartar scopes Inicio/Micro. Nunca borra un
+    // proyecto seleccionado en Macro/Meso que todavía no sabe abrir.
+    if (scopeV3NoSoportadoRef.current) return;
+
     if (hayAlgoQueBorrar) {
+      const detalleRecuperacion = datosNoRecuperables
+        ? " También se eliminarán las claves guardadas que no se pudieron leer y sus respaldos."
+        : "";
       const ok = window.confirm(
-        "¿Descartar este microcurrículo y empezar de cero?\n\nSe borran de este navegador la conversación y la ficha. No se puede deshacer."
+        `¿Descartar este microcurrículo y empezar de cero?\n\nSe borrarán de este navegador la conversación, la ficha y los respaldos del proyecto. No se puede deshacer.${detalleRecuperacion}`
       );
       if (!ok) return;
     }
+
     abortRef.current?.abort();
-    setMicro(null);
-    setMensajes([]);
+    const vistaVacia = vistaMicroVacia();
+    setMicro(vistaVacia.microcurriculo);
+    setMensajes(vistaVacia.mensajes);
     setSugerencias(SUGERENCIAS_APERTURA);
-    setIntencion("entender");
+    setIntencion(vistaVacia.intencion);
     setSeccionActiva(null);
-    setCrudoUltimo("");
-    crudoRef.current = "";
+    setCrudoUltimo(vistaVacia.crudo);
+    crudoRef.current = vistaVacia.crudo;
     setError(null);
     setPildoraBorrador(false);
     setChatVisible(true);
-    try {
-      window.localStorage.removeItem(CLAVE_ALMACEN);
-    } catch {
-      /* nada que hacer */
+
+    estadoV3Ref.current = null;
+    idProyectoNuevoRef.current = null;
+    legadosPendientesRef.current = false;
+    scopeV3NoSoportadoRef.current = false;
+    setScopeV3NoSoportado(false);
+
+    const clavesFallidas: string[] = [];
+    for (const clave of CLAVES_PERSISTENCIA_PROYECTO) {
+      try {
+        window.localStorage.removeItem(clave);
+        if (window.localStorage.getItem(clave) !== null) clavesFallidas.push(clave);
+      } catch {
+        clavesFallidas.push(clave);
+      }
     }
+
+    if (clavesFallidas.length) {
+      bloqueoPersistenciaRef.current = true;
+      setPersistenciaBloqueada(true);
+      setDatosNoRecuperables(true);
+      setAvisoPersistencia(
+        "No pude confirmar la limpieza de todas las claves del proyecto. No guardaré encima de los restos; puedes volver a intentar «Conversación nueva»."
+      );
+      return;
+    }
+
+    bloqueoPersistenciaRef.current = false;
+    setPersistenciaBloqueada(false);
+    setDatosNoRecuperables(false);
+    setAvisoPersistencia(null);
     mostrarAviso("Empezamos una conversación nueva. Lo anterior se descartó de este navegador.");
   }
 
@@ -282,7 +436,11 @@ export default function Page() {
   const enviar = useCallback(
     async (texto: string, opciones?: { reintento?: boolean }) => {
       const t = texto.trim();
-      if (!t || enviando) return;
+      if (!t || enviando || !hidratado) return;
+      if (scopeV3NoSoportadoRef.current) {
+        setError("Este proyecto está en un módulo que esta página todavía no puede abrir. Sus datos permanecen intactos.");
+        return;
+      }
       if (saludRef.current && !saludRef.current.ia && saludRef.current.conexion === "sin_clave") {
         setError(saludRef.current.mensaje);
         return;
@@ -490,7 +648,7 @@ export default function Page() {
         }
       }
     },
-    [enviando, mensajes, mostrarAviso]
+    [enviando, mensajes, mostrarAviso, hidratado]
   );
 
   const reintentar = useCallback(() => {
@@ -511,7 +669,8 @@ export default function Page() {
     salud.conexion !== "ok" &&
     salud.conexion !== "proveedor";
 
-  const hayAlgoQueBorrar = mensajes.length > 0 || micro !== null;
+  const hayAlgoQueBorrar =
+    mensajes.length > 0 || micro !== null || (persistenciaBloqueada && !scopeV3NoSoportado);
 
   const etiquetaSalud = (() => {
     if (salud === null) return "Comprobando…";
@@ -547,11 +706,13 @@ export default function Page() {
           <button
             type="button"
             onClick={nuevo}
-            disabled={!hayAlgoQueBorrar}
+            disabled={!hayAlgoQueBorrar || scopeV3NoSoportado}
             title={
-              hayAlgoQueBorrar
-                ? "Descartar esta conversación y empezar de cero"
-                : "Todavía no hay nada que borrar"
+              scopeV3NoSoportado
+                ? "El proyecto contiene un módulo que esta página no puede descartar"
+                : hayAlgoQueBorrar
+                  ? "Descartar esta conversación y empezar de cero"
+                  : "Todavía no hay nada que borrar"
             }
             className="ml-1 inline-flex shrink-0 items-center gap-1.5 rounded-full border border-black/10 bg-crema/95 px-3 py-1.5 text-xs font-medium text-black/70 hover:border-black/25 hover:text-black disabled:opacity-40 disabled:hover:border-black/10"
           >
@@ -569,6 +730,7 @@ export default function Page() {
         </header>
 
         <main className="relative z-10 flex min-h-0 flex-1 flex-col px-3 pb-4 sm:px-6">
+          {avisoPersistencia && <AvisoPersistencia texto={avisoPersistencia} />}
           {/* Con clave presente pero inservible se avisa, y se deja intentar. */}
           {problemaClave && salud && (
             <div className="mx-auto w-full max-w-[640px] pb-2">
@@ -590,8 +752,14 @@ export default function Page() {
             sugerencias={mensajes.length === 0 ? SUGERENCIAS_APERTURA : sugerencias}
             saludo={SALUDO_APERTURA}
             variante="limpio"
-            deshabilitado={sinClave}
-            motivoDeshabilitado={salud?.mensaje}
+            deshabilitado={!hidratado || sinClave || scopeV3NoSoportado}
+            motivoDeshabilitado={
+              scopeV3NoSoportado
+                ? "Este proyecto está en un módulo que esta página todavía no puede abrir."
+                : !hidratado
+                  ? "Recuperando el proyecto guardado…"
+                  : salud?.mensaje
+            }
             scrollRef={scrollRef}
           />
         </main>
@@ -623,8 +791,12 @@ export default function Page() {
             <button
               type="button"
               onClick={nuevo}
-              disabled={!hayAlgoQueBorrar}
-              title="Descartar este microcurrículo y empezar de cero"
+              disabled={!hayAlgoQueBorrar || scopeV3NoSoportado}
+              title={
+                scopeV3NoSoportado
+                  ? "El proyecto contiene un módulo que esta página no puede descartar"
+                  : "Descartar este microcurrículo y empezar de cero"
+              }
               className="ml-auto inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2 py-1 text-[11px] font-medium text-black/60 hover:border-black/25 hover:text-black disabled:opacity-40"
             >
               <Icono nombre="deshacer" className="h-3 w-3" />
@@ -651,8 +823,14 @@ export default function Page() {
             sugerencias={sugerencias}
             saludo={SALUDO_APERTURA}
             variante="lateral"
-            deshabilitado={sinClave}
-            motivoDeshabilitado={salud?.mensaje}
+            deshabilitado={!hidratado || sinClave || scopeV3NoSoportado}
+            motivoDeshabilitado={
+              scopeV3NoSoportado
+                ? "Este proyecto está en un módulo que esta página todavía no puede abrir."
+                : !hidratado
+                  ? "Recuperando el proyecto guardado…"
+                  : salud?.mensaje
+            }
             scrollRef={scrollRef}
           />
         </aside>
@@ -660,6 +838,7 @@ export default function Page() {
 
       {/* Ficha */}
       <div className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+        {avisoPersistencia && <AvisoPersistencia texto={avisoPersistencia} />}
         <header className="flex shrink-0 flex-wrap items-center gap-2 rounded-[18px] border border-white/60 bg-crema/95 px-3 py-2 shadow-tarjeta">
           {!chatVisible && (
             <button
@@ -674,7 +853,9 @@ export default function Page() {
             <button
               type="button"
               onClick={nuevo}
-              className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium text-black/70 hover:border-black/25"
+              disabled={!hayAlgoQueBorrar || scopeV3NoSoportado}
+              title={scopeV3NoSoportado ? "El proyecto contiene un módulo que esta página no puede descartar" : undefined}
+              className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium text-black/70 hover:border-black/25 disabled:opacity-40"
             >
               <Icono nombre="deshacer" className="h-3.5 w-3.5" /> Nueva
             </button>
@@ -769,6 +950,21 @@ function Ondas() {
         opacity="0.45"
       />
     </svg>
+  );
+}
+
+function AvisoPersistencia({ texto }: { texto: string }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="mx-auto w-full max-w-[840px] rounded-xl border border-terracotta/20 bg-terracotta/10 px-3 py-2 text-[11.5px] leading-relaxed text-black/75"
+    >
+      <p className="flex items-start gap-2">
+        <Icono nombre="alerta" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-terracotta" />
+        <span>{texto}</span>
+      </p>
+    </div>
   );
 }
 
