@@ -1114,7 +1114,7 @@ export type ResultadoParseo =
 export const SUGERENCIAS_MAX = 4;
 
 /** Quita vallas de código y se queda con el primer objeto balanceado. */
-function aislarObjeto(crudo: string): string {
+export function aislarObjeto(crudo: string): string {
   let t = crudo.trim();
   const valla = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(t);
   if (valla) t = valla[1].trim();
