@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node lib/schema.test.ts && node lib/proyecto.test.ts && node lib/persistencia.test.ts && node lib/estadoMicro.test.ts && node lib/macro.test.ts && node lib/estadoMacro.test.ts"
+    "test": "node lib/schema.test.ts && node lib/proyecto.test.ts && node lib/persistencia.test.ts && node lib/estadoMicro.test.ts && node lib/macro.test.ts && node lib/estadoMacro.test.ts && node lib/meso.test.ts"
   },
   "dependencies": {
     "next": "14.2.5",

@@ -519,7 +519,9 @@ export function fusionarMarco(
     emisor: entrante.emisor?.trim() ? entrante.emisor : anterior.emisor,
     version: textoReal(entrante.version) ? entrante.version : anterior.version,
     vigencia: entrante.vigencia ?? anterior.vigencia,
-    estado: entrante.estado || anterior.estado,
+    // El "borrador" del normalizador es el valor por defecto, no una decisión:
+    // nunca degrada el estado que ya tenía el documento.
+    estado: entrante.estado && entrante.estado !== "borrador" ? entrante.estado : anterior.estado,
     principios: entrante.principios.length > 0 ? entrante.principios : anterior.principios,
     afirmaciones: entrante.afirmaciones.length > 0 ? entrante.afirmaciones : anterior.afirmaciones
   };
