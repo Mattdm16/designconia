@@ -7,6 +7,29 @@ import { extraerMensajeParcial, type ChatMensaje } from "@/lib/schema";
 
 export type VarianteChat = "limpio" | "lateral";
 
+/** Adjunto visible en el compositor antes de enviar. */
+export type AdjuntoChip = {
+  id: string;
+  nombre: string;
+  estado: "extrayendo" | "listo" | "error" | "anio";
+  /** Texto secundario: páginas/año, motivo del error o aviso. */
+  detalle?: string;
+};
+
+/** Documento del proyecto para el menú del botón «+». */
+export type DocMenuItem = {
+  id: string;
+  nombre: string;
+  nivel: "macro" | "meso" | "micro";
+};
+
+export type MenuCompositor = {
+  documentos: DocMenuItem[];
+  onNuevoDocumento: () => void;
+  onAbrirDocumento: (nivel: DocMenuItem["nivel"], id: string) => void;
+  onAdjuntar: (archivos: File[]) => void;
+};
+
 type Props = {
   mensajes: ChatMensaje[];
   enviando: boolean;
@@ -23,6 +46,13 @@ type Props = {
   deshabilitado?: boolean;
   motivoDeshabilitado?: string;
   scrollRef: React.RefObject<HTMLDivElement>;
+  /** Adjuntos pendientes de enviar (PDF ya validados o en proceso). */
+  adjuntos?: AdjuntoChip[];
+  onQuitarAdjunto?: (id: string) => void;
+  /** Confirma el año declarado de un PDF sin fecha legible. */
+  onConfirmarAnio?: (id: string, anio: number) => void;
+  /** Menú del botón «+»: adjuntar PDF, nuevo documento y documentos del proyecto. */
+  menu?: MenuCompositor | null;
 };
 
 /** Mensaje de la IA con el texto conversacional que va llegando en streaming. */
@@ -60,10 +90,16 @@ export function Chat({
   variante = "limpio",
   deshabilitado = false,
   motivoDeshabilitado,
-  scrollRef
+  scrollRef,
+  adjuntos = [],
+  onQuitarAdjunto,
+  onConfirmarAnio,
+  menu = null
 }: Props) {
   const [texto, setTexto] = useState("");
   const areaRef = useRef<HTMLTextAreaElement>(null);
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  const archivoRef = useRef<HTMLInputElement>(null);
 
   // La última respuesta se está escribiendo.
   const ultimo = mensajes[mensajes.length - 1];
@@ -161,9 +197,121 @@ export function Chat({
             e.preventDefault();
             enviar(texto);
           }}
-          className="rounded-[18px] border border-white/60 bg-crema/95 p-2.5 shadow-tarjeta"
+          className="relative rounded-[18px] border border-white/60 bg-crema/95 p-2.5 shadow-tarjeta"
         >
+          {adjuntos.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1.5" aria-label="PDF adjuntos">
+              {adjuntos.map((a) => (
+                <AdjuntoChipView
+                  key={a.id}
+                  adjunto={a}
+                  onQuitar={onQuitarAdjunto}
+                  onConfirmarAnio={onConfirmarAnio}
+                />
+              ))}
+            </div>
+          )}
+
           <div className="flex items-end gap-2">
+            {menu && (
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setMenuAbierto((v) => !v)}
+                  aria-label="Añadir: adjuntar PDF, nuevo documento o abrir documentos"
+                  aria-expanded={menuAbierto}
+                  title="Añadir"
+                  disabled={deshabilitado}
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-black/10 bg-white text-black/70 hover:border-black/25 hover:text-black disabled:opacity-40"
+                >
+                  <Icono nombre="mas" />
+                </button>
+                {menuAbierto && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setMenuAbierto(false)}
+                      aria-hidden="true"
+                    />
+                    <div
+                      role="menu"
+                      className="absolute bottom-11 left-0 z-50 w-64 rounded-2xl border border-black/10 bg-crema p-1.5 shadow-tarjeta"
+                    >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setMenuAbierto(false);
+                          archivoRef.current?.click();
+                        }}
+                        className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[13px] hover:bg-black/[0.04]"
+                      >
+                        <Icono nombre="documento" className="h-4 w-4 shrink-0 text-black/50" />
+                        <span>
+                          Adjuntar PDF
+                          <span className="block text-[11px] text-black/45">Solo PDF con texto, máx. 3 años</span>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setMenuAbierto(false);
+                          menu.onNuevoDocumento();
+                        }}
+                        className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[13px] hover:bg-black/[0.04]"
+                      >
+                        <Icono nombre="mas" className="h-4 w-4 shrink-0 text-black/50" />
+                        <span>
+                          Nuevo documento
+                          <span className="block text-[11px] text-black/45">Lo describes conversando</span>
+                        </span>
+                      </button>
+                      <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-black/40">
+                        Documentos del proyecto
+                      </p>
+                      {menu.documentos.length === 0 ? (
+                        <p className="px-3 pb-2 text-[12px] text-black/45">Todavía no hay documentos.</p>
+                      ) : (
+                        <ul className="max-h-48 overflow-y-auto">
+                          {menu.documentos.map((d) => (
+                            <li key={`${d.nivel}:${d.id}`}>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  setMenuAbierto(false);
+                                  menu.onAbrirDocumento(d.nivel, d.id);
+                                }}
+                                className="flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left text-[13px] hover:bg-black/[0.04]"
+                              >
+                                <span className="min-w-0 flex-1 truncate">{d.nombre}</span>
+                                <span className="shrink-0 rounded-full bg-black/[0.05] px-2 py-0.5 text-[10px] text-black/55">
+                                  {d.nivel === "macro" ? "Marco" : d.nivel === "meso" ? "Programa" : "Asignatura"}
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </>
+                )}
+                <input
+                  ref={archivoRef}
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  multiple
+                  className="hidden"
+                  aria-label="Adjuntar archivos PDF"
+                  onChange={(e) => {
+                    const archivos = Array.from(e.target.files ?? []);
+                    e.target.value = "";
+                    if (archivos.length > 0) menu.onAdjuntar(archivos);
+                  }}
+                />
+              </div>
+            )}
             <label htmlFor="chat" className="sr-only">
               Escribe tu mensaje para el asistente
             </label>
@@ -205,6 +353,73 @@ export function Chat({
         </form>
       </div>
     </div>
+  );
+}
+
+/** Chip de un PDF adjunto con sus estados: leyendo, listo, error o año pendiente. */
+function AdjuntoChipView({
+  adjunto,
+  onQuitar,
+  onConfirmarAnio
+}: {
+  adjunto: AdjuntoChip;
+  onQuitar?: (id: string) => void;
+  onConfirmarAnio?: (id: string, anio: number) => void;
+}) {
+  const [anioTexto, setAnioTexto] = useState("");
+  const esError = adjunto.estado === "error";
+  const pideAnio = adjunto.estado === "anio";
+  const anioValido = /^\d{4}$/.test(anioTexto.trim());
+
+  return (
+    <span
+      className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11.5px] ${
+        esError ? "border-terracotta/40 bg-terracotta/10 text-black/75" : "border-black/10 bg-white text-black/70"
+      }`}
+    >
+      <Icono nombre="documento" className="h-3.5 w-3.5 shrink-0 text-black/45" />
+      <span className="min-w-0">
+        <span className="block max-w-[12rem] truncate font-medium">{adjunto.nombre}</span>
+        <span className="block text-[10.5px] text-black/50">
+          {adjunto.estado === "extrayendo"
+            ? "Leyendo PDF…"
+            : (adjunto.detalle ?? "")}
+        </span>
+        {pideAnio && onConfirmarAnio && (
+          <span className="mt-1 flex items-center gap-1">
+            <label className="sr-only" htmlFor={`anio-${adjunto.id}`}>
+              Año del documento {adjunto.nombre}
+            </label>
+            <input
+              id={`anio-${adjunto.id}`}
+              value={anioTexto}
+              onChange={(e) => setAnioTexto(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))}
+              placeholder="Año, p. ej. 2025"
+              inputMode="numeric"
+              className="w-28 rounded-lg border border-black/15 bg-transparent px-2 py-0.5 text-[11.5px] focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => anioValido && onConfirmarAnio(adjunto.id, Number(anioTexto.trim()))}
+              disabled={!anioValido}
+              className="rounded-full bg-sow px-2 py-0.5 text-[11px] font-medium text-seedling disabled:opacity-40"
+            >
+              Usar
+            </button>
+          </span>
+        )}
+      </span>
+      {onQuitar && (
+        <button
+          type="button"
+          onClick={() => onQuitar(adjunto.id)}
+          aria-label={`Quitar ${adjunto.nombre}`}
+          className="shrink-0 rounded-full p-0.5 text-black/40 hover:text-terracotta"
+        >
+          ×
+        </button>
+      )}
+    </span>
   );
 }
 

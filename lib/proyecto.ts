@@ -60,6 +60,17 @@ export type FuenteCurricular = {
   identificador?: string;
   url?: string;
   fechaPublicacion?: string;
+  /**
+   * Año del documento (metadatos del PDF, lastModified o declarado por el
+   * docente). Solo se integran PDFs de como máximo 3 años de antigüedad.
+   */
+  anio?: number;
+  /** Nombre del archivo PDF integrado, si la fuente viene de un adjunto. */
+  nombreArchivo?: string;
+  /** Texto extraído del PDF, recortado para no reventar el almacenamiento. */
+  textoExtraido?: string;
+  /** Páginas del PDF integrado. */
+  paginas?: number;
 };
 
 /** Macrocurrículo: marco educativo institucional/versionado. */
@@ -249,6 +260,17 @@ function esAfirmacion(valor: unknown): valor is AfirmacionCurricular {
   );
 }
 
+function esAnio(valor: unknown): boolean {
+  return (
+    valor === undefined ||
+    (typeof valor === "number" && Number.isInteger(valor) && valor >= 1900 && valor <= 2100)
+  );
+}
+
+function esPaginas(valor: unknown): boolean {
+  return valor === undefined || (typeof valor === "number" && Number.isInteger(valor) && valor > 0);
+}
+
 function esFuente(valor: unknown): valor is FuenteCurricular {
   if (!esRegistro(valor)) return false;
   return (
@@ -259,7 +281,11 @@ function esFuente(valor: unknown): valor is FuenteCurricular {
     esTextoOpcional(valor.emisor) &&
     esTextoOpcional(valor.identificador) &&
     esTextoOpcional(valor.url) &&
-    esTextoOpcional(valor.fechaPublicacion)
+    esTextoOpcional(valor.fechaPublicacion) &&
+    esAnio(valor.anio) &&
+    esTextoOpcional(valor.nombreArchivo) &&
+    esTextoOpcional(valor.textoExtraido) &&
+    esPaginas(valor.paginas)
   );
 }
 

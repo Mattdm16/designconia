@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Chat } from "@/components/Chat";
+import { Chat, type AdjuntoChip, type DocMenuItem } from "@/components/Chat";
 import { Icono } from "@/components/Icono";
 import { MarcoFicha } from "@/components/ficha/Marco";
 import { MesoFicha } from "@/components/ficha/Meso";
@@ -42,6 +42,21 @@ import { fusionarPrograma, parsearRespuestaMeso, validarPrograma, type SeccionMe
 import { definirAlineacion, existeAlineacion, quitarAlineacion } from "@/lib/alineaciones";
 import { SUGERENCIAS_APERTURA_MACRO } from "@/lib/promptMacro";
 import { SUGERENCIAS_APERTURA_MESO } from "@/lib/promptMeso";
+import { SUGERENCIAS_APERTURA_NEUTRAS } from "@/lib/inicio";
+import { mencionaOtroNivel, pideNuevoDocumento, parsearRespuestaInicio } from "@/lib/inicio";
+import {
+  MAX_PDFS_POR_ENVIO,
+  LIMITE_PDF_BYTES,
+  anioVigente,
+  construirFuentePdf,
+  extractosRelevantes,
+  idAdjunto,
+  mensajeRechazoPdf,
+  parecePdf,
+  tieneFirmaPdfprimeros,
+  tieneTextoAprovechable,
+  type MotivoRechazoPdf
+} from "@/lib/pdf";
 import type {
   FuenteCurricular,
   MarcoEducativoInstitucional,
@@ -155,6 +170,12 @@ export default function Page() {
 
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  /**
+   * Destino ya decidido por el enrutador mientras se sigue en inicio (solo
+   * ocurre con Micro, que no tiene lienzo). Evita preguntar dos veces: el
+   * siguiente turno ya crea la ficha directamente.
+   */
+  const destinoInicioRef = useRef<ModuloActivo | null>(null);
   const ultimaPeticion = useRef("");
   const avisoRef = useRef<number | null>(null);
 
@@ -205,6 +226,180 @@ export default function Page() {
   /** El vínculo principal en edición, por la misma razón. */
   const vinculoMarcoIdRef = useRef<string | null>(null);
   vinculoMarcoIdRef.current = vinculoMarcoId;
+
+  /**
+   * PDFs adjuntos al turno en curso. Viven fuera de los módulos: el docente
+   * puede adjuntar en cualquier punto y viajan con el siguiente envío.
+   * Al registrarse como fuente quedan en el proyecto aunque se quite el chip.
+   */
+  type AdjuntoPdf = {
+    id: string;
+    nombre: string;
+    estado: "extrayendo" | "listo" | "error" | "anio";
+    detalle?: string;
+    paginas?: number;
+    anio?: number | null;
+    textoPorPagina?: string[];
+    tituloFuente?: string;
+    fuenteId?: string;
+  };
+  const [adjuntos, setAdjuntos] = useState<AdjuntoPdf[]>([]);
+  const adjuntosRef = useRef<AdjuntoPdf[]>([]);
+  adjuntosRef.current = adjuntos;
+
+  /** Chips del compositor (subconjunto visible del estado de adjuntos). */
+  const adjuntosChips: AdjuntoChip[] = adjuntos.map((a) => ({
+    id: a.id,
+    nombre: a.nombre,
+    estado: a.estado,
+    detalle: a.detalle
+  }));
+
+  function actualizarAdjunto(id: string, parche: Partial<AdjuntoPdf>) {
+    setAdjuntos((lista) => lista.map((a) => (a.id === id ? { ...a, ...parche } : a)));
+  }
+
+  /** Registra un PDF validado como fuente curricular del proyecto. */
+  function registrarFuentePdf(adjunto: AdjuntoPdf, anio: number): boolean {
+    const base = estadoV3Ref.current;
+    if (!base || adjunto.textoPorPagina === undefined || adjunto.paginas === undefined) return false;
+    const construido = construirFuentePdf(
+      { nombre: adjunto.nombre, paginas: adjunto.paginas, anio, textoPorPagina: adjunto.textoPorPagina },
+      new Date()
+    );
+    if (!construido.ok) {
+      actualizarAdjunto(adjunto.id, { estado: "error", detalle: mensajeRechazoPdf("antiguo", adjunto.nombre) });
+      return false;
+    }
+    const fuente = { ...construido.fuente, tipo: "otro" as const };
+    const yaExiste = base.proyecto.fuentesCurriculares.some((f) => f.id === fuente.id);
+    const siguiente: EstadoGuardadoV3 = {
+      ...base,
+      proyecto: {
+        ...base.proyecto,
+        fuentesCurriculares: yaExiste
+          ? base.proyecto.fuentesCurriculares
+          : [...base.proyecto.fuentesCurriculares, fuente]
+      }
+    };
+    estadoV3Ref.current = siguiente;
+    if (yaExiste) {
+      const previa = base.proyecto.fuentesCurriculares.find((f) => f.id === fuente.id);
+      actualizarAdjunto(adjunto.id, {
+        estado: "listo",
+        detalle: `${adjunto.paginas} págs · ${previa?.anio ?? anio} (fuente ya registrada)`,
+        tituloFuente: previa?.titulo ?? fuente.titulo,
+        fuenteId: fuente.id
+      });
+    } else {
+      setFuentes((lista) => [...lista, fuente]);
+      actualizarAdjunto(adjunto.id, {
+        estado: "listo",
+        detalle: `${adjunto.paginas} págs · ${anio}`,
+        tituloFuente: fuente.titulo,
+        fuenteId: fuente.id
+      });
+    }
+    const guardado = guardarEstadoV3(window.localStorage, siguiente);
+    if (!guardado.ok) {
+      setAvisoPersistencia(
+        "La fuente se registró en esta sesión, pero no se pudo guardar en el navegador. No cierres la pestaña hasta resolverlo."
+      );
+    } else {
+      estadoV3Ref.current = guardado.estado;
+    }
+    setVersionProyecto((v) => v + 1);
+    return true;
+  }
+
+  /** Valida, extrae y registra cada PDF elegido en el menú del compositor. */
+  async function adjuntarArchivos(archivos: File[]) {
+    const activos = adjuntosRef.current.filter((a) => a.estado !== "error");
+    if (activos.length + archivos.length > MAX_PDFS_POR_ENVIO) {
+      mostrarAviso(`Puedes adjuntar ${MAX_PDFS_POR_ENVIO} PDFs por envío. Quita uno para añadir otro.`);
+      return;
+    }
+    for (const archivo of archivos) {
+      const nombre = archivo.name.trim() || "documento.pdf";
+      if (!parecePdf(nombre, archivo.type)) {
+        mostrarAviso(mensajeRechazoPdf("no_pdf", nombre));
+        continue;
+      }
+      if (archivo.size > LIMITE_PDF_BYTES) {
+        mostrarAviso(mensajeRechazoPdf("demasiado_grande", nombre));
+        continue;
+      }
+      const id = idAdjunto(nombre, archivo.size);
+      if (adjuntosRef.current.some((a) => a.id === id && a.estado !== "error")) continue;
+      setAdjuntos((lista) => [...lista, { id, nombre, estado: "extrayendo", detalle: "Leyendo PDF…" }]);
+      try {
+        const bytes = new Uint8Array(await archivo.arrayBuffer());
+        if (!tieneFirmaPdfprimeros(bytes)) {
+          actualizarAdjunto(id, { estado: "error", detalle: mensajeRechazoPdf("no_pdf", nombre) });
+          continue;
+        }
+        const { extraerTextoPdf } = await import("@/lib/pdf");
+        const extraido = await extraerTextoPdf(bytes, nombre);
+        if (!tieneTextoAprovechable(extraido.textoPorPagina)) {
+          actualizarAdjunto(id, { estado: "error", detalle: mensajeRechazoPdf("sin_texto", nombre) });
+          continue;
+        }
+        const anio = extraido.anio ?? null;
+        const base: AdjuntoPdf = {
+          id,
+          nombre,
+          estado: "listo",
+          paginas: extraido.paginas,
+          anio,
+          textoPorPagina: extraido.textoPorPagina,
+          detalle: `${extraido.paginas} págs`
+        };
+        if (anio === null) {
+          // Sin fecha legible el año lo declara el docente: sin año no se integra.
+          setAdjuntos((lista) => lista.map((a) => (a.id === id ? { ...base, estado: "anio", detalle: "Indica el año del documento" } : a)));
+          continue;
+        }
+        if (!anioVigente(anio, new Date())) {
+          actualizarAdjunto(id, { estado: "error", detalle: mensajeRechazoPdf("antiguo", nombre) });
+          continue;
+        }
+        setAdjuntos((lista) => lista.map((a) => (a.id === id ? base : a)));
+        registrarFuentePdf({ ...base, textoPorPagina: extraido.textoPorPagina }, anio);
+      } catch (error) {
+        const motivo = (error as { motivo?: MotivoRechazoPdf } | null)?.motivo ?? "ilegible";
+        actualizarAdjunto(id, { estado: "error", detalle: mensajeRechazoPdf(motivo, nombre) });
+      }
+    }
+  }
+
+  function quitarAdjunto(id: string) {
+    // Quitar el chip no borra la fuente: ya quedó registrada para poder citarla.
+    setAdjuntos((lista) => lista.filter((a) => a.id !== id));
+  }
+
+  function confirmarAnioAdjunto(id: string, anio: number) {
+    const adjunto = adjuntosRef.current.find((a) => a.id === id);
+    if (!adjunto || adjunto.estado !== "anio") return;
+    if (!anioVigente(anio, new Date())) {
+      actualizarAdjunto(id, { estado: "error", detalle: mensajeRechazoPdf("antiguo", adjunto.nombre) });
+      return;
+    }
+    const completo: AdjuntoPdf = { ...adjunto, anio };
+    setAdjuntos((lista) => lista.map((a) => (a.id === id ? completo : a)));
+    registrarFuentePdf(completo, anio);
+  }
+
+  /** Evidencia lista para el siguiente envío (título, páginas y extractos). */
+  function fuentesPdfParaEnvio(mensaje: string): { titulo: string; paginas: number; extractos: string[] }[] {
+    return adjuntosRef.current
+      .filter((a) => a.estado === "listo" && a.textoPorPagina && a.tituloFuente)
+      .map((a) => ({
+        titulo: a.tituloFuente as string,
+        paginas: a.paginas ?? 0,
+        extractos: extractosRelevantes(a.textoPorPagina as string[], mensaje)
+      }))
+      .filter((f) => f.extractos.length > 0);
+  }
 
   const saludRef = useRef<Salud | null>(null);
   saludRef.current = salud;
@@ -960,9 +1155,13 @@ export default function Page() {
    * cargando después la vista del destino desde el agregado. Nunca mezcla
    * conversaciones ni documentos entre módulos.
    */
-  function cambiarModulo(destino: ModuloActivo) {
-    if (destino === moduloActivoRef.current || enviando) return;
-    abortRef.current?.abort();
+  /**
+   * Núcleo del cambio de módulo sin guardas: guarda la vista actual, apunta
+   * la selección al destino (recordado, primero o lienzo) y carga su vista.
+   * Lo usan tanto el cambio explícito como el enrutador conversacional.
+   */
+  function ejecutarCambioModulo(destino: ModuloActivo) {
+    destinoInicioRef.current = null;
     try {
       let base = guardarVistaActual() ?? estadoV3Ref.current;
       if (base) {
@@ -1025,6 +1224,7 @@ export default function Page() {
   function nuevo() {
     // Nunca borra un proyecto en un scope que la página no sabe abrir.
     if (scopeV3NoSoportadoRef.current) return;
+    destinoInicioRef.current = null;
 
     if (hayAlgoQueBorrar) {
       const detalleRecuperacion = datosNoRecuperables
@@ -1281,7 +1481,7 @@ export default function Page() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           signal: control.signal,
-          body: JSON.stringify({ mensaje: t, microcurriculo: enviarBorrador, historia })
+          body: JSON.stringify({ mensaje: t, microcurriculo: enviarBorrador, historia, fuentesPdf: fuentesPdfParaEnvio(t) })
         });
         respuestaLlego = true;
 
@@ -1394,6 +1594,7 @@ export default function Page() {
         setSeccionActiva(resultado.seccionActiva);
         setCrudoUltimo(bruto);
         crudoRef.current = bruto;
+        setAdjuntos([]);
 
         // SOLO con borrador se toca la ficha. Un turno conversacional no
         // puede borrar lo que el docente ya tenía.
@@ -1493,7 +1694,7 @@ export default function Page() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           signal: control.signal,
-          body: JSON.stringify({ mensaje: t, modulo: "macro", marco: marcoEnviar, historia })
+          body: JSON.stringify({ mensaje: t, modulo: "macro", marco: marcoEnviar, historia, fuentesPdf: fuentesPdfParaEnvio(t) })
         });
         respuestaLlego = true;
 
@@ -1586,6 +1787,7 @@ export default function Page() {
         setSeccionActivaMacro(resultado.seccionActiva);
         setCrudoMacro(bruto);
         crudoMacroRef.current = bruto;
+        setAdjuntos([]);
 
         // SOLO con borrador se toca el documento. Un turno conversacional no
         // puede borrar lo que el docente ya tenía.
@@ -1672,7 +1874,7 @@ export default function Page() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           signal: control.signal,
-          body: JSON.stringify({ mensaje: t, modulo: "meso", programa: programaEnviar, marcos: marcosDisponibles, historia })
+          body: JSON.stringify({ mensaje: t, modulo: "meso", programa: programaEnviar, marcos: marcosDisponibles, historia, fuentesPdf: fuentesPdfParaEnvio(t) })
         });
         respuestaLlego = true;
 
@@ -1770,6 +1972,7 @@ export default function Page() {
         setSeccionActivaMeso(resultado.seccionActiva);
         setCrudoMeso(bruto);
         crudoMesoRef.current = bruto;
+        setAdjuntos([]);
 
         // SOLO con borrador se toca el documento. Un turno conversacional no
         // puede borrar lo que el docente ya tenía.
@@ -1816,6 +2019,435 @@ export default function Page() {
     [enviando, mensajesMeso, mostrarAviso, hidratado]
   );
 
+  /**
+   * Lee el stream del chat y devuelve el JSON crudo + meta. Lanza con un
+   * mensaje legible si la conexión se cortó o el servidor falló. Lo usan los
+   * turnos del enrutador para no triplicar el bucle SSE.
+   */
+  async function consumirStreamChat(
+    res: Response,
+    control: AbortController,
+    onParcial: (parcial: string) => void
+  ): Promise<{
+    bruto: string;
+    meta: { fin?: string | null; tokens?: number | null; vacio?: boolean; error?: string | null };
+  }> {
+    const tipo = res.headers.get("content-type") ?? "";
+    if (!res.ok || !tipo.includes("text/event-stream")) {
+      if (res.status === 404) {
+        throw new Error(
+          `El servidor respondió 404 en ${res.url || "/api/chat"}. ` +
+            "La petición no llegó al servidor de la app: comprueba que `npm run dev` esté corriendo en el puerto de esta pestaña y recarga con Ctrl+Shift+R."
+        );
+      }
+      let motivo = `El asistente respondió ${res.status}.`;
+      try {
+        const j = (await res.json()) as unknown;
+        const detalle = textoLegible(j);
+        if (detalle) motivo = detalle;
+      } catch {
+        /* respuesta sin JSON: nos quedamos con el estado */
+      }
+      throw new Error(motivo);
+    }
+
+    const lector = res.body!.getReader();
+    const decodificador = new TextDecoder();
+    let buffer = "";
+    let bruto = "";
+    let meta: { fin?: string | null; tokens?: number | null; vacio?: boolean; error?: string | null } = {};
+    let cerradoPorServidor = false;
+
+    for (;;) {
+      const { done, value } = await lector.read();
+      if (done) break;
+      buffer += decodificador.decode(value, { stream: true });
+
+      let corte: number;
+      while ((corte = buffer.indexOf("\n\n")) !== -1) {
+        const evento = buffer.slice(0, corte);
+        buffer = buffer.slice(corte + 2);
+
+        for (const linea of evento.split("\n")) {
+          if (!linea.startsWith("data:")) continue;
+          const carga = linea.slice(5).trim();
+          if (!carga || carga === "[DONE]") continue;
+          try {
+            const trozo = JSON.parse(carga) as { t?: string; meta?: typeof meta };
+            if (trozo.t) bruto += trozo.t;
+            if (trozo.meta) {
+              meta = trozo.meta;
+              if (trozo.meta.fin) cerradoPorServidor = true;
+            }
+          } catch {
+            /* un trozo ilegible no invalida lo ya recibido */
+          }
+        }
+
+        const parcial = extraerMensajeParcial(bruto);
+        if (parcial) onParcial(parcial);
+      }
+    }
+
+    if (!cerradoPorServidor) {
+      throw new Error(
+        "La conexión se cortó antes de que el asistente terminara de responder. " +
+          "Suele pasar si el servidor se reinició mientras se generaba. Reintenta."
+      );
+    }
+    void control;
+    return { bruto, meta };
+  }
+
+  /* -------- el inicio: la IA decide el nivel conversando -------- */
+  const enviarInicio = useCallback(
+    async (texto: string, opciones?: { reintento?: boolean }) => {
+      const t = texto.trim();
+      if (!t || enviando || !hidratado) return;
+      if (scopeV3NoSoportadoRef.current) {
+        setError("Este proyecto está en un módulo que esta página todavía no puede abrir. Sus datos permanecen intactos.");
+        return;
+      }
+      if (saludRef.current && !saludRef.current.ia && saludRef.current.conexion === "sin_clave") {
+        setError(saludRef.current.mensaje);
+        return;
+      }
+
+      ultimaPeticion.current = t;
+      setError(null);
+      setEnviando(true);
+
+      const idUsuario = `u${Date.now()}`;
+      const idIA = `a${Date.now()}-b`;
+      const msgUsuario: ChatMensaje = { id: idUsuario, role: "usuario", texto: t };
+      const msgIA: ChatMensaje = { id: idIA, role: "asistente", texto: "" };
+      setMensajes((m) => [...m, msgUsuario, msgIA]);
+
+      const control = new AbortController();
+      abortRef.current = control;
+
+      const proyecto = estadoV3Ref.current?.proyecto ?? null;
+      const documentos: { nivel: "macro" | "meso" | "micro"; nombre: string }[] = proyecto
+        ? [
+            ...proyecto.marcos.map((m) => ({ nivel: "macro" as const, nombre: m.nombre })),
+            ...proyecto.programas.map((p) => ({ nivel: "meso" as const, nombre: p.nombre })),
+            ...proyecto.asignaturas.map((a) => ({
+              nivel: "micro" as const,
+              nombre: a.microcurriculo.ident.asignatura
+            }))
+          ]
+        : [];
+      const historia: { role: string; content: string }[] = [];
+      if (crudoRef.current) historia.push({ role: "assistant", content: crudoRef.current });
+      for (const m of mensajes.slice(-8)) {
+        historia.push({ role: m.role === "usuario" ? "user" : "assistant", content: m.texto });
+      }
+
+      let bruto = "";
+      let meta: { fin?: string | null; tokens?: number | null; vacio?: boolean; error?: string | null } = {};
+      let respuestaLlego = false;
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: control.signal,
+          body: JSON.stringify({
+            mensaje: t,
+            modulo: "inicio",
+            documentos,
+            historia,
+            fuentesPdf: fuentesPdfParaEnvio(t)
+          })
+        });
+        respuestaLlego = true;
+
+        const leido = await consumirStreamChat(res, control, (parcial) =>
+          setMensajes((m) => m.map((x) => (x.id === idIA ? { ...x, texto: parcial } : x)))
+        );
+        bruto = leido.bruto;
+        meta = leido.meta;
+
+        if (!bruto.trim() && !meta.error) {
+          if (!opciones?.reintento) {
+            reintentarVacio.current = true;
+            return;
+          }
+          throw new Error(
+            "El asistente devolvió un turno vacío dos veces seguidas. Vuelve a intentarlo: si se repite, reformula la petición."
+          );
+        }
+
+        const resultado = parsearRespuestaInicio(bruto, meta);
+        if (!resultado.ok) {
+          const causaReal = meta.error ? ` El proveedor reportó: ${meta.error}` : "";
+          const motivo = resultado.motivo + causaReal;
+          ultimoErrorRef.current = { motivo, fin: meta.fin ?? null, bruto };
+          throw new Error(motivo);
+        }
+        ultimoErrorRef.current = null;
+
+        const iaFinal: ChatMensaje = { id: idIA, role: "asistente", texto: resultado.mensaje };
+        setMensajes((m) => m.map((x) => (x.id === idIA ? iaFinal : x)));
+        setSugerencias(resultado.sugerencias);
+        setCrudoUltimo(bruto);
+        crudoRef.current = bruto;
+
+        if (resultado.destino !== "aclarar") {
+          // Guarda el hilo de inicio y cambia al nivel elegido. Para Micro no
+          // hay lienzo: se queda en inicio hasta que el primer dato cree la ficha.
+          const transferencia: ChatMensaje[] = [...mensajes, msgUsuario, iaFinal];
+          let base = guardarVistaActual() ?? estadoV3Ref.current;
+          if (!base) {
+            base = aplicarVistaMicroV3(
+              null,
+              {
+                microcurriculo: null,
+                mensajes: transferencia,
+                sugerencias: resultado.sugerencias,
+                intencion: "entender",
+                seccionActiva: null,
+                crudo: bruto
+              },
+              idProyectoActual()
+            );
+          }
+          setModuloActivo(resultado.destino);
+          destinoInicioRef.current = resultado.destino === "micro" ? "micro" : null;
+          if (resultado.destino !== "micro") {
+            const scopeId = `${resultado.destino}:sin-documento`;
+            const conversacion = {
+              scopeId,
+              modulo: resultado.destino,
+              documentoId: null,
+              mensajes: transferencia,
+              sugerencias: resultado.sugerencias,
+              intencion: "entender" as const,
+              seccionActiva: null,
+              crudo: bruto
+            };
+            const conSeleccion: EstadoGuardadoV3 = {
+              ...base,
+              conversaciones: { ...base.conversaciones, [scopeId]: conversacion },
+              seleccion: { modulo: resultado.destino, documentoId: null }
+            };
+            estadoV3Ref.current = conSeleccion;
+            if (resultado.destino === "macro") mostrarVistaMacro(conSeleccion);
+            else recargarMeso(conSeleccion);
+            const guardado = guardarEstadoV3(window.localStorage, conSeleccion);
+            if (!guardado.ok) {
+              setAvisoPersistencia(
+                "El proyecto sigue disponible en esta sesión, pero no se pudo guardar en el navegador. No cierres la pestaña hasta resolverlo."
+              );
+            } else {
+              estadoV3Ref.current = guardado.estado;
+            }
+            setVersionProyecto((v) => v + 1);
+          }
+        }
+        setAdjuntos([]);
+      } catch (e) {
+        const abortado = e instanceof DOMException && e.name === "AbortError";
+        const falloDeRed = !abortado && !respuestaLlego;
+        const motivo = abortado
+          ? "Detuviste la respuesta. Seguís donde estabas."
+          : falloDeRed
+            ? "No se pudo contactar al servidor de la app. Comprueba que `npm run dev` siga corriendo y recarga la página."
+            : e instanceof Error
+              ? e.message
+              : "Ocurrió un error inesperado.";
+
+        setMensajes((m) => m.map((x) => (x.id === idIA ? { ...x, texto: x.texto || motivo, incompleto: true } : x)));
+        if (!abortado) setError(motivo);
+      } finally {
+        setEnviando(false);
+        abortRef.current = null;
+
+        if (reintentarVacio.current) {
+          reintentarVacio.current = false;
+          setMensajes((m) => m.filter((x) => x.id !== idIA));
+          window.setTimeout(() => void enviarInicio(t, { reintento: true }), 0);
+          return;
+        }
+      }
+    },
+    [enviando, mensajes, mostrarAviso, hidratado]
+  );
+
+  /**
+   * Dentro de un nivel, si el docente pide cambiar de nivel o empezar otro
+   * documento, el enrutador confirma y se cambia sin perder el hilo actual.
+   */
+  const enviarRouterCambio = useCallback(
+    async (texto: string, actual: ModuloActivo, opciones?: { reintento?: boolean }) => {
+      const t = texto.trim();
+      if (!t || enviando || !hidratado) return;
+      if (saludRef.current && !saludRef.current.ia && saludRef.current.conexion === "sin_clave") {
+        setError(saludRef.current.mensaje);
+        return;
+      }
+
+      ultimaPeticion.current = t;
+      setError(null);
+      setEnviando(true);
+
+      const idUsuario = `u${Date.now()}`;
+      const idIA = `a${Date.now()}-b`;
+      const msgUsuario: ChatMensaje = { id: idUsuario, role: "usuario", texto: t };
+      const msgIA: ChatMensaje = { id: idIA, role: "asistente", texto: "" };
+      const poner = (fn: (lista: ChatMensaje[]) => ChatMensaje[]) => {
+        if (actual === "macro") setMensajesMacro(fn);
+        else if (actual === "meso") setMensajesMeso(fn);
+        else setMensajes(fn);
+      };
+      poner((m) => [...m, msgUsuario, msgIA]);
+
+      const control = new AbortController();
+      abortRef.current = control;
+
+      const proyecto = estadoV3Ref.current?.proyecto ?? null;
+      const documentos: { nivel: "macro" | "meso" | "micro"; nombre: string }[] = proyecto
+        ? [
+            ...proyecto.marcos.map((m) => ({ nivel: "macro" as const, nombre: m.nombre })),
+            ...proyecto.programas.map((p) => ({ nivel: "meso" as const, nombre: p.nombre })),
+            ...proyecto.asignaturas.map((a) => ({
+              nivel: "micro" as const,
+              nombre: a.microcurriculo.ident.asignatura
+            }))
+          ]
+        : [];
+      const hilo = actual === "macro" ? mensajesMacro : actual === "meso" ? mensajesMeso : mensajes;
+      const historia: { role: string; content: string }[] = [];
+      for (const m of hilo.slice(-8)) {
+        historia.push({ role: m.role === "usuario" ? "user" : "assistant", content: m.texto });
+      }
+
+      let bruto = "";
+      let meta: { fin?: string | null; tokens?: number | null; vacio?: boolean; error?: string | null } = {};
+      let respuestaLlego = false;
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: control.signal,
+          body: JSON.stringify({
+            mensaje: t,
+            modulo: "inicio",
+            documentos,
+            historia,
+            fuentesPdf: fuentesPdfParaEnvio(t)
+          })
+        });
+        respuestaLlego = true;
+
+        const leido = await consumirStreamChat(res, control, (parcial) =>
+          poner((m) => m.map((x) => (x.id === idIA ? { ...x, texto: parcial } : x)))
+        );
+        bruto = leido.bruto;
+        meta = leido.meta;
+
+        if (!bruto.trim() && !meta.error) {
+          if (!opciones?.reintento) {
+            reintentarVacio.current = true;
+            return;
+          }
+          throw new Error("El asistente devolvió un turno vacío dos veces seguidas. Vuelve a intentarlo.");
+        }
+
+        const resultado = parsearRespuestaInicio(bruto, meta);
+        if (!resultado.ok) {
+          const causaReal = meta.error ? ` El proveedor reportó: ${meta.error}` : "";
+          throw new Error(resultado.motivo + causaReal);
+        }
+        ultimoErrorRef.current = null;
+
+        poner((m) => m.map((x) => (x.id === idIA ? { ...x, texto: resultado.mensaje } : x)));
+        if (actual === "macro") setSugerenciasMacro(resultado.sugerencias);
+        else if (actual === "meso") setSugerenciasMeso(resultado.sugerencias);
+        else setSugerencias(resultado.sugerencias);
+        setAdjuntos([]);
+
+        if (resultado.destino !== "aclarar" && resultado.destino !== actual) {
+          ejecutarCambioModulo(resultado.destino);
+        } else if (resultado.destino !== "aclarar" && pideNuevoDocumento(t)) {
+          // Mismo nivel pero pide otro documento: vuelve al lienzo por chat.
+          nuevoDocumento(actual);
+        }
+      } catch (e) {
+        const abortado = e instanceof DOMException && e.name === "AbortError";
+        const falloDeRed = !abortado && !respuestaLlego;
+        const motivo = abortado
+          ? "Detuviste la respuesta. Seguís donde estabas."
+          : falloDeRed
+            ? "No se pudo contactar al servidor de la app. Comprueba que `npm run dev` siga corriendo y recarga la página."
+            : e instanceof Error
+              ? e.message
+              : "Ocurrió un error inesperado.";
+
+        poner((m) => m.map((x) => (x.id === idIA ? { ...x, texto: x.texto || motivo, incompleto: true } : x)));
+        if (!abortado) setError(motivo);
+      } finally {
+        setEnviando(false);
+        abortRef.current = null;
+
+        if (reintentarVacio.current) {
+          reintentarVacio.current = false;
+          poner((m) => m.filter((x) => x.id !== idIA));
+          window.setTimeout(() => void enviarRouterCambio(t, actual, { reintento: true }), 0);
+          return;
+        }
+      }
+    },
+    [enviando, mensajes, mensajesMacro, mensajesMeso, mostrarAviso, hidratado]
+  );
+
+  /**
+   * Nuevo documento por chat: vuelve al inicio con el hilo limpio para que la
+   * IA pregunte qué se quiere crear. No borra ningún documento del proyecto.
+   */
+  function nuevoHilo() {
+    if (enviando || scopeV3NoSoportadoRef.current) return;
+    abortRef.current?.abort();
+    destinoInicioRef.current = null;
+    try {
+      const base = guardarVistaActual() ?? estadoV3Ref.current;
+      if (!base) {
+        const vacia = vistaMicroVacia();
+        setMicro(vacia.microcurriculo);
+        setMensajes(vacia.mensajes);
+        setSugerencias(SUGERENCIAS_APERTURA_NEUTRAS);
+        setIntencion(vacia.intencion);
+        setSeccionActiva(null);
+        setCrudoUltimo(vacia.crudo);
+        crudoRef.current = vacia.crudo;
+        setModuloActivo("micro");
+        return;
+      }
+      const conInicio: EstadoGuardadoV3 = { ...base, seleccion: { modulo: "inicio", documentoId: null } };
+      const limpio = aplicarVistaMicroV3(
+        conInicio,
+        { ...vistaMicroVacia(), mensajes: [], sugerencias: SUGERENCIAS_APERTURA_NEUTRAS },
+        idProyectoActual()
+      );
+      estadoV3Ref.current = limpio;
+      mostrarVistaMicro(limpio);
+      setSugerencias(SUGERENCIAS_APERTURA_NEUTRAS);
+      setModuloActivo("micro");
+      const guardado = guardarEstadoV3(window.localStorage, limpio);
+      if (!guardado.ok) {
+        setAvisoPersistencia(
+          "El proyecto sigue disponible en esta sesión, pero no se pudo guardar en el navegador. No cierres la pestaña hasta resolverlo."
+        );
+      } else {
+        estadoV3Ref.current = guardado.estado;
+      }
+      setVersionProyecto((v) => v + 1);
+    } catch (errorNuevo) {
+      setAvisoPersistencia(
+        `No pude empezar un documento nuevo (${nombreErrorPersistencia(errorNuevo)}). No se perdió nada: seguís donde estabas.`
+      );
+    }
+  }
+
   const reintentar = useCallback(() => {
     const base = ultimaPeticion.current;
     if (!base) return;
@@ -1824,10 +2456,15 @@ export default function Page() {
       ? `${base}\n\n[El intento anterior falló: ${falla.motivo} No repitas la misma respuesta completa; ` +
         `devuelve algo más acotado y bien formado.]`
       : base;
+    const seleccion = estadoV3Ref.current?.seleccion ?? null;
+    if (!estadoV3Ref.current || seleccion?.modulo === "inicio") {
+      void enviarInicio(conContexto);
+      return;
+    }
     if (moduloActivoRef.current === "macro") void enviarMacro(conContexto);
     else if (moduloActivoRef.current === "meso") void enviarMeso(conContexto);
     else void enviar(conContexto);
-  }, [enviar, enviarMacro, enviarMeso]);
+  }, [enviar, enviarInicio, enviarMacro, enviarMeso]);
 
   const sinClave = salud !== null && salud.conexion === "sin_clave";
   const problemaClave =
@@ -1868,8 +2505,29 @@ export default function Page() {
   const esMeso = moduloActivo === "meso";
   const chatMensajes = esMacro ? mensajesMacro : esMeso ? mensajesMeso : mensajes;
   const chatSugerencias = esMacro ? sugerenciasMacro : esMeso ? sugerenciasMeso : sugerencias;
-  const chatSemillas = esMacro ? SUGERENCIAS_APERTURA_MACRO : esMeso ? SUGERENCIAS_APERTURA_MESO : SUGERENCIAS_APERTURA;
-  const chatEnviar = (t: string) => void (esMacro ? enviarMacro(t) : esMeso ? enviarMeso(t) : enviar(t));
+  /* En inicio decide la IA; dentro de un nivel, un pedido explícito de cambio
+     o de documento nuevo también pasa por el enrutador. */
+  const seleccionParaEnvio = estadoV3Ref.current?.seleccion ?? null;
+  const enInicio = !estadoV3Ref.current || seleccionParaEnvio?.modulo === "inicio";
+  const chatEnviar = (t: string) => {
+    const texto = t.trim();
+    if (!texto || enviando) return;
+    if (enInicio && destinoInicioRef.current === null) {
+      void enviarInicio(texto);
+      return;
+    }
+    if (enInicio) {
+      // El nivel ya quedó decidido conversando: el turno crea la ficha.
+      destinoInicioRef.current = null;
+      void enviar(texto);
+      return;
+    }
+    if (mencionaOtroNivel(texto, moduloActivo) || pideNuevoDocumento(texto)) {
+      void enviarRouterCambio(texto, moduloActivo);
+      return;
+    }
+    void (esMacro ? enviarMacro(texto) : esMeso ? enviarMeso(texto) : enviar(texto));
+  };
   const textoPildora = esMacro
     ? "Aquí va tomando forma tu marco. Sigue conversando: cada dato cae en su sección."
     : esMeso
@@ -1890,31 +2548,45 @@ export default function Page() {
     nombre: m.nombre,
     estado: m.estado
   }));
-  /* Listas de documentos por nivel para el selector multi-documento. */
-  const documentosMicro = (proyectoEnVista?.asignaturas ?? []).map((a) => ({
-    id: a.id,
-    nombre: a.microcurriculo.ident.asignatura.trim() || `Asignatura ${a.microcurriculo.folio}`
-  }));
-  const documentosMacro = (proyectoEnVista?.marcos ?? []).map((m) => ({
-    id: m.id,
-    nombre: m.nombre.trim() || "Marco sin nombre"
-  }));
-  const documentosMeso = (proyectoEnVista?.programas ?? []).map((p) => ({
-    id: p.id,
-    nombre: p.nombre.trim() || "Programa sin nombre"
-  }));
-  const documentoActualId =
-    seleccionEnVista?.modulo === moduloActivo ? (seleccionEnVista.documentoId ?? null) : null;
-  const documentosDelModulo =
-    moduloActivo === "macro" ? documentosMacro : moduloActivo === "meso" ? documentosMeso : documentosMicro;
-  /* Saludo explícito por nivel: el chat sigue siendo la entrada, pero el docente
-     elige desde el inicio si empieza una asignatura, un programa o un marco. */
-  const saludoPorModulo =
-    moduloActivo === "macro"
-      ? "Hola. Soy tu asistente de diseño curricular para educación superior. ¿Qué marco institucional quieres redactar o revisar?"
-      : moduloActivo === "meso"
-        ? "Hola. Soy tu asistente de diseño curricular para educación superior. ¿Qué programa académico quieres diseñar o revisar?"
-        : SALUDO_APERTURA;
+  /* Documentos del proyecto para el menú «+» del compositor. */
+  const documentosMenu: DocMenuItem[] = proyectoEnVista
+    ? [
+        ...proyectoEnVista.marcos.map((m) => ({
+          id: m.id,
+          nombre: m.nombre.trim() || "Marco sin nombre",
+          nivel: "macro" as const
+        })),
+        ...proyectoEnVista.programas.map((p) => ({
+          id: p.id,
+          nombre: p.nombre.trim() || "Programa sin nombre",
+          nivel: "meso" as const
+        })),
+        ...proyectoEnVista.asignaturas.map((a) => ({
+          id: a.id,
+          nombre: a.microcurriculo.ident.asignatura.trim() || `Asignatura ${a.microcurriculo.folio}`,
+          nivel: "micro" as const
+        }))
+      ]
+    : [];
+  /* Etiqueta pasiva del contexto: informa dónde se está, no elige. El nivel lo
+     decide la conversación, no un selector. */
+  const etiquetaContexto = (() => {
+    if (!proyectoEnVista || !seleccionEnVista || seleccionEnVista.modulo === "inicio") {
+      return "Conversación inicial";
+    }
+    if (seleccionEnVista.modulo === "macro") {
+      const m = proyectoEnVista.marcos.find((x) => x.id === seleccionEnVista.documentoId);
+      return `Marco · ${m?.nombre.trim() || "sin nombre"}`;
+    }
+    if (seleccionEnVista.modulo === "meso") {
+      const p = proyectoEnVista.programas.find((x) => x.id === seleccionEnVista.documentoId);
+      return `Programa · ${p?.nombre.trim() || "sin nombre"}`;
+    }
+    const a = proyectoEnVista.asignaturas.find((x) => x.id === seleccionEnVista.documentoId);
+    return `Asignatura · ${a?.microcurriculo.ident.asignatura.trim() || "sin nombre"}`;
+  })();
+  /* Saludo único y neutro: no propone niveles, solo invita a conversar. */
+  const saludoUnico = SALUDO_APERTURA;
   const asignaturasVinculadas =
     programa === null || !proyectoEnVista
       ? []
@@ -1992,19 +2664,10 @@ export default function Page() {
             <span className="hidden sm:inline">Conversación nueva</span>
             <span className="sr-only sm:hidden">Conversación nueva</span>
           </button>
-          <SelectorModulo
-            activo={moduloActivo}
-            onCambiar={cambiarModulo}
-            deshabilitado={enviando || scopeV3NoSoportado}
-          />
-          <SelectorDocumento
-            modulo={moduloActivo}
-            documentos={documentosDelModulo}
-            seleccionadoId={documentoActualId}
-            onElegir={(id) => abrirDocumento(moduloActivo, id)}
-            onNuevo={() => nuevoDocumento(moduloActivo)}
-            deshabilitado={enviando || scopeV3NoSoportado || !hidratado}
-          />
+          <span className="inline-flex max-w-[12rem] items-center gap-1.5 truncate rounded-full border border-black/10 bg-crema/95 px-3 py-1.5 text-xs font-medium text-black/70">
+            <Icono nombre="chispa" className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{etiquetaContexto}</span>
+          </span>
           <span className="ml-auto flex items-center gap-2 text-[11px] text-black/50">
             <span
               className={`h-2 w-2 rounded-full ${sinClave ? "bg-terracotta" : salud === null ? "bg-mist" : "bg-rainfall"}`}
@@ -2027,9 +2690,6 @@ export default function Page() {
               </p>
             </div>
           )}
-          {chatMensajes.length === 0 && (
-            <NivelInicial activo={moduloActivo} onElegir={cambiarModulo} deshabilitado={enviando} />
-          )}
           <Chat
             mensajes={chatMensajes}
             enviando={enviando}
@@ -2037,9 +2697,18 @@ export default function Page() {
             onEnviar={chatEnviar}
             onDetener={() => abortRef.current?.abort()}
             onReintentar={reintentar}
-            sugerencias={chatMensajes.length === 0 ? chatSemillas : chatSugerencias}
-            saludo={saludoPorModulo}
+            sugerencias={chatMensajes.length === 0 ? SUGERENCIAS_APERTURA_NEUTRAS : chatSugerencias}
+            saludo={saludoUnico}
             variante="limpio"
+            adjuntos={adjuntosChips}
+            onQuitarAdjunto={quitarAdjunto}
+            onConfirmarAnio={confirmarAnioAdjunto}
+            menu={{
+              documentos: documentosMenu,
+              onNuevoDocumento: nuevoHilo,
+              onAbrirDocumento: (nivel, id) => abrirDocumento(nivel, id),
+              onAdjuntar: adjuntarArchivos
+            }}
             deshabilitado={!hidratado || sinClave || scopeV3NoSoportado}
             motivoDeshabilitado={
               scopeV3NoSoportado
@@ -2109,8 +2778,17 @@ export default function Page() {
             onDetener={() => abortRef.current?.abort()}
             onReintentar={reintentar}
             sugerencias={chatSugerencias}
-            saludo={saludoPorModulo}
+            saludo={saludoUnico}
             variante="lateral"
+            adjuntos={adjuntosChips}
+            onQuitarAdjunto={quitarAdjunto}
+            onConfirmarAnio={confirmarAnioAdjunto}
+            menu={{
+              documentos: documentosMenu,
+              onNuevoDocumento: nuevoHilo,
+              onAbrirDocumento: (nivel, id) => abrirDocumento(nivel, id),
+              onAdjuntar: adjuntarArchivos
+            }}
             deshabilitado={!hidratado || sinClave || scopeV3NoSoportado}
             motivoDeshabilitado={
               scopeV3NoSoportado
@@ -2157,19 +2835,10 @@ export default function Page() {
             <span className="hidden truncate sm:inline">{etiquetaSalud}</span>
           </span>
 
-          <SelectorModulo
-            activo={moduloActivo}
-            onCambiar={cambiarModulo}
-            deshabilitado={enviando || scopeV3NoSoportado}
-          />
-          <SelectorDocumento
-            modulo={moduloActivo}
-            documentos={documentosDelModulo}
-            seleccionadoId={documentoActualId}
-            onElegir={(id) => abrirDocumento(moduloActivo, id)}
-            onNuevo={() => nuevoDocumento(moduloActivo)}
-            deshabilitado={enviando || scopeV3NoSoportado || !hidratado}
-          />
+          <span className="inline-flex max-w-[12rem] items-center gap-1.5 truncate rounded-full border border-black/10 bg-white px-3 py-1 text-[11px] font-medium text-black/70">
+            <Icono nombre="chispa" className="h-3 w-3 shrink-0" />
+            <span className="truncate">{etiquetaContexto}</span>
+          </span>
 
           <div className="ml-auto flex items-center gap-1.5">
             {proyectoEnVista &&
@@ -2349,167 +3018,6 @@ function Ondas() {
         opacity="0.45"
       />
     </svg>
-  );
-}
-
-/**
- * Selector compacto de nivel curricular. Vive en el encabezado y no abre un
- * tercer riel: solo cambia qué documento conduce la conversación y la ficha.
- */
-function SelectorModulo({
-  activo,
-  onCambiar,
-  deshabilitado
-}: {
-  activo: ModuloActivo;
-  onCambiar: (m: ModuloActivo) => void;
-  deshabilitado?: boolean;
-}) {
-  const base = "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors";
-  return (
-    <div
-      role="group"
-      aria-label="Nivel curricular"
-      className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-black/10 bg-white p-0.5"
-    >
-      {(
-        [
-          { id: "micro", etiqueta: "Asignatura", titulo: "Microcurrículo de asignatura" },
-          { id: "meso", etiqueta: "Programa", titulo: "Programa académico" },
-          { id: "macro", etiqueta: "Marco", titulo: "Marco educativo institucional" }
-        ] as const
-      ).map((m) => (
-        <button
-          key={m.id}
-          type="button"
-          onClick={() => onCambiar(m.id)}
-          disabled={deshabilitado}
-          aria-pressed={activo === m.id}
-          title={m.titulo}
-          className={`${base} ${activo === m.id ? "bg-sow text-seedling" : "text-black/55 hover:text-black"} disabled:opacity-60`}
-        >
-          {m.etiqueta}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/**
- * Selector de documento dentro del nivel activo. Lista los documentos del
- * proyecto, abre el elegido y ofrece empezar uno nuevo sin borrar el proyecto.
- * "Conversación nueva" queda reservada para el borrado total y explícito.
- */
-function SelectorDocumento({
-  modulo,
-  documentos,
-  seleccionadoId,
-  onElegir,
-  onNuevo,
-  deshabilitado
-}: {
-  modulo: ModuloActivo;
-  documentos: { id: string; nombre: string }[];
-  seleccionadoId: string | null;
-  onElegir: (id: string | null) => void;
-  onNuevo: () => void;
-  deshabilitado?: boolean;
-}) {
-  const etiqueta =
-    modulo === "macro" ? "Marco" : modulo === "meso" ? "Programa" : "Asignatura";
-  return (
-    <span className="inline-flex shrink-0 items-center gap-1">
-      <label className="sr-only" htmlFor={`selector-documento-${modulo}`}>
-        {etiqueta} activo
-      </label>
-      <select
-        id={`selector-documento-${modulo}`}
-        value={seleccionadoId ?? ""}
-        onChange={(e) => onElegir(e.target.value === "" ? null : e.target.value)}
-        disabled={deshabilitado}
-        title={documentos.length ? `Elegir ${etiqueta.toLowerCase()} del proyecto` : `Aún no hay documentos en este nivel`}
-        className="max-w-[11rem] truncate rounded-full border border-black/10 bg-white px-2 py-1 text-[11px] font-medium text-black/70 hover:border-black/25 disabled:opacity-60"
-      >
-        {documentos.length === 0 && <option value="">Sin documentos</option>}
-        {documentos.length > 0 && seleccionadoId === null && (
-          <option value="">Nuevo…</option>
-        )}
-        {documentos.map((d) => (
-          <option key={d.id} value={d.id}>
-            {d.nombre}
-          </option>
-        ))}
-      </select>
-      <button
-        type="button"
-        onClick={onNuevo}
-        disabled={deshabilitado}
-        title={`Empezar un ${etiqueta.toLowerCase()} nuevo sin borrar el proyecto`}
-        className="inline-flex items-center rounded-full border border-black/10 bg-white px-2 py-1 text-[11px] font-medium text-black/60 hover:border-black/25 hover:text-black disabled:opacity-60"
-      >
-        + Nuevo
-      </button>
-    </span>
-  );
-}
-
-/**
- * Entrada inicial por nivel: el chat sigue siendo lo primero, pero el docente
- * ve de forma explícita que puede empezar una asignatura, un programa o un marco.
- */
-function NivelInicial({
-  activo,
-  onElegir,
-  deshabilitado
-}: {
-  activo: ModuloActivo;
-  onElegir: (m: ModuloActivo) => void;
-  deshabilitado?: boolean;
-}) {
-  const opciones = [
-    {
-      id: "micro" as const,
-      titulo: "Asignatura",
-      detalle: "Microcurrículo de una materia"
-    },
-    {
-      id: "meso" as const,
-      titulo: "Programa",
-      detalle: "Perfil y resultados del programa"
-    },
-    {
-      id: "macro" as const,
-      titulo: "Marco",
-      detalle: "Modelo y principios institucionales"
-    }
-  ];
-  return (
-    <div className="mx-auto w-full max-w-[640px] pb-2">
-      <p className="px-1 pb-1.5 text-[11px] font-medium uppercase tracking-wide text-black/45">
-        ¿Por dónde empezamos?
-      </p>
-      <div className="flex flex-col gap-1.5 sm:flex-row">
-        {opciones.map((o) => (
-          <button
-            key={o.id}
-            type="button"
-            onClick={() => onElegir(o.id)}
-            disabled={deshabilitado}
-            aria-pressed={activo === o.id}
-            className={`flex-1 rounded-xl border px-3 py-2 text-left transition-colors disabled:opacity-60 ${
-              activo === o.id
-                ? "border-sow bg-sow text-seedling shadow-burbuja"
-                : "border-black/10 bg-white/80 text-black/70 hover:border-black/25 hover:text-black"
-            }`}
-          >
-            <span className="block text-[12.5px] font-semibold">{o.titulo}</span>
-            <span className={`block text-[11px] ${activo === o.id ? "opacity-80" : "text-black/50"}`}>
-              {o.detalle}
-            </span>
-          </button>
-        ))}
-      </div>
-    </div>
   );
 }
 

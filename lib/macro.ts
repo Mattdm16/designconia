@@ -215,6 +215,16 @@ function normalizarFuente(v: unknown): FuenteCurricular | null {
   if (url) fuente.url = url;
   if (identificador) fuente.identificador = identificador;
   if (fecha) fuente.fechaPublicacion = fecha;
+  // Campos de PDFs integrados: se conservan si ya venían validados, nunca se
+  // inventan desde el modelo.
+  if (typeof crudo.anio === "number" && Number.isInteger(crudo.anio)) fuente.anio = crudo.anio;
+  const nombreArchivo = textoOpcional(crudo.nombreArchivo).trim();
+  if (nombreArchivo) fuente.nombreArchivo = nombreArchivo;
+  const textoExtraido = textoOpcional(crudo.textoExtraido);
+  if (textoExtraido) fuente.textoExtraido = textoExtraido;
+  if (typeof crudo.paginas === "number" && Number.isInteger(crudo.paginas) && crudo.paginas > 0) {
+    fuente.paginas = crudo.paginas;
+  }
   return fuente;
 }
 

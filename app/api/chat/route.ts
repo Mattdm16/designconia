@@ -7,6 +7,7 @@ import {
   recortarHistoria,
   turnoDocente
 } from "@/lib/prompt";
+import { SYSTEM_PROMPT_INICIO, turnoInicio } from "@/lib/promptInicio";
 import { SYSTEM_PROMPT_MACRO, turnoDocenteMacro } from "@/lib/promptMacro";
 import { marcoVacio, normalizarMarco } from "@/lib/macro";
 import { SYSTEM_PROMPT_MESO, turnoDocenteMeso, type MarcoDisponible } from "@/lib/promptMeso";
@@ -36,6 +37,10 @@ type Cuerpo = {
   programa?: unknown;
   /** Marcos del proyecto para citar por id, solo en el nivel Meso. */
   marcos?: unknown;
+  /** Documentos existentes (para que el inicio resuelva "sigue con el marco"). */
+  documentos?: unknown;
+  /** Extractos de PDFs adjuntos como evidencia (texto + páginas, nunca el binario). */
+  fuentesPdf?: unknown;
 };
 
 function errorJson(status: number, code: string, mensaje: string) {
@@ -124,6 +129,53 @@ function comoPrograma(v: unknown): ProgramaAcademico | null {
   return programaVacio(normalizado) ? null : normalizado;
 }
 
+/** Documentos existentes que el cliente declara para el enrutador de inicio. */
+function comoDocumentosExistentes(v: unknown): { nivel: "macro" | "meso" | "micro"; nombre: string }[] {
+  if (!Array.isArray(v)) return [];
+  const salida: { nivel: "macro" | "meso" | "micro"; nombre: string }[] = [];
+  for (const crudo of v) {
+    if (typeof crudo !== "object" || crudo === null || Array.isArray(crudo)) continue;
+    const o = crudo as Record<string, unknown>;
+    if ((o.nivel === "macro" || o.nivel === "meso" || o.nivel === "micro") && typeof o.nombre === "string" && o.nombre.trim()) {
+      salida.push({ nivel: o.nivel, nombre: o.nombre.trim().slice(0, 120) });
+    }
+  }
+  return salida.slice(0, 20);
+}
+
+export type FuentePdfContexto = { titulo: string; paginas: number; extractos: string[] };
+
+/** Extractos de PDF que el cliente adjunta como evidencia (con topes). */
+function comoFuentesPdf(v: unknown): FuentePdfContexto[] {
+  if (!Array.isArray(v)) return [];
+  const salida: FuentePdfContexto[] = [];
+  for (const crudo of v) {
+    if (typeof crudo !== "object" || crudo === null || Array.isArray(crudo)) continue;
+    const o = crudo as Record<string, unknown>;
+    if (typeof o.titulo !== "string" || !o.titulo.trim()) continue;
+    const extractos = Array.isArray(o.extractos)
+      ? o.extractos.filter((e): e is string => typeof e === "string" && e.trim().length > 0).map((e) => e.slice(0, 1200)).slice(0, 6)
+      : [];
+    if (extractos.length === 0) continue;
+    const paginas = typeof o.paginas === "number" && Number.isFinite(o.paginas) ? Math.floor(o.paginas) : 0;
+    salida.push({ titulo: o.titulo.trim().slice(0, 120), paginas, extractos });
+  }
+  return salida.slice(0, 3);
+}
+
+/** Bloque de evidencia que se añade al turno cuando hay PDFs adjuntos. */
+function bloqueFuentesPdf(fuentes: FuentePdfContexto[]): string {
+  if (fuentes.length === 0) return "";
+  const partes = fuentes.map(
+    (f) => `[${f.titulo} (${f.paginas} págs.)]\n${f.extractos.join("\n")}`
+  );
+  return (
+    `\n\nFUENTES APORTADAS POR EL DOCENTE (PDF, solo lectura):\n${partes.join("\n\n").slice(0, 8000)}\n\n` +
+    "Si afirmas algo que salga de ellas, cita «título, p. N». Si el PDF no contiene evidencia suficiente, dilo y pide precisión. " +
+    "Nunca presentes una afirmación como oficial solo porque venga de un adjunto."
+  );
+}
+
 /** Marcos que el cliente declara para poder citarlos por id en el nivel Meso. */
 function comoMarcosDisponibles(v: unknown): MarcoDisponible[] {
   if (!Array.isArray(v)) return [];
@@ -192,24 +244,30 @@ export async function POST(req: NextRequest) {
   // Sin `modulo`, el comportamiento Micro queda intacto.
   const esMacro = cuerpo.modulo === "macro";
   const esMeso = cuerpo.modulo === "meso";
+  const esInicio = cuerpo.modulo === "inicio";
 
   // El documento es OPCIONAL: si no existe todavía, la conversación va sin
   // ficha y el modelo no puede inventarse que la tiene.
-  const borrador = esMacro || esMeso ? null : comoBorrador(cuerpo.microcurriculo);
+  const borrador = esMacro || esMeso || esInicio ? null : comoBorrador(cuerpo.microcurriculo);
   const marcoBase = esMacro ? comoMarco(cuerpo.marco) : null;
   const programaBase = esMeso ? comoPrograma(cuerpo.programa) : null;
   const marcosDisponibles = esMeso ? comoMarcosDisponibles(cuerpo.marcos) : [];
+  const documentosExistentes = esInicio ? comoDocumentosExistentes(cuerpo.documentos) : [];
+  const fuentesPdf = comoFuentesPdf(cuerpo.fuentesPdf);
 
-  const turnoUsuario = esMacro
-    ? turnoDocenteMacro(mensajeUsuario, marcoBase)
-    : esMeso
-      ? turnoDocenteMeso(mensajeUsuario, programaBase, marcosDisponibles)
-      : turnoDocente(mensajeUsuario, borrador);
+  const turnoBase = esInicio
+    ? turnoInicio(mensajeUsuario, documentosExistentes)
+    : esMacro
+      ? turnoDocenteMacro(mensajeUsuario, marcoBase)
+      : esMeso
+        ? turnoDocenteMeso(mensajeUsuario, programaBase, marcosDisponibles)
+        : turnoDocente(mensajeUsuario, borrador);
+  const turnoUsuario = turnoBase + bloqueFuentesPdf(fuentesPdf);
 
   const mensajes = [
     {
       role: "system" as const,
-      content: esMacro ? SYSTEM_PROMPT_MACRO : esMeso ? SYSTEM_PROMPT_MESO : SYSTEM_PROMPT
+      content: esInicio ? SYSTEM_PROMPT_INICIO : esMacro ? SYSTEM_PROMPT_MACRO : esMeso ? SYSTEM_PROMPT_MESO : SYSTEM_PROMPT
     },
     ...leerHistoria(cuerpo.historia),
     { role: "user" as const, content: turnoUsuario }

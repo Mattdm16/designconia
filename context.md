@@ -34,8 +34,9 @@
 | Conservar el Micro y migrar el guardado previo | **Implementado**: V1/V2→V3, respaldo, staging y protección frente a datos corruptos. | El Micro aún no tiene IDs estables propios para sus resultados/unidades/evidencias. |
 | Vincular Meso con Macro | **Implementado**: un marco principal activo por programa; al cambiarlo, el vínculo anterior se conserva como inactivo. | Hay tipos de alineación Macro→resultado Meso, pero no una matriz editable de alineación en la interfaz. |
 | Vincular Micro con Meso | **Implementado**: desde el editor Meso se vincula/desvincula una asignatura independiente; la ficha nunca se borra al desvincular. | El vínculo es a nivel de asignatura, no entre resultados específicos. Una asignatura solo admite un programa en este MVP. |
-| Elegir Macro/Meso/Micro desde la conversación inicial | **Implementado**: el chat inicial muestra «¿Por dónde empezamos?» (Asignatura/Programa/Marco) con saludo y sugerencias por nivel; el selector compacto sigue en el encabezado. | Verificado solo con tipos, pruebas y build; sin inspección visual en navegador. |
-| Manejar varios Marcos, Programas y Asignaturas | **Implementado**: selector de documento por nivel + «+ Nuevo» en modo conversación y en modo borrador; abrir/crear preserva el proyecto y sus hilos. | El documento recién creado tarda un instante en aparecer en la lista (autosave con debounce). «Conversación nueva» sigue siendo borrado total y explícito del proyecto. |
+| Elegir Macro/Meso/Micro conversando | **Implementado**: sin tarjetas ni selectores visibles; la IA decide el nivel por chat (enrutador con `aclarar` ante duda) y muestra una etiqueta pasiva de contexto. | Verificado solo con tipos, pruebas y build; sin inspección visual en navegador. |
+| Manejar varios Marcos, Programas y Asignaturas | **Implementado**: botón «+» del compositor con adjuntar PDF, nuevo documento (por chat) y lista de documentos; abrir/crear preserva el proyecto y sus hilos. | El documento recién creado tarda un instante en aparecer en la lista (autosave con debounce). «Conversación nueva» sigue siendo borrado total y explícito del proyecto. |
+| Adjuntar PDFs como fuentes (máx. 3 años) | **Implementado**: solo PDF con texto (sin OCR), validación de firma/tamaño/páginas, extracción local en navegador, año por metadatos o declarado, registro como fuente curricular con texto recortado. | Límite 10 MB por archivo, 3 por envío, 150 páginas; tope de texto para contexto y almacenamiento. Sin inspección visual en navegador. |
 | Trazabilidad pedagógica completa | **Implementada**: RA con ids estables y actividades con `mideIds` en el Micro; bordes principio→resultado→RA (RA→actividad vive en `mideIds`); matrices editables Macro→programa y programa→RA en la ficha Meso; insignias «Responde a» en el contenido Micro; poda de huérfanas al editar. | Falta matriz RA→actividad como alineación editable (hoy vive en `mideIds` de cada actividad). `mide` se conserva como nota libre heredada. Sin inspección visual en navegador. |
 | Citas de fuentes curriculares | **Implementada**: editor compartido de citas (fuente + localizador/página/sección) en cada afirmación Macro/Meso, con selectores de origen y estado; el cambio a documento/contrastada exige cita válida y la última cita respaldada no se puede quitar. | Sin inspección visual en navegador. |
 | Exportación | **Implementada para Micro, Macro y Meso**: PDF de texto plano y copia Markdown en los tres niveles; el programa incluye trazabilidad (principios y RA vinculados) y asignaturas. | Resuelta con el expediente conjunto (ver abajo). |
@@ -43,12 +44,13 @@
 
 ### Próximo orden recomendado
 
-1. ~~Elección Macro/Meso/Micro desde la conversación inicial~~ Hecho: tarjetas «¿Por dónde empezamos?», saludo y sugerencias por nivel.
-2. ~~Lista, selección y creación de varios documentos por nivel~~ Hecho: selector + «+ Nuevo» por nivel con proyecto e hilos preservados.
+1. ~~Chat conversacional con elección de nivel~~ Hecho: sin tarjetas ni selectores; enrutador por intención con `aclarar`, etiqueta pasiva de contexto y cambio de nivel por chat.
+2. ~~Gestión de varios documentos por nivel~~ Hecho: botón «+» con adjuntar PDF, nuevo documento por chat y lista de documentos, con proyecto e hilos preservados.
 3. ~~Trazabilidad Macro→Meso→Micro→evaluación~~ Hecho: ids estables en RA/actividades, matrices editables en Meso, `mideIds` en evaluación, poda de huérfanas y migración de datos heredados al leer.
 4. ~~Citas curriculares y exportación Macro/Meso~~ Hecho: citas editables por afirmación con localizador, paridad de normalizadores y PDF/Markdown en los tres niveles.
 5. ~~Expediente curricular conjunto~~ Hecho: `exportarExpediente.ts` reúne marcos, programas, asignaturas y alineaciones en texto plano/Markdown/PDF, con botones Copiar/Expediente en el encabezado.
-6. Probar flujos completos y revisar visualmente escritorio/móvil (detector mecánico limpio; sin inspección en navegador).
+6. ~~PDFs como fuentes con tope de 3 años~~ Hecho: `lib/pdf.ts` (validación, año, extractos) + `lib/inicio.ts` (enrutador), extracción local con worker en `/public`, citas con página y evidencia en los tres niveles.
+7. Probar flujos completos y revisar visualmente escritorio/móvil (detector mecánico limpio; sin inspección en navegador).
 
 ## 3. Datos y contratos
 
@@ -97,11 +99,11 @@ El Micro canónico sigue en [schema.ts](lib/schema.ts). Conserva las ocho seccio
 
 ```text
 app/
-  page.tsx                       chat, selector de nivel, estado y guardado V3
-  api/chat/route.ts              proxy SSE y ramas Micro/Macro/Meso
+  page.tsx                       chat conversacional, enrutador, adjuntos PDF y guardado V3
+  api/chat/route.ts              proxy SSE y ramas inicio/Micro/Macro/Meso + evidencia PDF
   api/salud/route.ts             valida conexión y clave
 components/
-  Chat.tsx                       hilo y compositor compartidos
+  Chat.tsx                       hilo y compositor con botón «+», menú y chips de PDF
   ficha/Microcurriculo.tsx       editor de la asignatura existente
   ficha/Marco.tsx                editor del marco institucional
   ficha/Meso.tsx                 editor del programa y vínculos
@@ -109,6 +111,8 @@ components/
   ficha/Campos.tsx               controles editables reutilizables
   ficha/Citas.tsx                editor compartido de citas y afirmaciones Macro/Meso
 lib/
+  pdf.ts                         validación, año/antigüedad, extractos y worker local (8 pruebas)
+  inicio.ts / promptInicio.ts    enrutador por intención + heurística de cambio (5 pruebas)
   exportarMacroTexto.ts          marco a texto plano (para PDF)
   exportarMesoTexto.ts           programa a texto plano con trazabilidad (para PDF)
   exportarExpediente.ts          expediente conjunto texto/Markdown de todo el proyecto
@@ -132,7 +136,7 @@ lib/
 Último checkpoint de implementación: commit `84c8e57` (flujos E2E verificados y deriva PRODUCT/DESIGN resuelta) en la rama local `feature/curricular-project-foundation`. Los commits de desarrollo **no se han subido a GitHub**.
 
 ```text
-npm test              → 258 pruebas (95 + 14 + 38 + 11 + 27 + 11 + 24 + 17 + 11 + 5 + 3 + 2)
+npm test              → 271 pruebas (95 + 14 + 38 + 11 + 27 + 11 + 24 + 17 + 11 + 5 + 3 + 2 + 8 + 5)
 impeccable detect     → [] sobre Citas, Marco, Meso, Secciones, Microcurriculo y page
 npx tsc --noEmit      → limpio
 npm run build         → correcto
@@ -147,9 +151,9 @@ La adición Macro/Meso **hereda** el mundo visual confirmado en [DESIGN.md](DESI
 
 **Drift documental resuelto:** [PRODUCT.md](PRODUCT.md) y [DESIGN.md](DESIGN.md) ya describen los tres niveles, la trazabilidad, las citas y el expediente, conservando el mundo visual. Mora identifica lo sin verificar (bibliografía y afirmaciones); Rainfall lo cumplido/contrastado; Sow marca el origen documento.
 
-- Estado inicial: chat, tarjetas «¿Por dónde empezamos?» por nivel, saludo y sugerencias por nivel; no aparece ficha hasta que hay contenido.
-- Al existir un documento: chat a la izquierda y ficha a la derecha, selector compacto **Asignatura / Programa / Marco** más selector de documento del nivel con **+ Nuevo**, sin tercer riel.
-- Macro/Meso/Micro permiten varios documentos por proyecto: la lista cambia el documento activo y «+ Nuevo» vuelve al lienzo (inicio para Micro) preservando lo anterior y sus hilos.
+- Estado inicial: solo el chat con saludo neutro; la IA decide el nivel conversando y muestra una etiqueta pasiva de contexto. No aparece ficha hasta que hay contenido.
+- Al existir un documento: chat a la izquierda y ficha a la derecha, sin selectores visibles; el botón «+» del compositor concentra adjuntar PDF, nuevo documento y la lista de documentos, sin tercer riel.
+- Macro/Meso/Micro permiten varios documentos por proyecto: el menú «+» cambia el documento activo y «Nuevo documento» vuelve al inicio por chat, preservando lo anterior y sus hilos. Los PDF adjuntos viajan como evidencia citada por página; solo se integran PDFs de hasta 3 años.
 - **La interfaz no se ha inspeccionado visualmente en navegador.** Revisar al menos 375/768/1024/1280/1920 px, teclado/foco, estados vacíos, módulo activo, guardado y scopes no compatibles.
 
 ## 7. Alcance que sigue fuera
@@ -187,6 +191,7 @@ npm run build
 8. Se implementaron citas editables por afirmación (fuente + localizador, con paridad macro/meso en normalizadores) y exportación Macro/Meso a PDF de texto plano y Markdown.
 9. Se implementó el expediente curricular conjunto (texto plano/Markdown/PDF de todo el proyecto con trazabilidad) con 3 pruebas nuevas.
 10. Se verificaron flujos completos a nivel de datos (2 pruebas en `flujos.test.ts`) y se resolvió la deriva en PRODUCT.md/DESIGN.md.
+11. Chat conversacional con enrutador por intención (sin selectores visibles), botón «+» con adjuntos PDF y documentos, PDFs como fuentes con tope de 3 años y citas por página.
 
 > Si cualquier sección histórica de este archivo o [PRODUCT.md](PRODUCT.md) aún describe un producto solo Micro, esta sección y el código reciente describen el estado actual; actualiza las discrepancias cuando corresponda.
 

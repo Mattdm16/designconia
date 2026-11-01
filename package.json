@@ -6,10 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node lib/schema.test.ts && node lib/proyecto.test.ts && node lib/persistencia.test.ts && node lib/estadoMicro.test.ts && node lib/macro.test.ts && node lib/estadoMacro.test.ts && node lib/meso.test.ts && node lib/estadoMeso.test.ts && node lib/trazabilidad.test.ts && node lib/exportarCurricular.test.ts && node lib/exportarExpediente.test.ts && node lib/flujos.test.ts"
+    "postinstall": "node scripts/copy-pdf-worker.mjs",
+    "test": "node lib/schema.test.ts && node lib/proyecto.test.ts && node lib/persistencia.test.ts && node lib/estadoMicro.test.ts && node lib/macro.test.ts && node lib/estadoMacro.test.ts && node lib/meso.test.ts && node lib/estadoMeso.test.ts && node lib/trazabilidad.test.ts && node lib/exportarCurricular.test.ts && node lib/exportarExpediente.test.ts && node lib/flujos.test.ts && node lib/pdf.test.ts && node lib/inicio.test.ts"
   },
   "dependencies": {
     "next": "14.2.5",
+    "pdfjs-dist": "^4.10.38",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
