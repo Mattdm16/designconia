@@ -4,11 +4,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Chat } from "@/components/Chat";
 import { Icono } from "@/components/Icono";
+import { MarcoFicha } from "@/components/ficha/Marco";
 import { MicrocurriculoFicha } from "@/components/ficha/Microcurriculo";
 import { textoLegible } from "@/lib/errores";
-import { nombreArchivo, textoAPdf } from "@/lib/exportarPdf";
-import { microcurriculoATexto } from "@/lib/exportarTexto";
-import { microcurriculoAMarkdown } from "@/lib/markdown";
+import {
+  aplicarVistaMacroV3,
+  leerVistaMacroV3,
+  vistaMacroVacia,
+  type VistaMacroPersistible
+} from "@/lib/estadoMacro";
 import {
   aplicarVistaMicroV3,
   crearEstadoGuardadoV3Vacio,
@@ -16,6 +20,12 @@ import {
   vistaMicroVacia,
   type VistaMicroPersistible
 } from "@/lib/estadoMicro";
+import { nombreArchivo, textoAPdf } from "@/lib/exportarPdf";
+import { microcurriculoATexto } from "@/lib/exportarTexto";
+import { microcurriculoAMarkdown } from "@/lib/markdown";
+import { fusionarMarco, parsearRespuestaMacro, validarMarco, type SeccionMacro } from "@/lib/macro";
+import { SUGERENCIAS_APERTURA_MACRO } from "@/lib/promptMacro";
+import type { FuenteCurricular, MarcoEducativoInstitucional } from "@/lib/proyecto";
 import {
   CLAVE_MICRO_V1,
   CLAVE_MICRO_V2,
@@ -90,6 +100,16 @@ export default function Page() {
   const [pildoraBorrador, setPildoraBorrador] = useState(false);
   const [chatVisible, setChatVisible] = useState(true);
 
+  /* -------- módulo Macro: marco institucional y su conversación -------- */
+  const [moduloActivo, setModuloActivo] = useState<"micro" | "macro">("micro");
+  const [marco, setMarco] = useState<MarcoEducativoInstitucional | null>(null);
+  const [fuentes, setFuentes] = useState<FuenteCurricular[]>([]);
+  const [mensajesMacro, setMensajesMacro] = useState<ChatMensaje[]>([]);
+  const [sugerenciasMacro, setSugerenciasMacro] = useState<string[]>(SUGERENCIAS_APERTURA_MACRO);
+  const [intencionMacro, setIntencionMacro] = useState<Intencion>("entender");
+  const [seccionActivaMacro, setSeccionActivaMacro] = useState<SeccionMacro | null>(null);
+  const [crudoMacro, setCrudoMacro] = useState("");
+
   const estadoV3Ref = useRef<EstadoGuardadoV3 | null>(null);
   const idProyectoNuevoRef = useRef<string | null>(null);
   const bloqueoPersistenciaRef = useRef(false);
@@ -127,10 +147,23 @@ export default function Page() {
   const microRef = useRef<Microcurriculo | null>(null);
   microRef.current = micro;
 
+  /** El marco vivo y el módulo visible, por la misma razón. */
+  const marcoRef = useRef<MarcoEducativoInstitucional | null>(null);
+  marcoRef.current = marco;
+  const moduloActivoRef = useRef<"micro" | "macro">("micro");
+  moduloActivoRef.current = moduloActivo;
+  /** Último documento abierto en cada módulo, para volver a él al cambiar. */
+  const docIdPorModuloRef = useRef<{ micro: string | null; macro: string | null }>({
+    micro: null,
+    macro: null
+  });
+  /** Última respuesta cruda del módulo Macro, para su historial. */
+  const crudoMacroRef = useRef("");
+
   const saludRef = useRef<Salud | null>(null);
   saludRef.current = salud;
 
-  const hayBorrador = micro !== null;
+  const hayBorrador = moduloActivo === "macro" ? marco !== null : micro !== null;
 
   /* -------- avisos efímeros -------- */
   const mostrarAviso = useCallback((texto: string) => {
@@ -151,31 +184,7 @@ export default function Page() {
           carga.clavesTemporalesPendientes.length > 0 ||
           carga.clavesConflictivas.length > 0;
 
-        const resultadoVista = leerVistaMicroV3(carga.estado);
-        if (!resultadoVista.ok) {
-          bloqueoPersistenciaRef.current = true;
-          scopeV3NoSoportadoRef.current = true;
-          setPersistenciaBloqueada(true);
-          setScopeV3NoSoportado(true);
-          setAvisoPersistencia(
-            "Este proyecto está guardado, pero esta página todavía no puede abrir ese módulo. No cambié la selección ni el guardado para proteger sus datos."
-          );
-        } else {
-          bloqueoPersistenciaRef.current = false;
-          scopeV3NoSoportadoRef.current = false;
-          setPersistenciaBloqueada(false);
-          setScopeV3NoSoportado(false);
-          setDatosNoRecuperables(false);
-          const vista = resultadoVista.vista;
-          const seccion = esSeccionMicro(vista.seccionActiva) ? vista.seccionActiva : null;
-          setMicro(vista.microcurriculo);
-          setMensajes(vista.mensajes);
-          setSugerencias(vista.sugerencias);
-          setIntencion(vista.intencion);
-          setSeccionActiva(seccion);
-          setCrudoUltimo(vista.crudo);
-          crudoRef.current = vista.crudo;
-
+        const avisarCarga = () => {
           if (!carga.guardado) {
             setAvisoPersistencia(
               "Pude recuperar tu trabajo y está disponible en esta sesión, pero el navegador no confirmó el nuevo guardado. No cierres la pestaña hasta resolverlo."
@@ -191,8 +200,79 @@ export default function Page() {
           } else {
             setAvisoPersistencia(null);
           }
-          if (carga.migrado && carga.guardado) {
-            mostrarAviso("Tu microcurrículo y conversación se migraron al proyecto V3.");
+        };
+
+        const bloquearScope = () => {
+          bloqueoPersistenciaRef.current = true;
+          scopeV3NoSoportadoRef.current = true;
+          setPersistenciaBloqueada(true);
+          setScopeV3NoSoportado(true);
+          setAvisoPersistencia(
+            "Este proyecto está guardado, pero esta página todavía no puede abrir ese módulo. No cambié la selección ni el guardado para proteger sus datos."
+          );
+        };
+
+        const desbloquear = () => {
+          bloqueoPersistenciaRef.current = false;
+          scopeV3NoSoportadoRef.current = false;
+          setPersistenciaBloqueada(false);
+          setScopeV3NoSoportado(false);
+          setDatosNoRecuperables(false);
+        };
+
+        if (carga.estado.seleccion.modulo === "macro") {
+          const resultadoVista = leerVistaMacroV3(carga.estado);
+          if (!resultadoVista.ok) {
+            bloquearScope();
+          } else {
+            desbloquear();
+            const vista = resultadoVista.vista;
+            docIdPorModuloRef.current = {
+              micro: carga.estado.proyecto.asignaturas[0]?.id ?? null,
+              macro: carga.estado.seleccion.documentoId
+            };
+            setModuloActivo("macro");
+            setMarco(vista.marco);
+            setFuentes(vista.fuentes);
+            setMensajesMacro(vista.mensajes);
+            setSugerenciasMacro(
+              vista.sugerencias.length ? vista.sugerencias : SUGERENCIAS_APERTURA_MACRO
+            );
+            setIntencionMacro(vista.intencion);
+            setSeccionActivaMacro(vista.seccionActiva);
+            setCrudoMacro(vista.crudo);
+            crudoMacroRef.current = vista.crudo;
+            avisarCarga();
+            if (carga.migrado && carga.guardado) {
+              mostrarAviso("Tu proyecto se migró al formato V3.");
+            }
+          }
+        } else {
+          const resultadoVista = leerVistaMicroV3(carga.estado);
+          if (!resultadoVista.ok) {
+            bloquearScope();
+          } else {
+            desbloquear();
+            const vista = resultadoVista.vista;
+            const seccion = esSeccionMicro(vista.seccionActiva) ? vista.seccionActiva : null;
+            docIdPorModuloRef.current = {
+              micro:
+                carga.estado.seleccion.modulo === "micro"
+                  ? carga.estado.seleccion.documentoId
+                  : (carga.estado.proyecto.asignaturas[0]?.id ?? null),
+              macro: carga.estado.proyecto.marcos[0]?.id ?? null
+            };
+            setMicro(vista.microcurriculo);
+            setMensajes(vista.mensajes);
+            setSugerencias(vista.sugerencias);
+            setIntencion(vista.intencion);
+            setSeccionActiva(seccion);
+            setCrudoUltimo(vista.crudo);
+            crudoRef.current = vista.crudo;
+            avisarCarga();
+            if (carga.migrado && carga.guardado) {
+              mostrarAviso("Tu microcurrículo y conversación se migraron al proyecto V3.");
+            }
           }
         }
       } else if (carga.estadoCarga === "sin_datos") {
@@ -299,9 +379,77 @@ export default function Page() {
     return () => window.clearTimeout(id);
   }, [micro, mensajes, sugerencias, intencion, seccionActiva, crudoUltimo, hidratado]);
 
+  /* -------- autosave del módulo Macro (espejo del anterior) -------- */
+  useEffect(() => {
+    if (!hidratado || bloqueoPersistenciaRef.current || scopeV3NoSoportadoRef.current) return;
+    if (moduloActivo !== "macro") return;
+    // No se escribe un proyecto vacío por el mero hecho de abrir la página.
+    if (marco === null && mensajesMacro.length === 0) return;
+
+    const id = window.setTimeout(() => {
+      try {
+        if (!idProyectoNuevoRef.current) {
+          idProyectoNuevoRef.current = `proyecto_${folioNuevo()}`;
+        }
+        const vista: VistaMacroPersistible = {
+          marco,
+          fuentes,
+          mensajes: mensajesMacro,
+          sugerencias: sugerenciasMacro,
+          intencion: intencionMacro,
+          seccionActiva: seccionActivaMacro,
+          crudo: crudoMacro
+        };
+        const base =
+          estadoV3Ref.current ?? crearEstadoGuardadoV3Vacio(idProyectoNuevoRef.current);
+        const siguiente = aplicarVistaMacroV3(base, vista, idProyectoNuevoRef.current);
+        estadoV3Ref.current = siguiente;
+        const guardado = guardarEstadoV3(window.localStorage, siguiente);
+        if (!guardado.ok) {
+          setAvisoPersistencia(
+            `El proyecto sigue disponible en esta sesión, pero no se pudo guardar en el navegador (${guardado.error}). No cierres la pestaña hasta resolverlo.`
+          );
+          return;
+        }
+
+        estadoV3Ref.current = guardado.estado;
+        const temporalPendiente = guardado.clavesTemporalesPendientes.length > 0;
+        if (legadosPendientesRef.current) {
+          const limpieza = cargarEstadoPersistido(window.localStorage);
+          if (limpieza.ok && limpieza.guardado) {
+            estadoV3Ref.current = limpieza.estado;
+            legadosPendientesRef.current =
+              limpieza.clavesLegadasPendientes.length > 0 ||
+              limpieza.clavesTemporalesPendientes.length > 0 ||
+              limpieza.clavesConflictivas.length > 0;
+            if (limpieza.clavesConflictivas.length) {
+              setAvisoPersistencia("El proyecto se guardó; conservé copias antiguas que no pude validar.");
+              return;
+            }
+          }
+        }
+
+        if (temporalPendiente || legadosPendientesRef.current) {
+          setAvisoPersistencia("El proyecto se guardó, pero quedaron claves locales pendientes de limpieza.");
+        } else {
+          setAvisoPersistencia(null);
+        }
+      } catch (errorPersistencia) {
+        setAvisoPersistencia(
+          `El proyecto sigue disponible en esta sesión, pero no se pudo guardar (${nombreErrorPersistencia(errorPersistencia)}). No cierres la pestaña hasta resolverlo.`
+        );
+      }
+    }, 400);
+    return () => window.clearTimeout(id);
+  }, [marco, fuentes, mensajesMacro, sugerenciasMacro, intencionMacro, seccionActivaMacro, crudoMacro, hidratado, moduloActivo]);
+
   useEffect(() => {
     crudoRef.current = crudoUltimo;
   }, [crudoUltimo]);
+
+  useEffect(() => {
+    crudoMacroRef.current = crudoMacro;
+  }, [crudoMacro]);
 
   /* -------- configuración del asistente -------- */
   useEffect(() => {
@@ -337,6 +485,132 @@ export default function Page() {
     setMicro(siguiente);
   }
 
+  /* -------- edición del marco institucional -------- */
+  function editarMarco(siguiente: { marco: MarcoEducativoInstitucional; fuentes: FuenteCurricular[] }) {
+    setMarco(siguiente.marco);
+    setFuentes(siguiente.fuentes);
+  }
+
+  function vistaMicroActual(): VistaMicroPersistible {
+    return {
+      microcurriculo: microRef.current,
+      mensajes,
+      sugerencias,
+      intencion,
+      seccionActiva,
+      crudo: crudoUltimo
+    };
+  }
+
+  function vistaMacroActual(): VistaMacroPersistible {
+    return {
+      marco: marcoRef.current,
+      fuentes,
+      mensajes: mensajesMacro,
+      sugerencias: sugerenciasMacro,
+      intencion: intencionMacro,
+      seccionActiva: seccionActivaMacro,
+      crudo: crudoMacro
+    };
+  }
+
+  function idProyectoActual(): string {
+    if (!idProyectoNuevoRef.current) {
+      idProyectoNuevoRef.current = `proyecto_${folioNuevo()}`;
+    }
+    return idProyectoNuevoRef.current;
+  }
+
+  /**
+   * Cambia de módulo guardando primero lo del módulo actual (sin debounce) y
+   * cargando después la vista del destino desde el agregado. Nunca mezcla
+   * conversaciones ni documentos entre módulos.
+   */
+  function cambiarModulo(destino: "micro" | "macro") {
+    if (destino === moduloActivo || enviando) return;
+    abortRef.current?.abort();
+    try {
+      let base = estadoV3Ref.current;
+      if (base) {
+        if (moduloActivo === "micro") {
+          const vista = vistaMicroActual();
+          if (vista.microcurriculo !== null || vista.mensajes.length > 0) {
+            base = aplicarVistaMicroV3(base, vista, idProyectoActual());
+            estadoV3Ref.current = base;
+          }
+        } else {
+          const vista = vistaMacroActual();
+          if (vista.marco !== null || vista.mensajes.length > 0) {
+            base = aplicarVistaMacroV3(base, vista, idProyectoActual());
+            estadoV3Ref.current = base;
+          }
+        }
+        const sel = base.seleccion;
+        if (sel.modulo === "micro" || sel.modulo === "macro") {
+          docIdPorModuloRef.current[sel.modulo] = sel.documentoId;
+        }
+        // Apunta la selección al destino: documento recordado, primero que
+        // exista, o lienzo. Se verifica que el recordado siga existiendo.
+        const recordado = docIdPorModuloRef.current[destino];
+        const primero =
+          destino === "micro" ? base.proyecto.asignaturas[0]?.id : base.proyecto.marcos[0]?.id;
+        const candidato = recordado ?? primero ?? null;
+        const existe =
+          candidato === null ||
+          (destino === "micro"
+            ? base.proyecto.asignaturas.some((a) => a.id === candidato)
+            : base.proyecto.marcos.some((m) => m.id === candidato));
+        const conSeleccion: EstadoGuardadoV3 = {
+          ...base,
+          seleccion: { modulo: destino, documentoId: existe ? candidato : null }
+        };
+        base = conSeleccion;
+        estadoV3Ref.current = base;
+
+        if (destino === "macro") {
+          const r = leerVistaMacroV3(base);
+          if (!r.ok) throw new Error("la vista del marco no está disponible");
+          setMarco(r.vista.marco);
+          setFuentes(r.vista.fuentes);
+          setMensajesMacro(r.vista.mensajes);
+          setSugerenciasMacro(r.vista.sugerencias.length ? r.vista.sugerencias : SUGERENCIAS_APERTURA_MACRO);
+          setIntencionMacro(r.vista.intencion);
+          setSeccionActivaMacro(r.vista.seccionActiva);
+          setCrudoMacro(r.vista.crudo);
+          crudoMacroRef.current = r.vista.crudo;
+        } else {
+          const r = leerVistaMicroV3(base);
+          if (!r.ok) throw new Error("la vista del microcurrículo no está disponible");
+          setMicro(r.vista.microcurriculo);
+          setMensajes(r.vista.mensajes);
+          setSugerencias(r.vista.sugerencias);
+          setIntencion(r.vista.intencion);
+          setSeccionActiva(esSeccionMicro(r.vista.seccionActiva) ? r.vista.seccionActiva : null);
+          setCrudoUltimo(r.vista.crudo);
+          crudoRef.current = r.vista.crudo;
+        }
+        docIdPorModuloRef.current[destino] = conSeleccion.seleccion.documentoId;
+        setModuloActivo(destino);
+
+        const guardado = guardarEstadoV3(window.localStorage, base);
+        if (!guardado.ok) {
+          setAvisoPersistencia(
+            "El proyecto sigue disponible en esta sesión, pero no se pudo guardar en el navegador. No cierres la pestaña hasta resolverlo."
+          );
+        } else {
+          estadoV3Ref.current = guardado.estado;
+        }
+      } else {
+        // Sin proyecto todavía: el cambio es solo de vista.
+        setModuloActivo(destino);
+      }
+    } catch (errorCambio) {
+      setAvisoPersistencia(
+        `No pude cambiar de módulo (${nombreErrorPersistencia(errorCambio)}). No se perdió nada: seguís donde estabas.`
+      );
+    }
+  }
+
   function nuevo() {
     // Esta página solo puede descartar scopes Inicio/Micro. Nunca borra un
     // proyecto seleccionado en Macro/Meso que todavía no sabe abrir.
@@ -347,7 +621,7 @@ export default function Page() {
         ? " También se eliminarán las claves guardadas que no se pudieron leer y sus respaldos."
         : "";
       const ok = window.confirm(
-        `¿Descartar este microcurrículo y empezar de cero?\n\nSe borrarán de este navegador la conversación, la ficha y los respaldos del proyecto. No se puede deshacer.${detalleRecuperacion}`
+        `¿Descartar este proyecto y empezar de cero?\n\nSe borrarán de este navegador las conversaciones, el microcurrículo, el marco y los respaldos del proyecto. No se puede deshacer.${detalleRecuperacion}`
       );
       if (!ok) return;
     }
@@ -361,6 +635,16 @@ export default function Page() {
     setSeccionActiva(null);
     setCrudoUltimo(vistaVacia.crudo);
     crudoRef.current = vistaVacia.crudo;
+    const vistaMacroVaciaNueva = vistaMacroVacia();
+    setMarco(vistaMacroVaciaNueva.marco);
+    setFuentes(vistaMacroVaciaNueva.fuentes);
+    setMensajesMacro(vistaMacroVaciaNueva.mensajes);
+    setSugerenciasMacro(SUGERENCIAS_APERTURA_MACRO);
+    setIntencionMacro(vistaMacroVaciaNueva.intencion);
+    setSeccionActivaMacro(vistaMacroVaciaNueva.seccionActiva);
+    setCrudoMacro(vistaMacroVaciaNueva.crudo);
+    crudoMacroRef.current = vistaMacroVaciaNueva.crudo;
+    setModuloActivo("micro");
     setError(null);
     setPildoraBorrador(false);
     setChatVisible(true);
@@ -368,6 +652,7 @@ export default function Page() {
     estadoV3Ref.current = null;
     idProyectoNuevoRef.current = null;
     legadosPendientesRef.current = false;
+    docIdPorModuloRef.current = { micro: null, macro: null };
     scopeV3NoSoportadoRef.current = false;
     setScopeV3NoSoportado(false);
 
@@ -651,6 +936,185 @@ export default function Page() {
     [enviando, mensajes, mostrarAviso, hidratado]
   );
 
+  /* -------- el núcleo Macro: conversar e iterar sobre el marco -------- */
+  const enviarMacro = useCallback(
+    async (texto: string, opciones?: { reintento?: boolean }) => {
+      const t = texto.trim();
+      if (!t || enviando) return;
+      if (saludRef.current && !saludRef.current.ia && saludRef.current.conexion === "sin_clave") {
+        setError(saludRef.current.mensaje);
+        return;
+      }
+
+      ultimaPeticion.current = t;
+      setError(null);
+      setEnviando(true);
+
+      const idUsuario = `u${Date.now()}`;
+      const idIA = `a${Date.now()}-b`;
+      setMensajesMacro((m) => [...m, { id: idUsuario, role: "usuario", texto: t }, { id: idIA, role: "asistente", texto: "" }]);
+
+      const control = new AbortController();
+      abortRef.current = control;
+
+      /**
+       * El marco viaja SIEMPRE que exista: es la fuente de verdad del nivel,
+       * igual que la ficha lo es para el microcurrículo.
+       */
+      const marcoEnviar = marcoRef.current;
+
+      const historia: { role: string; content: string }[] = [];
+      if (crudoMacroRef.current) historia.push({ role: "assistant", content: crudoMacroRef.current });
+      for (const m of mensajesMacro.slice(-8)) {
+        historia.push({ role: m.role === "usuario" ? "user" : "assistant", content: m.texto });
+      }
+
+      let bruto = "";
+      let meta: { fin?: string | null; tokens?: number | null; vacio?: boolean; error?: string | null } = {};
+      let respuestaLlego = false;
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: control.signal,
+          body: JSON.stringify({ mensaje: t, modulo: "macro", marco: marcoEnviar, historia })
+        });
+        respuestaLlego = true;
+
+        const tipo = res.headers.get("content-type") ?? "";
+        if (!res.ok || !tipo.includes("text/event-stream")) {
+          if (res.status === 404) {
+            throw new Error(
+              `El servidor respondió 404 en ${res.url || "/api/chat"}. ` +
+                "La petición no llegó al servidor de la app: comprueba que `npm run dev` esté corriendo en el puerto de esta pestaña y recarga con Ctrl+Shift+R."
+            );
+          }
+          let motivo = `El asistente respondió ${res.status}.`;
+          try {
+            const j = (await res.json()) as unknown;
+            const detalle = textoLegible(j);
+            if (detalle) motivo = detalle;
+          } catch {
+            /* respuesta sin JSON: nos quedamos con el estado */
+          }
+          throw new Error(motivo);
+        }
+
+        const lector = res.body!.getReader();
+        const decodificador = new TextDecoder();
+        let buffer = "";
+        let cerradoPorServidor = false;
+
+        for (;;) {
+          const { done, value } = await lector.read();
+          if (done) break;
+          buffer += decodificador.decode(value, { stream: true });
+
+          let corte: number;
+          while ((corte = buffer.indexOf("\n\n")) !== -1) {
+            const evento = buffer.slice(0, corte);
+            buffer = buffer.slice(corte + 2);
+
+            for (const linea of evento.split("\n")) {
+              if (!linea.startsWith("data:")) continue;
+              const carga = linea.slice(5).trim();
+              if (!carga || carga === "[DONE]") continue;
+              try {
+                const trozo = JSON.parse(carga) as { t?: string; meta?: typeof meta };
+                if (trozo.t) bruto += trozo.t;
+                if (trozo.meta) {
+                  meta = trozo.meta;
+                  if (trozo.meta.fin) cerradoPorServidor = true;
+                }
+              } catch {
+                /* un trozo ilegible no invalida lo ya recibido */
+              }
+            }
+
+            const parcial = extraerMensajeParcial(bruto);
+            if (parcial) {
+              setMensajesMacro((m) => m.map((x) => (x.id === idIA ? { ...x, texto: parcial } : x)));
+            }
+          }
+        }
+
+        if (!cerradoPorServidor) {
+          throw new Error(
+            "La conexión se cortó antes de que el asistente terminara de responder. " +
+              "Suele pasar si el servidor se reinició mientras se generaba. Reintenta."
+          );
+        }
+
+        if (!bruto.trim() && !meta.error) {
+          if (!opciones?.reintento) {
+            reintentarVacio.current = true;
+            return;
+          }
+          throw new Error(
+            "El asistente devolvió un turno vacío dos veces seguidas. Vuelve a intentarlo: si se repite, reformula la petición o continúa desde la ficha."
+          );
+        }
+
+        const resultado = parsearRespuestaMacro(bruto, marcoRef.current, meta);
+        if (!resultado.ok) {
+          const causaReal = meta.error ? ` El proveedor reportó: ${meta.error}` : "";
+          const motivo = resultado.motivo + causaReal;
+          ultimoErrorRef.current = { motivo, fin: meta.fin ?? null, bruto };
+          throw new Error(motivo);
+        }
+        ultimoErrorRef.current = null;
+
+        setMensajesMacro((m) => m.map((x) => (x.id === idIA ? { ...x, texto: resultado.mensaje } : x)));
+        setSugerenciasMacro(resultado.sugerencias);
+        setIntencionMacro(resultado.intencion);
+        setSeccionActivaMacro(resultado.seccionActiva);
+        setCrudoMacro(bruto);
+        crudoMacroRef.current = bruto;
+
+        // SOLO con borrador se toca el documento. Un turno conversacional no
+        // puede borrar lo que el docente ya tenía.
+        if (resultado.borrador) {
+          const fusionado = fusionarMarco(marcoRef.current, resultado.marco);
+          const problemas = validarMarco(fusionado);
+          const primero = marcoRef.current === null;
+
+          setMarco(fusionado);
+          // Las fuentes que propone el modelo NO se agregan solas: solo el
+          // docente registra fuentes, en el editor.
+          if (primero) {
+            setPildoraBorrador(true);
+            setChatVisible(true);
+          }
+          if (problemas.length) mostrarAviso(problemas.join(" "));
+        }
+      } catch (e) {
+        const abortado = e instanceof DOMException && e.name === "AbortError";
+        const falloDeRed = !abortado && !respuestaLlego;
+        const motivo = abortado
+          ? "Detuviste la respuesta. El marco quedó como estaba."
+          : falloDeRed
+            ? "No se pudo contactar al servidor de la app. Comprueba que `npm run dev` siga corriendo y recarga la página."
+            : e instanceof Error
+              ? e.message
+              : "Ocurrió un error inesperado.";
+
+        setMensajesMacro((m) => m.map((x) => (x.id === idIA ? { ...x, texto: x.texto || motivo, incompleto: true } : x)));
+        if (!abortado) setError(motivo);
+      } finally {
+        setEnviando(false);
+        abortRef.current = null;
+
+        if (reintentarVacio.current) {
+          reintentarVacio.current = false;
+          setMensajesMacro((m) => m.filter((x) => x.id !== idIA));
+          window.setTimeout(() => void enviarMacro(t, { reintento: true }), 0);
+          return;
+        }
+      }
+    },
+    [enviando, mensajesMacro, mostrarAviso, hidratado]
+  );
+
   const reintentar = useCallback(() => {
     const base = ultimaPeticion.current;
     if (!base) return;
@@ -659,8 +1123,9 @@ export default function Page() {
       ? `${base}\n\n[El intento anterior falló: ${falla.motivo} No repitas la misma respuesta completa; ` +
         `devuelve algo más acotado y bien formado.]`
       : base;
-    void enviar(conContexto);
-  }, [enviar]);
+    if (moduloActivoRef.current === "macro") void enviarMacro(conContexto);
+    else void enviar(conContexto);
+  }, [enviar, enviarMacro]);
 
   const sinClave = salud !== null && salud.conexion === "sin_clave";
   const problemaClave =
@@ -670,7 +1135,11 @@ export default function Page() {
     salud.conexion !== "proveedor";
 
   const hayAlgoQueBorrar =
-    mensajes.length > 0 || micro !== null || (persistenciaBloqueada && !scopeV3NoSoportado);
+    mensajes.length > 0 ||
+    micro !== null ||
+    mensajesMacro.length > 0 ||
+    marco !== null ||
+    (persistenciaBloqueada && !scopeV3NoSoportado);
 
   const etiquetaSalud = (() => {
     if (salud === null) return "Comprobando…";
@@ -689,6 +1158,13 @@ export default function Page() {
         return "Asistente conectado";
     }
   })();
+
+  /* -------- vista por módulo: el chat y la ficha siguen al nivel activo -------- */
+  const esMacro = moduloActivo === "macro";
+  const chatMensajes = esMacro ? mensajesMacro : mensajes;
+  const chatSugerencias = esMacro ? sugerenciasMacro : sugerencias;
+  const chatSemillas = esMacro ? SUGERENCIAS_APERTURA_MACRO : SUGERENCIAS_APERTURA;
+  const chatEnviar = (t: string) => void (esMacro ? enviarMacro(t) : enviar(t));
 
   /* ------------------------------------------------------------------ */
   /* Modo conversación: solo el chat. Sin ficha, sin rieles, sin tabs.   */
@@ -720,6 +1196,11 @@ export default function Page() {
             <span className="hidden sm:inline">Conversación nueva</span>
             <span className="sr-only sm:hidden">Conversación nueva</span>
           </button>
+          <SelectorModulo
+            activo={moduloActivo}
+            onCambiar={cambiarModulo}
+            deshabilitado={enviando || scopeV3NoSoportado}
+          />
           <span className="ml-auto flex items-center gap-2 text-[11px] text-black/50">
             <span
               className={`h-2 w-2 rounded-full ${sinClave ? "bg-terracotta" : salud === null ? "bg-mist" : "bg-rainfall"}`}
@@ -743,13 +1224,13 @@ export default function Page() {
             </div>
           )}
           <Chat
-            mensajes={mensajes}
+            mensajes={chatMensajes}
             enviando={enviando}
             error={error}
-            onEnviar={(t) => void enviar(t)}
+            onEnviar={chatEnviar}
             onDetener={() => abortRef.current?.abort()}
             onReintentar={reintentar}
-            sugerencias={mensajes.length === 0 ? SUGERENCIAS_APERTURA : sugerencias}
+            sugerencias={chatMensajes.length === 0 ? chatSemillas : chatSugerencias}
             saludo={SALUDO_APERTURA}
             variante="limpio"
             deshabilitado={!hidratado || sinClave || scopeV3NoSoportado}
@@ -795,7 +1276,7 @@ export default function Page() {
               title={
                 scopeV3NoSoportado
                   ? "El proyecto contiene un módulo que esta página no puede descartar"
-                  : "Descartar este microcurrículo y empezar de cero"
+                  : "Descartar este proyecto y empezar de cero"
               }
               className="ml-auto inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2 py-1 text-[11px] font-medium text-black/60 hover:border-black/25 hover:text-black disabled:opacity-40"
             >
@@ -814,13 +1295,13 @@ export default function Page() {
           </div>
 
           <Chat
-            mensajes={mensajes}
+            mensajes={chatMensajes}
             enviando={enviando}
             error={error}
-            onEnviar={(t) => void enviar(t)}
+            onEnviar={chatEnviar}
             onDetener={() => abortRef.current?.abort()}
             onReintentar={reintentar}
-            sugerencias={sugerencias}
+            sugerencias={chatSugerencias}
             saludo={SALUDO_APERTURA}
             variante="lateral"
             deshabilitado={!hidratado || sinClave || scopeV3NoSoportado}
@@ -869,24 +1350,34 @@ export default function Page() {
             <span className="hidden truncate sm:inline">{etiquetaSalud}</span>
           </span>
 
+          <SelectorModulo
+            activo={moduloActivo}
+            onCambiar={cambiarModulo}
+            deshabilitado={enviando || scopeV3NoSoportado}
+          />
+
           <div className="ml-auto flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={copiar}
-              aria-label="Copiar el microcurrículo como Markdown, para pegar"
-              title="Copiar como Markdown para pegar"
-              className="rounded-full border border-black/10 bg-white p-1.5 hover:border-black/25"
-            >
-              <Icono nombre="copiar" />
-            </button>
-            <button
-              type="button"
-              onClick={descargarPdf}
-              title="Descargar como PDF de texto plano"
-              className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
-            >
-              <Icono nombre="descargar" className="h-3.5 w-3.5" /> Exportar PDF
-            </button>
+            {!esMacro && (
+              <button
+                type="button"
+                onClick={copiar}
+                aria-label="Copiar el microcurrículo como Markdown, para pegar"
+                title="Copiar como Markdown para pegar"
+                className="rounded-full border border-black/10 bg-white p-1.5 hover:border-black/25"
+              >
+                <Icono nombre="copiar" />
+              </button>
+            )}
+            {!esMacro && (
+              <button
+                type="button"
+                onClick={descargarPdf}
+                title="Descargar como PDF de texto plano"
+                className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
+              >
+                <Icono nombre="descargar" className="h-3.5 w-3.5" /> Exportar PDF
+              </button>
+            )}
           </div>
         </header>
 
@@ -894,7 +1385,9 @@ export default function Page() {
           <div className="flex shrink-0 items-center gap-2.5 rounded-[18px] border border-white/60 bg-sprout/50 px-3 py-2 text-[12px] text-black/75">
             <Icono nombre="chispa" className="h-4 w-4 shrink-0 text-redwood" />
             <p className="min-w-0 flex-1">
-              Aquí va tomando forma tu microcurrículo. Sigue conversando: cada dato cae en su sección.
+              {esMacro
+                ? "Aquí va tomando forma tu marco. Sigue conversando: cada dato cae en su sección."
+                : "Aquí va tomando forma tu microcurrículo. Sigue conversando: cada dato cae en su sección."}
             </p>
             <button
               type="button"
@@ -908,16 +1401,28 @@ export default function Page() {
         )}
 
         <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
-          {micro && (
-            <MicrocurriculoFicha
-              micro={micro}
-              activa={seccionActiva}
-              onChange={editarMicro}
-            />
+          {esMacro ? (
+            marco && (
+              <MarcoFicha
+                marco={marco}
+                fuentes={fuentes}
+                activa={seccionActivaMacro}
+                onChange={editarMarco}
+              />
+            )
+          ) : (
+            micro && (
+              <MicrocurriculoFicha
+                micro={micro}
+                activa={seccionActiva}
+                onChange={editarMicro}
+              />
+            )
           )}
           <p className="px-1 pb-2 pt-3 text-[11px] leading-relaxed text-black/40">
-            Tu microcurrículo se guarda en este navegador. Lo que genera el asistente es una propuesta:
-            revísalo, confirma la bibliografía y ajústalo antes de presentarlo.
+            {esMacro
+              ? "Tu marco se guarda en este navegador. Lo que genera el asistente es una propuesta: revísalo, confirma cada afirmación y ajústalo antes de presentarlo."
+              : "Tu microcurrículo se guarda en este navegador. Lo que genera el asistente es una propuesta: revísalo, confirma la bibliografía y ajústalo antes de presentarlo."}
           </p>
         </div>
       </div>
@@ -950,6 +1455,48 @@ function Ondas() {
         opacity="0.45"
       />
     </svg>
+  );
+}
+
+/**
+ * Selector compacto de nivel curricular. Vive en el encabezado y no abre un
+ * tercer riel: solo cambia qué documento conduce la conversación y la ficha.
+ */
+function SelectorModulo({
+  activo,
+  onCambiar,
+  deshabilitado
+}: {
+  activo: "micro" | "macro";
+  onCambiar: (m: "micro" | "macro") => void;
+  deshabilitado?: boolean;
+}) {
+  const base = "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors";
+  return (
+    <div
+      role="group"
+      aria-label="Nivel curricular"
+      className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-black/10 bg-white p-0.5"
+    >
+      {(
+        [
+          { id: "micro", etiqueta: "Asignatura", titulo: "Microcurrículo de asignatura" },
+          { id: "macro", etiqueta: "Marco", titulo: "Marco educativo institucional" }
+        ] as const
+      ).map((m) => (
+        <button
+          key={m.id}
+          type="button"
+          onClick={() => onCambiar(m.id)}
+          disabled={deshabilitado}
+          aria-pressed={activo === m.id}
+          title={m.titulo}
+          className={`${base} ${activo === m.id ? "bg-sow text-seedling" : "text-black/55 hover:text-black"} disabled:opacity-60`}
+        >
+          {m.etiqueta}
+        </button>
+      ))}
+    </div>
   );
 }
 

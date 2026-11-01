@@ -114,6 +114,16 @@ Cuando "generar" sea true, "borrador" lleva el marco completo con esta forma exa
 ${ESQUEMA_BORRADOR_MACRO}`;
 
 /**
+ * Sugerencias semilla para entrar al módulo Marco. No prometen documentos que
+ * la app no pueda abrir: el programa (Meso) todavía no existe.
+ */
+export const SUGERENCIAS_APERTURA_MACRO = [
+  "Quiero redactar el marco institucional",
+  "Ya tengo un documento y quiero revisarlo",
+  "No sé por dónde empezar con el marco"
+];
+
+/**
  * Turno del docente para el Marco. `marco` es el documento SOLO si ya existe;
  * en la fase conversacional viaja null y el modelo no ve ningún documento.
  */
