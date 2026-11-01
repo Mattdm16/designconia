@@ -7,7 +7,10 @@ import {
   recortarHistoria,
   turnoDocente
 } from "@/lib/prompt";
+import { SYSTEM_PROMPT_MACRO, turnoDocenteMacro } from "@/lib/promptMacro";
+import { marcoVacio, normalizarMarco } from "@/lib/macro";
 import { normalizarClave, textoLegible } from "@/lib/errores";
+import type { MarcoEducativoInstitucional } from "@/lib/proyecto";
 import { microcurriculoVacio, normalizarMicrocurriculo, type Microcurriculo } from "@/lib/schema";
 import { registrarTraza, type Traza } from "@/lib/traza";
 
@@ -23,6 +26,10 @@ type Cuerpo = {
   mensaje?: unknown;
   microcurriculo?: unknown;
   historia?: unknown;
+  /** Nivel al que va dirigido el turno. Sin él, el comportamiento Micro queda intacto. */
+  modulo?: unknown;
+  /** Documento del nivel Macro, solo cuando `modulo` es "macro". */
+  marco?: unknown;
 };
 
 function errorJson(status: number, code: string, mensaje: string) {
@@ -89,6 +96,17 @@ function comoBorrador(v: unknown): Microcurriculo | null {
   return microcurriculoVacio(normalizado) ? null : normalizado;
 }
 
+/**
+ * Interpreta el `marco` entrante como documento del nivel Macro.
+ *
+ * Igual que el borrador Micro, un marco vacío equivale a no tener documento:
+ * la conversación va sin ficha y el modelo no puede inventarse que la tiene.
+ */
+function comoMarco(v: unknown): MarcoEducativoInstitucional | null {
+  const normalizado = normalizarMarco(v);
+  return marcoVacio(normalizado) ? null : normalizado;
+}
+
 function leerHistoria(v: unknown): Turno[] {
   if (!Array.isArray(v)) return [];
   const salida: Turno[] = [];
@@ -140,14 +158,21 @@ export async function POST(req: NextRequest) {
     return errorJson(400, "mensaje_largo", "La petición es demasiado larga. Divídela en partes.");
   }
 
-  // El borrador es OPCIONAL: si no existe todavía, la conversación va sin
-  // ningún microcurrículo y el modelo no puede inventarse que lo tiene.
-  const borrador = comoBorrador(cuerpo.microcurriculo);
+  // Rama Macro: el cliente indica el nivel y manda solo ese documento. Sin
+  // `modulo: "macro"`, el comportamiento Micro queda intacto.
+  const esMacro = cuerpo.modulo === "macro";
 
-  const turnoUsuario = turnoDocente(mensajeUsuario, borrador);
+  // El documento es OPCIONAL: si no existe todavía, la conversación va sin
+  // ficha y el modelo no puede inventarse que la tiene.
+  const borrador = esMacro ? null : comoBorrador(cuerpo.microcurriculo);
+  const marcoBase = esMacro ? comoMarco(cuerpo.marco) : null;
+
+  const turnoUsuario = esMacro
+    ? turnoDocenteMacro(mensajeUsuario, marcoBase)
+    : turnoDocente(mensajeUsuario, borrador);
 
   const mensajes = [
-    { role: "system" as const, content: SYSTEM_PROMPT },
+    { role: "system" as const, content: esMacro ? SYSTEM_PROMPT_MACRO : SYSTEM_PROMPT },
     ...leerHistoria(cuerpo.historia),
     { role: "user" as const, content: turnoUsuario }
   ];
@@ -220,7 +245,7 @@ export async function POST(req: NextRequest) {
     upstream: respuesta.status,
     mensajeChars: mensajeUsuario.length,
     historiaChars: mensajes.reduce((a, m) => a + m.content.length, 0),
-    borradorEnviado: borrador !== null,
+    borradorEnviado: esMacro ? marcoBase !== null : borrador !== null,
     eventos: 0,
     contenido: 0,
     fin: null,
