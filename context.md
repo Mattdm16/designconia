@@ -1,299 +1,179 @@
-# context.md — Traspaso para un agente con visión
+# DesignConia — contexto y traspaso actualizado
 
-Este archivo existe para que **otro agente, que sí puede ver imágenes, audite la interfaz** de este proyecto. Fue escrito por quien construyó la app sin poder verla nunca: este entorno no tiene navegador y bloquea la descarga de binarios. Todo lo que sigue sobre el *código* está verificado; todo lo que sigue sobre lo *visual* es intención medida en CSS, no resultado observado.
+**Actualizado:** 31 de octubre de 2026. Este documento refleja el estado comprobado de la rama de desarrollo. Si contradice una implementación posterior, manda el código y actualiza este handoff.
 
-> **Lo primero que debes saber:** no hay ninguna captura guardada en el repo. Si te piden auditar, tienes que generar las capturas tú.
+> **Resumen ejecutivo:** ya existe una base local V3 con los tres niveles de datos, migración segura y una primera versión funcional de los módulos Macro, Meso y Micro. El siguiente trabajo ya no es crear esos niveles desde cero: es completar la navegación entre varios documentos, la trazabilidad pedagógica de extremo a extremo, las exportaciones y la revisión visual. La interfaz nueva todavía no se ha inspeccionado en navegador.
 
----
+## 1. Producto y requisitos acordados
 
-## 1. Qué es esto
+**DesignConia** es una aplicación web asistida por IA para diseño curricular de **educación superior**. No usa modelos escolares ni marcos de educación básica/media.
 
-**DesignConia** — aplicación web donde un docente universitario construye **el microcurrículo completo de una asignatura** conversando con una IA. La ficha tiene ocho secciones:
-
-1. **Justificación** — propósito de la asignatura y su lugar en el perfil de egreso.
-2. **Objetivos o competencias** — generales y específicas.
-3. **Contenido temático** — unidades con temas, subtemas y resultados de aprendizaje (obligatorios, con verbo medible).
-4. **Secuencia didáctica** — las horas clase por clase, en **dos niveles**: primero la lista de unidades y, al abrir una, solo las sesiones de esa unidad con duración, tipo y las tres fases (Inicio, Desarrollo, Cierre) con acciones del docente y del estudiante.
-5. **Metodología** — estrategias pedagógicas con cómo se aplican.
-6. **Sistema de evaluación** — cortes con porcentajes que deben sumar 100, con instrumento y herramientas por entregable.
-7. **Datos de identificación** — asignatura, código, programa, créditos, horas (HT/HP/HTI), prerrequisitos, semestre.
-8. **Bibliografía y recursos** — obligatorias, complementarias y herramientas, con año, edición e ISBN.
-
-- **Usuario:** docente o coordinador académico de **educación superior**. No es educación escolar.
-- **Idioma:** español rioplatense neutro («¿Qué querés hacer hoy?», «pedí cambios»).
-- **Modelo de datos:** `Microcurriculo` en [schema.ts](lib/schema.ts).
-- **Fuera de alcance:** autenticación, roles, persistencia en servidor, listas de microcurrículos, importación de PDF/syllabus, PDF con estilos.
-
-### Estado real
-
-| Aspecto | Estado |
-|---|---|
-| Compila, arranca, sirve la app | ✅ verificado |
-| IA real (DeepSeek) | ✅ clave válida (`/api/salud` → `"conexion":"ok"`) |
-| Generación real de microcurrículos | ✅ verificada por HTTP contra la API real (8/8 secciones) |
-| Pruebas unitarias | ✅ 95/95 |
-| Detector de calidad visual | ✅ 0 hallazgos |
-| **PDF exportado** | ✅ **verificado visualmente** con LibreOffice (5 páginas, sin fuentes faltantes) |
-| **Interfaz de la app** | ❌ **nunca vista. Es lo que necesitas auditar.** |
-
-Muestras reales generadas por la app (no inventadas), todas de la misma corrida:
-[microcurriculo-ejemplo.pdf](microcurriculo-ejemplo.pdf) · [.txt](microcurriculo-ejemplo.txt) · [.md](microcurriculo-ejemplo.md) · [.json](microcurriculo-ejemplo.json) — 8/8 secciones, 3 unidades con RA, 3 sesiones, cortes 30/30/40, bibliografía marcada `[SIN CONFIRMAR]`.
-
-El `.json` es el microcurrículo normalizado: sirve para regenerar el PDF y el texto **sin volver a llamar a la IA**.
-
----
-
-## 2. Cómo levantarla
-
-> **Ahora mismo el servidor está apagado.** Se detuvo al cerrar la sesión de trabajo; no hay nada escuchando en 3000. Arrancarlo es el comando de abajo.
-
-```bash
-cd D:\Devtools\Proyectos\DeepseekHS
-npm run dev          # http://localhost:3000
-```
-
-**Nunca dos servidores de desarrollo.** Next levanta el segundo en 3001 sobre el mismo `.next` y ambos se pisan los artefactos: produce 404 de assets, chunks corruptos y respuestas cortadas. Es la causa de la mitad de los bugs "misteriosos" de este proyecto.
-
-El `.env.local` ya tiene una API key válida. Si `/api/salud` dijera `clave_invalida`, hay que reponer `DEEPSEEK_API_KEY` y **reiniciar** el servidor.
-
-```bash
-npm test             # 95 pruebas, runner propio sin dependencias
-npx tsc --noEmit
-npx next build       # NO ejecutar con el dev server vivo
-```
-
-### Cómo llegar a cada estado
-
-La app arranca **siempre** en el chat vacío. La ficha solo nace de una conversación real con la IA (requiere la clave), porque no hay ruta ni botón que inyecte datos de ejemplo. Para capturar el estado poblado: conversar de verdad, o falsificar `localStorage` bajo `designconia.micro.v2` (la forma está en `EstadoGuardado`, en [schema.ts](lib/schema.ts)). Un guardado `v1` se migra solo.
-
----
-
-## 3. Modelo de dos estados (esto define la composición)
-
-Cuál se monta depende de si existe microcurrículo (`micro !== null`).
-
-### Estado A — «Conversación» (inicial)
-
-**Solo el chat.** Sin ficha, sin rieles.
-
-- Fondo `#FAF5E9` a pantalla completa, con dos ondas SVG (`#B6B7A5` 55 %, `#7E7B62` 45 %) en el tercio inferior.
-- Cabecera sin tarjeta: círculo marrón con destello + «DesignConia» en serif; botón **«Conversación nueva»** (deshabilitado si no hay nada que borrar); indicador de estado del asistente a la derecha.
-- Hilo centrado a **640 px**: burbuja marrón con el saludo y **tres chips** de sugerencia.
-- Compositor anclado al fondo, misma medida.
-
-**Copy exacto:** `Hola. Soy tu asistente de diseño curricular para educación superior. ¿Qué querés hacer hoy?`
-
-**Regla:** el saludo **no pide datos**. Es local, no lo genera la IA, para que el modelo no pueda adelantarse.
-
-### Estado B — «Borrador»
-
-- **Chat a la izquierda, 480 px** (solo ≥1280 px; debajo se apila arriba con `max-height: 38vh`).
-- **Ficha fluida a la derecha.** **No hay tercer riel.**
-- Encabezado de la ficha: estado del asistente, copiar (Markdown, para pegar), **«Exportar PDF»** (texto plano, sin estilos); y «Mostrar chat» cuando está plegado.
-- Píldora verde (`#E3EB90` al 50 %) al nacer el borrador: «Aquí va tomando forma tu microcurrículo…».
-
-### La ficha (pieza central)
-
-1. **Franja de identificación**: asignatura en serif 16 px, folio mono a la derecha, línea `Programa · Semestre · Créditos · Horas`.
-2. **Ocho marcas de progreso** (una por sección, `bg-rainfall` si está completa, `bg-black/10` si no) y el contador `n/8` en mono tabular.
-3. **Píldoras de aviso** cuando hay problemas globales: unidades sin RA, unidades sin sesiones, actividades sin instrumento, «Evaluación suma 47 %» (Terracotta), «2 referencias por confirmar» (Mora).
-4. **Ocho acordeones** en el orden del documento (identificación, justificación, objetivos, contenido, **secuencia didáctica**, metodología, evaluación, bibliografía). Cada uno: chevron, círculo con check si está cerrado, título en serif, resumen de una línea a su derecha. La sección que el asistente trabaja queda abierta y con anillo Pebble.
-
-Dentro de Contenido: unidades en tarjetas `arena/40` con el número en círculo Sow; los temas, blancos y anidados.
-
-**Secuencia en dos niveles:** abre en una lista de tarjetas —una por unidad, con el número, el título y `N sesiones · X h`, o la píldora «sin sesiones»—; al tocar una, la sección se transforma en las sesiones de **esa** unidad, con «Volver a unidades» en la cabecera. El estado de navegación vive en `useState` y el acordeón desmonta su contenido al cerrarse, así que **reabrir la sección siempre devuelve a la lista de unidades**. Las sesiones huérfanas (de una unidad borrada) aparecen en un grupo residual «Sesiones sin unidad».
-
-En Evaluación: instrumento, «Mide» y chips de herramientas por actividad, y una banda Terracotta con «Ajustar a 100» si la suma no da 100. En Bibliografía: cada referencia con píldora **Mora «Sugerencia»** o **Rainfall «Confirmada»**, campos de año/edición/ISBN, y cada recurso con la insignia «usada en N» o «sin uso».
-
----
-
-## 4. Sistema visual — tokens exactos
-
-Definidos en [tailwind.config.ts](tailwind.config.ts) y documentados en [DESIGN.md](DESIGN.md).
-
-| Token | Hex | Uso |
+| Nivel interno | Nombre visible | Alcance |
 |---|---|---|
-| `seedling` | `#FAF5E9` | fondo de pantalla |
-| `crema` | `#FFFDF8` | tarjetas, burbujas del docente, ficha |
-| `sow` | `#392525` | burbujas de la IA, círculo del número de unidad |
-| `terracotta` | `#B25D3E` | **solo acción**: enviar, exportar, ajustar a 100 |
-| `redwood` | `#6B3226` | hover de terracotta |
-| `sprout` | `#E3EB90` | banda «tomando forma», selección de texto |
-| `mora` | `#6B4A6E` | **solo lo no verificado**: referencias «Sugerencia» |
-| `rainfall` | `#728B83` | **solo lo cumplido**: sección completa, «Confirmada», 100 % |
-| `arena` | `#EFE7D6` | tarjetas de unidad |
-| `mist` / `pebble` | `#B6B7A5` / `#7E7B62` | ondas, anillo de foco |
+| **Macro** | Marco educativo institucional | Modelo educativo, principios, orientaciones y fuentes de la institución. No representa un currículo nacional. |
+| **Meso** | Programa académico | Identidad del programa, perfiles de ingreso/egreso, resultados del programa y vínculo a un marco institucional. |
+| **Micro** | Asignatura | Se conserva el microcurrículo existente de ocho secciones, con resultados por unidad, sesiones, metodología, evaluación, bibliografía y recursos. |
 
-**Tipografía:** display `"Palatino Linotype", "Book Antiqua", Cambria, Georgia, serif` (serif caligráfico instalado, **no** webfont); cuerpo system-ui; mono solo para datos (folio, `HT/HP/HTI`, porcentajes, `n/8`, `S1`) siempre `tabular-nums`. Rampa documentada: 16, 15, 14, 13, 12, 11, 10 px.
+### Decisiones confirmadas por el usuario
 
-**Reglas de marca:** solo terracotta actúa; toda sombra es marrón cálida difusa (`0 18px 45px -22px rgba(107,50,38,0.45)`); el fondo duna nunca lleva contenido directo; radios 4/8/12/14/18/999.
+- Un proyecto representa **un contexto institucional** y puede contener varios marcos/versiones y programas.
+- En la interfaz de primera entrega, cada programa selecciona como máximo un **marco principal activo**; los vínculos anteriores se conservan como historial.
+- Una asignatura puede permanecer independiente o asociarse a **un programa**. Cursos compartidos entre programas se dejan para una fase posterior.
+- Se mantiene el arranque conversacional: el saludo pregunta qué quiere hacer la persona antes de pedir datos. Al existir un documento, se usa un selector compacto para cambiar de nivel; no se añade un tercer panel.
+- La IA puede proponer principios/orientaciones como `sugerencia_IA`, pero no presentarlos como política oficial. El docente confirma o edita.
+- Las fuentes curriculares son distintas de la bibliografía del Micro. No se inventan fuentes, emisores, vigencias ni datos oficiales.
+- En esta primera versión las fuentes se capturan manualmente; no hay importación ni extracción automática de PDF/syllabus.
+- Sin autenticación, roles, persistencia de servidor, colaboración ni sincronización entre dispositivos.
 
----
+## 2. Requisitos: estado real y faltantes
 
-## 5. Checklist de auditoría visual
+| Requisito | Estado actual | Pendiente / límite actual |
+|---|---|---|
+| Crear y editar un marco institucional con IA | **Implementado**: editor, prompt, parseo, fusión y ruta API Macro. La IA puede proponer principios/orientaciones como sugerencias. | No se han recorrido visualmente sus estados en navegador; falta poder asociar una fuente a cada afirmación desde la UI. |
+| Crear y editar un programa académico con IA | **Implementado**: editor, prompt, parseo, fusión y ruta API Meso. Incluye perfiles, resultados y vínculo principal a un Marco. | No hay lista/selector ni acción de «nuevo programa» para elegir entre varios programas. |
+| Conservar el Micro y migrar el guardado previo | **Implementado**: V1/V2→V3, respaldo, staging y protección frente a datos corruptos. | El Micro aún no tiene IDs estables propios para sus resultados/unidades/evidencias. |
+| Vincular Meso con Macro | **Implementado**: un marco principal activo por programa; al cambiarlo, el vínculo anterior se conserva como inactivo. | Hay tipos de alineación Macro→resultado Meso, pero no una matriz editable de alineación en la interfaz. |
+| Vincular Micro con Meso | **Implementado**: desde el editor Meso se vincula/desvincula una asignatura independiente; la ficha nunca se borra al desvincular. | El vínculo es a nivel de asignatura, no entre resultados específicos. Una asignatura solo admite un programa en este MVP. |
+| Elegir Macro/Meso/Micro desde un documento activo | **Implementado**: selector compacto Asignatura/Programa/Marco en la vista de documento, sin tercer riel. | En el chat inicial no hay selección explícita del nivel: el estado/sugerencias de apertura todavía son Micro-first. Se puede llegar a Macro/Meso después de crear un documento Micro, pero no iniciar directamente esos niveles en un proyecto vacío. |
+| Manejar varios Marcos, Programas y Asignaturas | **El modelo V3 admite colecciones.** | Falta una lista/selector y acciones claras para crear varios documentos en el mismo proyecto. La página muestra un documento activo por nivel y no permite cambiar entre varios; «Conversación nueva» descarta el proyecto completo. |
+| Trazabilidad pedagógica completa | **Parcial**: hay tipos de alineación Macro principio→resultado de programa Meso y vínculos Programa–Marco / Asignatura–Programa. | La alineación Macro→Meso no se edita en UI; tampoco se enlaza resultado Meso→RA Micro→actividad/evidencia. `Unidad.resultadosAprendizaje` y `ActividadEvaluacion.mide` todavía son texto, no IDs estables. |
+| Citas de fuentes curriculares | **Parcial**: V3 separa fuentes y citas; el editor Macro registra fuentes y muestra citas existentes. | Falta asociar/editar una cita (fuente + localizador/página/sección) desde cada afirmación en la interfaz. |
+| Exportación | **Implementada para Micro**: PDF de texto plano y copia Markdown. | No hay exportación de Macro/Meso ni expediente curricular conjunto. |
+| Revisión visual | El detector mecánico marcó 0 hallazgos en los objetivos examinados. | **No se hizo inspección visual en navegador ni capturas** de la interfaz Macro/Meso. |
 
-Lo que nadie ha visto, por riesgo:
+### Próximo orden recomendado
 
-### A. Estado A
-1. **¿Se lee como un chat?** Cualquier rastro de documento es un fallo del objetivo.
-2. **640 px de medida:** ¿línea cómoda (65–75 caracteres) o franja estrecha?
-3. **Vacío vertical:** ¿el compositor flota demasiado alto con solo saludo + 3 chips?
-4. **«Conversación nueva»** deshabilitado junto al logo: ¿se ve apagado y no roto?
+1. Habilitar la elección Macro/Meso/Micro desde la conversación inicial sin dejar de empezar como chat.
+2. Añadir lista, selección y creación de varios documentos por nivel; no usar «Conversación nueva» para perder el proyecto al querer cambiar de documento.
+3. Completar citas curriculares y trazabilidad Macro→Meso→Micro→evaluación, empezando por IDs estables en RA/unidades/actividades del Micro.
+4. Añadir exportación de Macro y Meso, y decidir si se necesita un expediente conjunto.
+5. Probar flujos completos y revisar visualmente escritorio/móvil.
 
-### B. Estado B — aquí está el riesgo real
-5. **Proporción 480 px + ficha.** ¿La ficha conserva aire o el chat la estrangula?
-6. **Chat apilado arriba** entre 1024 y 1280 px (`38vh`): ¿se siente decisión o accidente?
-7. **Las ocho marcas de progreso:** ¿se leen como secciones o como una barra genérica?
-8. **Acordeones cerrados:** ¿el resumen («3 unidades · 6 temas», «3 sesiones · 4,5 h») se entiende sin abrir?
-9. **Sección en foco con anillo Pebble:** ¿se distingue de la sección simplemente abierta?
-10. **Contenido temático:** tres niveles de anidación (unidad → tema → subtema). ¿Sigue legible o se vuelve una madriguera?
-11. **Secuencia didáctica, nivel 1 (unidades):** ¿se entiende que cada tarjeta es una entrada y no un resumen? ¿La píldora «sin sesiones» se lee como pendiente y no como error? ¿El `n/total` de la cabecera se interpreta como unidades con sesiones?
-12. **Secuencia didáctica, nivel 2 (sesiones):** ¿el «Volver a unidades» se ve como navegación y no como otra acción? ¿Al entrar a una unidad queda claro que solo ves sus sesiones? Cada sesión tiene tres columnas de fase con filas de docente/estudiante: ¿se vuelve ilegible? ¿Sobra anidación?
-13. **Evaluación desbalanceada:** la banda Terracotta y «Ajustar a 100» — ¿se entiende de un vistazo? ¿Y el aviso de actividad sin instrumento?
-14. **Bibliografía:** píldoras Mora «Sugerencia» vs Rainfall «Confirmada». ¿Se distinguen del acento de acción? ¿La insignia «usada en N» de los recursos se lee como información o como ruido?
+## 3. Datos y contratos
 
-### C. Transversal
-15. **Quiebres:** 375, 768, 1024, 1280, 1920.
-16. **Estados:** vacío, escribiendo (cursor en la burbuja), error con «Reintentar», clave rechazada, aviso efímero abajo al centro.
-16. **Accesibilidad:** foco terracotta visible en todo control; `prefers-reduced-motion` anula animaciones; `aria-expanded` en cada acordeón; en la lista de unidades, cada tarjeta es un `button` con `aria-label` que anuncia cuántas sesiones tiene.
-17. **Superficies del navegador:** selección `#E3EB90`, caret terracotta, scrollbar `#B6B7A5` sobre `#FAF5E9`.
+### Agregado curricular
 
-> **Navegación interna de la Secuencia:** el estado «qué unidad está abierta» vive en `useState` dentro de `SecuenciaSeccion`, y el acordeón desmonta su contenido al cerrarse ([Seccion.tsx](components/ficha/Seccion.tsx)). Por eso **al reabrir la sección siempre se vuelve a la lista de unidades**. Es el comportamiento pedido: no lo «arregles» persistiendo la unidad abierta.
+El modelo está en [proyecto.ts](lib/proyecto.ts). La forma general es:
 
-### D. El PDF (esta sí está verificada)
-El PDF de texto plano **ya se revisó visualmente**: 5 páginas, acentos correctos, indentación preservada, sin fuentes faltantes. Lo que conviene vigilar si se toca el generador: saltos de página que dejen un encabezado huérfano (hay guarda), líneas de más de ~91 caracteres (se envuelven) y referencias con `[SIN CONFIRMAR]`.
-
----
-
-## 6. Arquitectura
-
+```text
+ProyectoCurricular
+├── marcos: MarcoEducativoInstitucional[]
+├── programas: ProgramaAcademico[]
+├── asignaturas: Asignatura[]
+├── fuentesCurriculares: FuenteCurricular[]
+├── vinculosProgramaMarco: VinculoProgramaMarco[]
+└── alineaciones: AlineacionCurricular[]
 ```
+
+- `MarcoEducativoInstitucional`: id, nombre, emisor opcional, versión/vigencia/estado, principios y otras afirmaciones.
+- `ProgramaAcademico`: id, nombre/código, perfiles y resultados del programa.
+- `Asignatura`: id, `programaId: string | null` y el `Microcurriculo` canónico. No se duplica el esquema Micro.
+- `AfirmacionCurricular`: id, texto, origen (`docente`, `documento`, `sugerencia_IA`, `derivado`), estado (`sin_confirmar`, `confirmado_por_docente`, `contrastado_con_fuente`) y citas.
+- `FuenteCurricular` no se mezcla con bibliografía. Una afirmación de origen documental o contrastada exige una cita válida.
+- Una alineación no equivale por sí sola a aprobación institucional.
+
+### Contrato Micro existente
+
+El Micro canónico sigue en [schema.ts](lib/schema.ts). Conserva las ocho secciones y su flujo de generación por hitos. Los resultados por unidad y el campo `mide` de evaluación siguen siendo cadenas; por tanto no afirmar que existe aún una alineación por resultado/evidencia.
+
+### Prompts y API
+
+- [prompt.ts](lib/prompt.ts): contrato y prompt Micro existentes.
+- [promptMacro.ts](lib/promptMacro.ts): prompt Macro. La respuesta usa JSON con `mensaje` primero, `generar` y `borrador` opcional; las fuentes no aportadas quedan fuera.
+- [promptMeso.ts](lib/promptMeso.ts): prompt Meso. Recibe solo marcos disponibles por id para no inventar ni adjuntar un marco inexistente.
+- [route.ts](app/api/chat/route.ts): `modulo: "macro"` usa el prompt Macro y solo recibe el marco activo; `modulo: "meso"` recibe el programa y marcos disponibles; sin módulo explícito, permanece el flujo Micro.
+- El proxy SSE y extracción incremental de `mensaje` siguen comunes a los niveles.
+
+### Persistencia y puentes de estado
+
+- [persistencia.ts](lib/persistencia.ts): estado V3 en `designconia.proyecto.v3`; conserva respaldo, staging y claves de recuperación. Revisa payloads V1/V2 por versión antes de migrar; solo elimina snapshots reconocidos después de verificar el nuevo estado.
+- Claves históricas: `designconia.micro.v2` y `designconia.micro.v1`.
+- [estadoMicro.ts](lib/estadoMicro.ts), [estadoMacro.ts](lib/estadoMacro.ts) y [estadoMeso.ts](lib/estadoMeso.ts): adaptadores puros entre vista y agregado V3; protegen scopes, IDs y documentos/conversaciones hermanos.
+- El vínculo Programa–Marco mantiene un marco principal activo por programa. El vínculo Asignatura–Programa actualiza solo `programaId`; desvincular conserva la asignatura.
+
+## 4. Arquitectura actual
+
+```text
 app/
-  page.tsx                 orquesta todo: estados, modos, envío, localStorage
-  api/chat/route.ts        proxy SSE a DeepSeek; guardas, timeouts, errores
-  api/salud/route.ts       valida la clave con GET /models (cache 30 s)
-  api/diagnostico/route.ts últimas trazas (solo si DESIGNCONIA_DIAGNOSTICO=1)
+  page.tsx                       chat, selector de nivel, estado y guardado V3
+  api/chat/route.ts              proxy SSE y ramas Micro/Macro/Meso
+  api/salud/route.ts             valida conexión y clave
 components/
-  Chat.tsx                 hilo, compositor, chips; variante "limpio" | "lateral"
-  Icono.tsx                iconos SVG a mano, trazo 1.7
-  ficha/Microcurriculo.tsx franja, progreso n/8, orquesta las 8 secciones
-  ficha/Seccion.tsx        acordeón con estado y resumen
-  ficha/Secciones.tsx      los ocho cuerpos editables (incluye secuencia en dos niveles)
-  ficha/Campos.tsx         campo, área, número, lista de textos, botón mini
+  Chat.tsx                       hilo y compositor compartidos
+  ficha/Microcurriculo.tsx       editor de la asignatura existente
+  ficha/Marco.tsx                editor del marco institucional
+  ficha/Meso.tsx                 editor del programa y vínculos
+  ficha/Seccion.tsx              acordeón del Micro
+  ficha/Campos.tsx               controles editables reutilizables
 lib/
-  schema.ts                modelo, normalización, validación, fusión, parseo, migración
-                           + agrupación de la secuencia: sesionesDeUnidad, horasTotales,
-                             unidadesDeSecuencia, unidadesConSesiones
-  prompt.ts                prompt de sistema y contrato JSON
-  exportarTexto.ts         microcurrículo → texto plano
-  exportarPdf.ts           texto plano → PDF mínimo (Helvetica/WinAnsi), sin dependencias
-  markdown.ts              microcurrículo → Markdown (para «Copiar»)
-  errores.ts               textoLegible() y normalizarClave()
-  traza.ts                 memoria de las últimas peticiones
-  schema.test.ts           95 pruebas, runner propio
+  schema.ts                      contrato Micro, normalización y 95 pruebas
+  proyecto.ts                    agregado V3, guardas y migración Micro
+  persistencia.ts                migración/guardado local transaccional
+  estadoMicro.ts                 puente vista Micro ↔ V3
+  macro.ts / promptMacro.ts       lógica pura y prompt Macro
+  estadoMacro.ts                 puente vista Marco ↔ V3
+  meso.ts / promptMeso.ts         lógica pura y prompt Meso
+  estadoMeso.ts                  puente vista Programa ↔ V3 y vínculos Micro
 ```
 
-### El contrato con la IA
+## 5. Verificación comprobada
 
-```json
-{ "mensaje": "...", "sugerencias": ["..."], "intencion": "entender|crear|editar|consultar",
-  "seccionActiva": "justificacion|objetivos|contenido|secuencia|metodologia|evaluacion|ident|bibliografia",
-  "generar": false, "borrador": null }
+Último checkpoint de implementación antes de esta actualización: commit `177a4aa` (vínculo Micro–Meso) en la rama local `feature/curricular-project-foundation`. Los commits de desarrollo **no se han subido a GitHub**. Esta edición de `context.md` se confirma por separado; no cambiar el checkpoint de código al leerla.
+
+```text
+npm test              → 235 pruebas (95 + 14 + 38 + 11 + 26 + 11 + 23 + 17)
+npx tsc --noEmit      → limpio
+npm run build         → correcto
+impeccable detect     → [] en la última tanda de archivos UI revisada
+API real Macro/Meso   → turnos conversacionales probados por HTTP; cierre SSE stop/[DONE]
 ```
 
-- `mensaje` va **primero**: el cliente lo extrae en streaming ([extraerMensajeParcial](lib/schema.ts)) mientras el resto llega.
-- **`borrador` es opcional.** `null` = turno conversacional, no toca nada.
-- **Generación por hitos:** en cuanto hay un dato real, `generar: true` con el borrador **parcial**. No espera a las ocho secciones.
-- `seccionActiva` decide qué acordeón se abre y se resalta.
-- Si el JSON llega **desbalanceado al final**, `repararJSON` lo cierra de forma determinista; si el daño es interno, no se toca y se pide reintentar.
-- **Sesiones:** se generan por unidad y se acumulan en el merge (`fusionarSesiones`), así pedir las de la unidad 2 no borra las de la 1.
-- **ISBN:** el prompt prohíbe proponerlo. Año y edición sí se proponen, siempre como sugerencia.
+No hay pruebas automatizadas de UI/API de extremo a extremo. Los smoke tests de API fueron breves; no sustituyen probar una conversación completa en navegador.
 
-**Bugs de raíz corregidos — no los reintroduzcas:**
-1. El prompt obligaba a generar siempre → el modelo no podía preguntar.
-2. Se normalizaba una ficha vacía en cada respuesta y se fusionaba → un turno que solo preguntaba **borraba** lo anterior. Ahora la unión es discriminada: sin borrador no existe ficha.
-3. `max_tokens: 8000` truncaba el JSON. Ahora 32000 y el `finish_reason` llega al cliente.
-4. Las confirmaciones de bibliografía viven en el docente: el merge las restaura comparando autor y título, porque el modelo siempre devuelve `confirmada: false`. La migración hace lo mismo.
-5. `envolver()` del PDF partía por palabras y **perdía la sangría**: los ítems anidados acababan al ras. Se conserva explícitamente.
+## 6. Sistema visual y estado visual
 
-### Persistencia
+La adición Macro/Meso **hereda** el mundo visual confirmado en [DESIGN.md](DESIGN.md) y la paleta definida en [tailwind.config.ts](tailwind.config.ts): Seedling/Sow, tarjetas crema, acento Terracotta para acciones, Mora para contenido sin confirmar y Rainfall para contenido confirmado. No se cambió la identidad visual.
 
-`localStorage`, clave **`designconia.micro.v2`**, con `{ version, microcurriculo, mensajes, sugerencias, intencion, seccionActiva, crudo }`. `microcurriculo` es `null` sin borrador. Se valida con `esEstadoGuardado`.
+**Drift documental:** [PRODUCT.md](PRODUCT.md) y varias descripciones de [DESIGN.md](DESIGN.md) todavía describen el producto solo como Micro; DESIGN también limita Mora a sugerencias bibliográficas, mientras la UI Macro usa Mora para sugerencias de afirmaciones. No cambiar esos artefactos de diseño en este handoff: registrar la discrepancia y actualizarlos en la fase de documentación, conservando el mundo visual.
 
-Un guardado de la versión anterior (`designconia.micro.v1`) **se migra** con `migrarEstadoV1`: se normalizan los campos nuevos (secuencia vacía, instrumentos vacíos, año/edición/ISBN vacíos) y se conservan las confirmaciones de bibliografía. Las claves de la ficha de sesión (`designconia.ficha.v3/v2`) sí se borran: son de otro producto.
+- Estado inicial: chat, saludo y sugerencias; no aparece ficha hasta que hay contenido.
+- Al existir un documento: chat a la izquierda y ficha a la derecha, selector compacto **Asignatura / Programa / Marco**, sin tercer riel.
+- Macro muestra un marco por vez; Meso muestra un programa por vez. Las listas para elegir entre varios documentos son un pendiente.
+- **La interfaz no se ha inspeccionado visualmente en navegador.** Revisar al menos 375/768/1024/1280/1920 px, teclado/foco, estados vacíos, módulo activo, guardado y scopes no compatibles.
 
----
+## 7. Alcance que sigue fuera
 
-## 7. Verificación que ya existe
+- Importación/subida de PDF, extracción automática o ingesta documental.
+- Login, roles, trabajo colaborativo, persistencia de servidor o multi-institución.
+- Cursos compartidos entre varios programas (relación N:M asignatura–programa).
+- Exportación formal/estilizada o Word.
 
-```
-95 pruebas         npm test
-tipos              npx tsc --noEmit      → limpio
-build              npx next build        → correcto
-detector visual    impeccable detect     → 0 hallazgos
-PDF                render con LibreOffice → 5 páginas, sin fuentes faltantes
+## 8. Cómo trabajar sin reintroducir fallos conocidos
+
+```bash
+cd D:\Devtools\Proyectos\DeepseekHS\disenoconia
+npm run dev
+npm test
+npx tsc --noEmit
+npm run build
 ```
 
-Verificado por HTTP contra la API real: turno conversacional (no genera), turno con datos (borrador parcial con la asignatura), iteración (agrega unidades y cortes sin perder lo previo), generación completa **8/8** con secuencia didáctica, e iteración de la secuencia por unidad sin borrar las demás.
+- **No levantes dos servidores Next** sobre el mismo `.next`.
+- **No ejecutes `next build` con el servidor de desarrollo vivo.**
+- En esta máquina el entorno aislado puede bloquear `spawn` de workers de Next con `EPERM`; si ocurre, la compilación debe repetirse fuera del aislamiento (sin otro servidor activo).
+- `.env.local` no se debe versionar; usa [.env.example](.env.example) como plantilla.
+- No añadas secretos, fuentes institucionales inventadas ni nombres/códigos de programa inferidos.
 
-Lo verificado **visualmente** es solo el PDF. **La interfaz de la app sigue sin verse**: no hay navegador en este entorno.
+## 9. Historial resumido
 
----
+1. Se sustituyó el prototipo con IA simulada por el chat real con DeepSeek y streaming SSE.
+2. El dominio se trasladó de una ficha escolar a un microcurrículo universitario de ocho secciones.
+3. Se añadieron secuencia didáctica modular por unidad, instrumentos, recursos alineados y PDF de texto plano.
+4. Se integró Macro/Meso en V3, con migración segura desde `designconia.micro.v1/v2` y continuidad del Micro.
+5. Se añadieron los prompts, editores, API y vínculos Programa–Marco y Asignatura–Programa. El siguiente foco es gestión de múltiples documentos y trazabilidad por IDs hasta la evaluación.
 
-## 8. Errores conocidos
-
-| Síntoma | Causa | Solución |
-|---|---|---|
-| `__webpack_modules__[moduleId] is not a function` | `.next` mezclado por dos dev servers | borrar `.next`, dejar **uno** |
-| 404 en `/api/chat` | la pestaña apunta a otro puerto (3001) | abrir `localhost:3000` |
-| 404 al primer request tras arrancar | Next responde 404 mientras compila la ruta | reintentar; ya está precalentado |
-| `Authentication Fails` (401) | clave inválida | reponer `DEEPSEEK_API_KEY` y reiniciar |
-| «La respuesta se cortó…» | se agotó el presupuesto de tokens | pedir una unidad por vez |
-| «La conexión se cortó…» | el servidor se reinició a mitad del stream | reintentar |
-
----
-
-## 9. Historial de entregas
-
-Lo que existe hoy es el resultado de seis rondas. Sirve para entender por qué hay código que parece de otro producto (spoiler: lo fue).
-
-1. **Prototipo visual** — un mockup de una sola pantalla con datos fijos y una «IA» que era un `setTimeout` devolviendo frases escritas a mano. Mundo visual CodeEase (duna + crema + Terracotta), tres rieles. Hubo una ronda de tres composiciones y el usuario eligió la A.
-2. **IA real** — se sustituyó el simulacro por el proxy SSE a DeepSeek (`/api/chat`), más `/api/salud` (valida la clave antes de que el docente escriba) y `/api/diagnostico` (trazas de las últimas peticiones). Llegaron con ella: streaming del mensaje mientras el JSON aún se está formando, `finish_reason` para explicar cortes, `repararJSON` para cierres desbalanceados, reintento automático del turno vacío y `textoLegible()` para no perder el detalle del proveedor.
-3. **Flujo conversacional** — el borrador pasó a ser **opcional** en el contrato. Antes, cada respuesta generaba una ficha; un turno que solo preguntaba **borraba** la anterior. Ahora la ficha nace por hitos, el arranque es un chat limpio con «¿Qué qués hacer hoy?» y existe «Conversación nueva».
-4. **Dominio universitario** — de ficha de sesión escolar (OA, 5° básico) a **microcurrículo de asignatura** de educación superior: siete secciones, bibliografía que nace como sugerencia, «Ajustar a 100» y contador `n/7`.
-5. **Ocho secciones** — se añadió la **secuencia didáctica** (sesiones con tres fases), instrumentos por entregable, herramientas alineadas a las actividades, año/edición/ISBN, exportación a **PDF de texto plano** (el Markdown se quedó para «Copiar»), chat a 480 px y migración del estado guardado `v1 → v2`. Las pruebas pasaron de 60 a 87.
-6. **Secuencia en dos niveles** — la sección abre en la lista de unidades y al tocar una muestra solo sus sesiones, con «Volver a unidades», indicador `unidades con sesiones / total` y grupo residual para sesiones huérfanas. 95 pruebas.
-
-**Bugs que costaron tiempo y ya están cerrados** (están detallados en §6): la ficha que se borraba sola, `max_tokens` corto, dos servidores de desarrollo pisándose `.next`, el `404` de una pestaña en el puerto equivocado, `ref` como prop reservada de React y la sangría que se perdía al envolver líneas del PDF.
+> Si cualquier sección histórica de este archivo o [PRODUCT.md](PRODUCT.md) aún describe un producto solo Micro, esta sección y el código reciente describen el estado actual; actualiza las discrepancias cuando corresponda.
 
 ---
 
-## 10. Historia de decisiones
-
-1. **Mundo visual pineado** por el usuario desde una imagen de referencia (CodeEase). No negociable.
-2. **Composición:** se eligió COMP A (tres rieles) en una ronda de tres propuestas.
-3. **Dominio:** empezó escolar (OA, 5° básico) → **educación superior** → **microcurrículo completo de asignatura** (esta entrega). La sesión quedó fuera.
-4. **Flujo:** chat primero; el asistente pregunta antes de producir; la ficha crece por hitos.
-5. **Sugerencias aceptadas por el usuario en esta entrega:** estados por sección, «Ajustar a 100», bibliografía honesta marcada como sugerencia, orden de preguntas empezando por el propósito con la identificación al final, y resultados de aprendizaje por unidad.
-6. **Segunda ronda de sugerencias del usuario (esta entrega):** resultados de aprendizaje obligatorios con verbos medibles, **secuencia didáctica** con sesiones y tres fases, instrumentos de evaluación por entregable, año/edición/ISBN en la bibliografía, herramientas integradas en las actividades, **exportación a PDF** de texto plano (el Markdown se conserva solo para «Copiar»), y chat más ancho (480 px).
-7. **El ISBN no se genera nunca con IA.** Decisión explícita: un ISBN inventado parece autoritativo y es verificable como falso. El asistente pide el dato.
-8. **Tercera ronda: la secuencia se navega en dos niveles.** El usuario pidió ver las unidades al abrir la sección y entrar a una para ver solo sus sesiones. Es navegación, no cambio de modelo: no se tocaron esquema, prompt, API ni persistencia. El estado de la unidad abierta queda en memoria y se reinicia al cerrar el acordeón, a propósito.
-
----
-
-## 11. Qué NO hacer
-
-- No reintroducir vocabulario escolar (OA, niveles, SEP, NEM).
-- No generar un microcurrículo completo antes del primer dato: la ficha debe crecer por hitos.
-- No dejar que un turno conversacional toque la ficha.
-- No presentar una referencia sin confirmar como obligatoria.
-- No inventar ISBN, ni siquiera como sugerencia.
-- No generar las veinte sesiones del curso de una vez: la secuencia es modular, por unidad.
-- No usar emoji como iconos, degradados de texto, ni sombras negras.
-- No usar Mora para decorar ni terracotta para algo que no sea acción.
-- No inventar código, programa, créditos ni semestre: `[por definir]`.
-- No ejecutar `next build` con el servidor de desarrollo vivo: se pisan los artefactos de `.next`.
-
----
-
-*Documento de traspaso. Si algo aquí contradice el código, manda el código — y conviene anotar la discrepancia.*
+*Handoff para continuar el proyecto: distinguir siempre entre lo que existe en el modelo, lo que está disponible en la interfaz y lo que todavía no se ha validado visualmente.*
