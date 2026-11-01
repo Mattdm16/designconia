@@ -133,7 +133,7 @@ lib/
 
 ## 5. Verificación comprobada
 
-Último checkpoint de implementación: commit `84c8e57` (flujos E2E verificados y deriva PRODUCT/DESIGN resuelta) en la rama local `feature/curricular-project-foundation`. Los commits de desarrollo **no se han subido a GitHub**.
+Último checkpoint de implementación: commit `98af540` (chat conversacional con enrutador, botón «+» con PDF y tope 3 años) en la rama local `feature/curricular-project-foundation`. Los commits de desarrollo **no se han subido a GitHub**.
 
 ```text
 npm test              → 271 pruebas (95 + 14 + 38 + 11 + 27 + 11 + 24 + 17 + 11 + 5 + 3 + 2 + 8 + 5)
