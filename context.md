@@ -1,8 +1,8 @@
 # DesignConia — contexto y traspaso actualizado
 
-**Actualizado:** 31 de octubre de 2026. Este documento refleja el estado comprobado de la rama de desarrollo. Si contradice una implementación posterior, manda el código y actualiza este handoff.
+**Actualizado:** 1 de noviembre de 2026. Este documento refleja el estado comprobado de la rama de desarrollo. Si contradice una implementación posterior, manda el código y actualiza este handoff.
 
-> **Resumen ejecutivo:** ya existe una base local V3 con los tres niveles de datos, migración segura y una primera versión funcional de los módulos Macro, Meso y Micro. El siguiente trabajo ya no es crear esos niveles desde cero: es completar la navegación entre varios documentos, la trazabilidad pedagógica de extremo a extremo, las exportaciones y la revisión visual. La interfaz nueva todavía no se ha inspeccionado en navegador.
+> **Resumen ejecutivo:** ya existe una base local V3 con los tres niveles de datos, migración segura, navegación conversacional por intención (sin selectores visibles), varios documentos por nivel, trazabilidad de extremo a extremo, citas con localizador, PDFs como fuentes (tope 3 años) y exportaciones incluido el expediente conjunto. Lo único pendiente es la revisión visual en navegador y probar flujos completos con la IA real.
 
 ## 1. Producto y requisitos acordados
 
@@ -19,28 +19,28 @@
 - Un proyecto representa **un contexto institucional** y puede contener varios marcos/versiones y programas.
 - En la interfaz de primera entrega, cada programa selecciona como máximo un **marco principal activo**; los vínculos anteriores se conservan como historial.
 - Una asignatura puede permanecer independiente o asociarse a **un programa**. Cursos compartidos entre programas se dejan para una fase posterior.
-- Se mantiene el arranque conversacional: el saludo pregunta qué quiere hacer la persona antes de pedir datos. Al existir un documento, se usa un selector compacto para cambiar de nivel; no se añade un tercer panel.
+- Se mantiene el arranque conversacional: el saludo pregunta qué quiere hacer la persona antes de pedir datos. No hay selectores visibles de nivel ni de documento: la IA decide por chat (con `aclarar` ante duda) y solo se muestra una etiqueta pasiva de contexto; no hay tercer panel.
 - La IA puede proponer principios/orientaciones como `sugerencia_IA`, pero no presentarlos como política oficial. El docente confirma o edita.
 - Las fuentes curriculares son distintas de la bibliografía del Micro. No se inventan fuentes, emisores, vigencias ni datos oficiales.
-- En esta primera versión las fuentes se capturan manualmente; no hay importación ni extracción automática de PDF/syllabus.
+- Las fuentes pueden registrarse a mano o integrarse desde un PDF adjunto (texto extraído localmente, sin OCR); solo se integran PDFs de hasta 3 años, con año por metadatos o declarado por el docente.
 - Sin autenticación, roles, persistencia de servidor, colaboración ni sincronización entre dispositivos.
 
 ## 2. Requisitos: estado real y faltantes
 
 | Requisito | Estado actual | Pendiente / límite actual |
 |---|---|---|
-| Crear y editar un marco institucional con IA | **Implementado**: editor, prompt, parseo, fusión y ruta API Macro. La IA puede proponer principios/orientaciones como sugerencias. | No se han recorrido visualmente sus estados en navegador; falta poder asociar una fuente a cada afirmación desde la UI. |
-| Crear y editar un programa académico con IA | **Implementado**: editor, prompt, parseo, fusión y ruta API Meso. Incluye perfiles, resultados y vínculo principal a un Marco. | No hay lista/selector ni acción de «nuevo programa» para elegir entre varios programas. |
-| Conservar el Micro y migrar el guardado previo | **Implementado**: V1/V2→V3, respaldo, staging y protección frente a datos corruptos. | El Micro aún no tiene IDs estables propios para sus resultados/unidades/evidencias. |
-| Vincular Meso con Macro | **Implementado**: un marco principal activo por programa; al cambiarlo, el vínculo anterior se conserva como inactivo. | Hay tipos de alineación Macro→resultado Meso, pero no una matriz editable de alineación en la interfaz. |
-| Vincular Micro con Meso | **Implementado**: desde el editor Meso se vincula/desvincula una asignatura independiente; la ficha nunca se borra al desvincular. | El vínculo es a nivel de asignatura, no entre resultados específicos. Una asignatura solo admite un programa en este MVP. |
+| Crear y editar un marco institucional con IA | **Implementado**: editor, prompt, parseo, fusión y ruta API Macro. La IA puede proponer principios/orientaciones como sugerencias. | Verificado solo con tipos, pruebas y build; sin inspección visual en navegador. |
+| Crear y editar un programa académico con IA | **Implementado**: editor, prompt, parseo, fusión y ruta API Meso. Incluye perfiles, resultados y vínculo principal a un Marco. | Verificado solo con tipos, pruebas y build; sin inspección visual en navegador. |
+| Conservar el Micro y migrar el guardado previo | **Implementado**: V1/V2→V3, respaldo, staging y protección frente a datos corruptos. | Sin inspección visual en navegador. |
+| Vincular Meso con Macro | **Implementado**: un marco principal activo por programa; al cambiarlo, el vínculo anterior se conserva como inactivo, más matriz editable principio→resultado en la ficha Meso. | Sin inspección visual en navegador. |
+| Vincular Micro con Meso | **Implementado**: desde el editor Meso se vincula/desvincula una asignatura independiente; la ficha nunca se borra al desvincular. El vínculo trazable programa→RA vive en la matriz Meso; una asignatura solo admite un programa en este MVP. | Sin inspección visual en navegador. |
 | Elegir Macro/Meso/Micro conversando | **Implementado**: sin tarjetas ni selectores visibles; la IA decide el nivel por chat (enrutador con `aclarar` ante duda) y muestra una etiqueta pasiva de contexto. | Verificado solo con tipos, pruebas y build; sin inspección visual en navegador. |
 | Manejar varios Marcos, Programas y Asignaturas | **Implementado**: botón «+» del compositor con adjuntar PDF, nuevo documento (por chat) y lista de documentos; abrir/crear preserva el proyecto y sus hilos. | El documento recién creado tarda un instante en aparecer en la lista (autosave con debounce). «Conversación nueva» sigue siendo borrado total y explícito del proyecto. |
 | Adjuntar PDFs como fuentes (máx. 3 años) | **Implementado**: solo PDF con texto (sin OCR), validación de firma/tamaño/páginas, extracción local en navegador, año por metadatos o declarado, registro como fuente curricular con texto recortado. | Límite 10 MB por archivo, 3 por envío, 150 páginas; tope de texto para contexto y almacenamiento. Sin inspección visual en navegador. |
 | Trazabilidad pedagógica completa | **Implementada**: RA con ids estables y actividades con `mideIds` en el Micro; bordes principio→resultado→RA (RA→actividad vive en `mideIds`); matrices editables Macro→programa y programa→RA en la ficha Meso; insignias «Responde a» en el contenido Micro; poda de huérfanas al editar. | Falta matriz RA→actividad como alineación editable (hoy vive en `mideIds` de cada actividad). `mide` se conserva como nota libre heredada. Sin inspección visual en navegador. |
 | Citas de fuentes curriculares | **Implementada**: editor compartido de citas (fuente + localizador/página/sección) en cada afirmación Macro/Meso, con selectores de origen y estado; el cambio a documento/contrastada exige cita válida y la última cita respaldada no se puede quitar. | Sin inspección visual en navegador. |
 | Exportación | **Implementada para Micro, Macro y Meso**: PDF de texto plano y copia Markdown en los tres niveles; el programa incluye trazabilidad (principios y RA vinculados) y asignaturas. | Resuelta con el expediente conjunto (ver abajo). |
-| Revisión visual | El detector mecánico marcó 0 hallazgos en los objetivos examinados. | **No se hizo inspección visual en navegador ni capturas** de la interfaz Macro/Meso. |
+| Revisión visual | El detector mecánico marcó 0 hallazgos en los objetivos examinados. | **No se hizo inspección visual en navegador ni capturas** de la interfaz. |
 
 ### Próximo orden recomendado
 
@@ -85,7 +85,7 @@ El Micro canónico sigue en [schema.ts](lib/schema.ts). Conserva las ocho seccio
 - [prompt.ts](lib/prompt.ts): contrato y prompt Micro existentes.
 - [promptMacro.ts](lib/promptMacro.ts): prompt Macro. La respuesta usa JSON con `mensaje` primero, `generar` y `borrador` opcional; las fuentes no aportadas quedan fuera.
 - [promptMeso.ts](lib/promptMeso.ts): prompt Meso. Recibe solo marcos disponibles por id para no inventar ni adjuntar un marco inexistente.
-- [route.ts](app/api/chat/route.ts): `modulo: "macro"` usa el prompt Macro y solo recibe el marco activo; `modulo: "meso"` recibe el programa y marcos disponibles; sin módulo explícito, permanece el flujo Micro.
+- [route.ts](app/api/chat/route.ts): `modulo: "inicio"` enruta por intención (con documentos existentes); `"macro"` usa el prompt Macro y solo recibe el marco activo; `"meso"` recibe el programa y marcos disponibles; sin módulo explícito, permanece el flujo Micro. Todos aceptan `fuentesPdf` (título, páginas y extractos) como evidencia citada por página.
 - El proxy SSE y extracción incremental de `mensaje` siguen comunes a los niveles.
 
 ### Persistencia y puentes de estado
@@ -137,7 +137,7 @@ lib/
 
 ```text
 npm test              → 271 pruebas (95 + 14 + 38 + 11 + 27 + 11 + 24 + 17 + 11 + 5 + 3 + 2 + 8 + 5)
-impeccable detect     → [] sobre Citas, Marco, Meso, Secciones, Microcurriculo y page
+impeccable detect     → [] sobre Citas, Marco, Meso, Secciones, Microcurriculo, Chat y page
 npx tsc --noEmit      → limpio
 npm run build         → correcto
 API real Macro/Meso   → turnos conversacionales probados por HTTP; cierre SSE stop/[DONE]
@@ -158,7 +158,7 @@ La adición Macro/Meso **hereda** el mundo visual confirmado en [DESIGN.md](DESI
 
 ## 7. Alcance que sigue fuera
 
-- Importación/subida de PDF, extracción automática o ingesta documental.
+- OCR de PDFs escaneados (solo se integran PDFs con texto seleccionable).
 - Login, roles, trabajo colaborativo, persistencia de servidor o multi-institución.
 - Cursos compartidos entre varios programas (relación N:M asignatura–programa).
 - Exportación formal/estilizada o Word.
