@@ -1,6 +1,6 @@
 ---
 name: DesignConia
-description: Ficha microcurricular universitaria conversacional — documento editable en pantalla, trazable por subcompetencia.
+description: Proyecto curricular universitario conversacional — marcos, programas y microcurrículos editables en pantalla, trazables de principio a evidencia.
 colors:
   seedling: "#FAF5E9"
   sow: "#392525"
@@ -98,13 +98,13 @@ components:
 
 El mundo CodeEase pineado por el usuario con paleta Seedling/Sow: una sala Seedling de pantalla completa donde todo flota —chat, encabezado, secciones— en tarjetas crema de radio grande sobre ondas Mist/Pebble. La IA habla en burbujas Sow; el usuario, en tarjetas claras con avatar inicial Redwood. Terracotta marca lo accionable.
 
-El producto es un **microcurrículo universitario**: un documento de ocho secciones que se lee de arriba abajo, mientras a un lado se conversa con el asistente que lo va llenando. Por eso el display pasó a un serif caligráfico: el registro tipográfico de un documento académico, no el de un panel de control. Y por eso el progreso se dibuja como ocho marcas de sección (`n/8`), no como una barra abstracta.
+El producto es un **proyecto curricular universitario** en tres niveles: marco institucional, programa académico y microcurrículo de asignatura (ocho secciones que se leen de arriba abajo), mientras a un lado se conversa con el asistente que los va llenando. Por eso el display pasó a un serif caligráfico: el registro tipográfico de un documento académico, no el de un panel de control. Y por eso el progreso se dibuja como marcas de sección (`n/8` en el Micro), no como una barra abstracta.
 
 **Key Characteristics:**
 - Full-bleed: la app cubre todo el viewport, sin tarjeta centrada.
 - Todo flota: tarjetas crema con sombra difusa cálida sobre duna.
 - Progreso por sección: cada sección muestra su estado sin abrirla; la que el asistente trabaja queda en foco con anillo Pebble.
-- Honestidad visible: las referencias sin verificar llevan Mora y la palabra «sugerencia».
+- Honestidad visible: lo sin verificar lleva Mora y la palabra «sugerencia» — referencias bibliográficas y afirmaciones propuestas por la IA.
 
 ## Colors
 
@@ -118,7 +118,7 @@ Paleta pineada por el usuario (brand guidelines Seedling/Sow): crema luminosa co
 
 ### Tertiary
 - **Sprout** (#E3EB90): banda del aviso «aquí va tomando forma» y selección de texto.
-- **Mora** (#6B4A6E): **solo** identifica lo que está sin verificar — referencias bibliográficas propuestas por el asistente. Nunca decora.
+- **Mora** (#6B4A6E): **solo** identifica lo que está sin verificar — referencias bibliográficas y afirmaciones propuestas por el asistente. Nunca decora.
 
 ### Neutral
 - **Seedling** (#FAF5E9): fondo de pantalla completa.
@@ -209,6 +209,8 @@ Radio grande y amable: paneles 18px, bloques y filas 12–16px, pills y botones 
 - **Sugerencia (respuesta):** pill crema con borde negro/10, texto alineado a la izquierda. Es una respuesta que el docente puede tocar para enviarla; nunca se envía sola.
 - **Sugerencia (bibliografía):** pill Mora sólido con el texto «Sugerencia». Marca una referencia que el asistente propuso y el docente **no** ha verificado. Un toque la confirma.
 - **Confirmada (bibliografía):** pill Rainfall sólido con «Confirmada». Es el único estado en que una referencia cuenta como obligatoria.
+- **Sugerencia de IA (afirmación):** pill Mora con «Sugerencia de IA». **Documento:** pill Sow. **Contrastada/Confirmada:** pill Rainfall. El respaldo se lista debajo como texto mono («Fuente · localizador»).
+- **RA vinculado (evaluación y matrices):** pill Rainfall tenue cuando el RA o el borde ya están alineados; fondo neutro cuando no.
 - **Porcentaje de evaluación:** pill mono tabular; Rainfall al 10% si suma 100, Terracotta al 10% si no.
 
 ### Cards / Containers
@@ -220,18 +222,24 @@ Radio grande y amable: paneles 18px, bloques y filas 12–16px, pills y botones 
 ### Inputs / Fields
 - **Style:** transparentes hasta el foco; borde negro/20 y fondo blanco al enfocar. Sin bordes permanentes.
 - **Estructura:** las unidades del contenido temático viven en tarjetas Arena al 40% con el número en un círculo Sow; los temas, en tarjetas blancas anidadas. La numeración la pone la interfaz, nunca el modelo.
-- **Evaluación:** los cortes son filas con nombre, porcentaje en mono y sus actividades; cuando la suma no da 100 aparece una banda de aviso Terracotta con el botón «Ajustar a 100». Cada actividad declara instrumento (con sugerencias en `datalist`), qué RA mide y qué herramientas exige; la que no tiene instrumento lo dice en Terracotta.
+- **Evaluación:** los cortes son filas con nombre, porcentaje en mono y sus actividades; cuando la suma no da 100 aparece una banda de aviso Terracotta con el botón «Ajustar a 100». Cada actividad declara instrumento (con sugerencias en `datalist`), los RA que mide con chips (U+número + texto) y qué herramientas exige; la que no tiene instrumento o no mide ningún RA lo dice en Terracotta.
 - **Secuencia didáctica (dos niveles):** abre en una **lista de unidades** —tarjetas con el número en círculo Sow, título, temas y `N sesiones · X h`, o la píldora «sin sesiones»—; al tocar una, la sección se transforma en las **sesiones de esa unidad** con un botón «Volver a unidades» en la cabecera. Cada sesión es una tarjeta con insignia `S1`, tema, unidad, tipo y minutos; sus tres fases van en bandas Arena, cada una con filas de docente / estudiante y sus recursos en píldoras Mora. La cabecera del acordeón muestra `unidades con sesiones / total` en mono tabular.
 
 ### Navigation
-- **Modo conversación:** sin navegación. La marca, «Conversación nueva» y el estado del asistente bastan.
-- **Modo borrador:** sin rieles laterales. El chat (480px) es la navegación de la conversación y la ficha se recorre con su propio scroll; el encabezado concentra copiar (Markdown, para pegar) y exportar (PDF de texto plano), además de plegar el chat.
+- **Modo conversación:** sin navegación de documento. La marca, «Conversación nueva», el selector de nivel (Asignatura/Programa/Marco) con sus tarjetas «¿Por dónde empezamos?» y el estado del asistente bastan.
+- **Modo borrador:** sin rieles laterales. El chat (480px) es la navegación de la conversación y la ficha se recorre con su propio scroll; el encabezado concentra el selector de nivel, el selector de documento del nivel con «+ Nuevo», copiar (Markdown, para pegar) y exportar (PDF de texto plano) por nivel más el expediente conjunto, además de plegar el chat.
 
 ### Chat (signature)
 Burbujas Sow de la IA y tarjetas crema del docente, con avatar de inicial Redwood. La IA escribe su mensaje en streaming mientras el resto del JSON todavía llega, así que el texto se lee como conversación y nunca se ve crudo. Debajo de la última respuesta, los chips de sugerencia. Bajo el hilo, el compositor: una tarjeta con textarea que crece hasta 8rem y el botón Terracotta de envío, que se convierte en «Detener» mientras hay una respuesta en curso.
 
 ### Microcurrículo (signature)
 Franja de identificación con la asignatura en serif, folio mono y la línea programa · semestre · créditos · horas. Debajo, ocho marcas de progreso y el contador `n/8`. Luego ocho acordeones —Identificación, Justificación, Objetivos, Contenido temático, Secuencia didáctica, Metodología, Sistema de evaluación, Bibliografía y recursos— con check de cerrada y resumen de una línea. La sección en foco lleva anillo Pebble. Los avisos globales (RAs faltantes, unidades sin sesiones, actividades sin instrumento, porcentajes que no suman 100, referencias sin confirmar) se muestran como píldoras arriba, y también dentro de su sección.
+
+### Niveles Macro y Meso
+Misma sala, mismo documento-acordeón: franja de identificación en serif, marcas de progreso y secciones plegables con resumen de una línea. Cada afirmación (principio, orientación, perfil, resultado) lleva su insignia de estado, sus selectores de origen/estado y su bloque de respaldo en fuentes con citas (fuente + localizador/página/sección). Sin fuentes registradas no se puede citar: la UI lo dice en vez de inventar.
+
+### Trazabilidad y expediente
+La ficha Meso cierra con la sección **Trazabilidad**: matrices principio→resultado y resultado→RA con chips que se prenden y apagan, más el conteo de resultados sin sostén. En el Micro, cada RA muestra a qué resultado responde («↳ Responde a: …») y cada actividad, los RA que mide. El encabezado exporta por nivel y el **expediente conjunto** (todo el proyecto con su trazabilidad) en Markdown para pegar y PDF de texto plano.
 
 ## Motion
 

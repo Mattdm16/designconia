@@ -113,6 +113,7 @@ lib/
   exportarMesoTexto.ts           programa a texto plano con trazabilidad (para PDF)
   exportarExpediente.ts          expediente conjunto texto/Markdown de todo el proyecto
   exportarExpediente.test.ts     3 pruebas del expediente
+  flujos.test.ts                 2 pruebas de flujos completos Macro→Meso→Micro→expediente
   exportarCurricular.test.ts     5 pruebas de exportación Macro/Meso
   schema.ts                      contrato Micro, normalización y 95 pruebas
   proyecto.ts                    agregado V3, guardas y migración Micro
@@ -131,7 +132,7 @@ lib/
 Último checkpoint de implementación: commit `62c55f7` (expediente curricular conjunto con exportación PDF/Markdown) en la rama local `feature/curricular-project-foundation`. Los commits de desarrollo **no se han subido a GitHub**.
 
 ```text
-npm test              → 256 pruebas (95 + 14 + 38 + 11 + 27 + 11 + 24 + 17 + 11 + 5 + 3)
+npm test              → 258 pruebas (95 + 14 + 38 + 11 + 27 + 11 + 24 + 17 + 11 + 5 + 3 + 2)
 impeccable detect     → [] sobre Citas, Marco, Meso, Secciones, Microcurriculo y page
 npx tsc --noEmit      → limpio
 npm run build         → correcto
@@ -144,7 +145,7 @@ No hay pruebas automatizadas de UI/API de extremo a extremo. Los smoke tests de 
 
 La adición Macro/Meso **hereda** el mundo visual confirmado en [DESIGN.md](DESIGN.md) y la paleta definida en [tailwind.config.ts](tailwind.config.ts): Seedling/Sow, tarjetas crema, acento Terracotta para acciones, Mora para contenido sin confirmar y Rainfall para contenido confirmado. No se cambió la identidad visual.
 
-**Drift documental:** [PRODUCT.md](PRODUCT.md) y varias descripciones de [DESIGN.md](DESIGN.md) todavía describen el producto solo como Micro; DESIGN también limita Mora a sugerencias bibliográficas, mientras la UI Macro usa Mora para sugerencias de afirmaciones. No cambiar esos artefactos de diseño en este handoff: registrar la discrepancia y actualizarlos en la fase de documentación, conservando el mundo visual.
+**Drift documental resuelto:** [PRODUCT.md](PRODUCT.md) y [DESIGN.md](DESIGN.md) ya describen los tres niveles, la trazabilidad, las citas y el expediente, conservando el mundo visual. Mora identifica lo sin verificar (bibliografía y afirmaciones); Rainfall lo cumplido/contrastado; Sow marca el origen documento.
 
 - Estado inicial: chat, tarjetas «¿Por dónde empezamos?» por nivel, saludo y sugerencias por nivel; no aparece ficha hasta que hay contenido.
 - Al existir un documento: chat a la izquierda y ficha a la derecha, selector compacto **Asignatura / Programa / Marco** más selector de documento del nivel con **+ Nuevo**, sin tercer riel.
@@ -185,6 +186,7 @@ npm run build
 7. Se implementó trazabilidad: RA/actividades con ids, bordes extendidos, matrices en Meso, `mideIds` en evaluación y poda de huérfanas.
 8. Se implementaron citas editables por afirmación (fuente + localizador, con paridad macro/meso en normalizadores) y exportación Macro/Meso a PDF de texto plano y Markdown.
 9. Se implementó el expediente curricular conjunto (texto plano/Markdown/PDF de todo el proyecto con trazabilidad) con 3 pruebas nuevas.
+10. Se verificaron flujos completos a nivel de datos (2 pruebas en `flujos.test.ts`) y se resolvió la deriva en PRODUCT.md/DESIGN.md.
 
 > Si cualquier sección histórica de este archivo o [PRODUCT.md](PRODUCT.md) aún describe un producto solo Micro, esta sección y el código reciente describen el estado actual; actualiza las discrepancias cuando corresponda.
 

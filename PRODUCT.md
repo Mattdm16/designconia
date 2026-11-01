@@ -16,11 +16,11 @@ Docentes universitarios y coordinadores académicos de educación superior. Prep
 
 ## Product Purpose
 
-DesignConia (nombre temporal) convierte una conversación en el **microcurrículo completo de una asignatura universitaria**, listo para presentar: datos de identificación, justificación, objetivos generales y específicos, contenido temático por unidades con sus resultados de aprendizaje, secuencia didáctica sesión por sesión, metodología, sistema de evaluación con porcentajes e instrumentos, y bibliografía. Éxito = el docente responde preguntas durante unos minutos y obtiene un documento coherente y editable, con la última palabra sobre cada línea.
+DesignConia (nombre temporal) convierte una conversación en el **diseño curricular completo de un contexto institucional universitario**, listo para presentar: marco educativo institucional (principios, orientaciones y fuentes), programas académicos (perfiles, resultados y vínculo al marco) y microcurrículos de asignatura (identificación, justificación, objetivos, contenido por unidades con resultados de aprendizaje, secuencia didáctica, metodología, evaluación con porcentajes e instrumentos, y bibliografía). Éxito = el docente responde preguntas durante unos minutos y obtiene documentos coherentes y editables, con la última palabra sobre cada línea.
 
 ## Positioning
 
-El asistente no entrega un documento terminado: entrega un **microcurrículo vivo** que crece sección por sección mientras se conversa, y que el docente corrige en pantalla. La ficha muestra en todo momento qué está cerrado y qué falta (n/8), y marca sin disimulo lo que aún no está verificado —empezando por la bibliografía.
+El asistente no entrega un documento terminado: entrega un **proyecto curricular vivo** que crece sección por sección mientras se conversa, y que el docente corrige en pantalla. Cada nivel (marco, programa, asignatura) muestra en todo momento qué está cerrado y qué falta, y marca sin disimulo lo que aún no está verificado —empezando por la bibliografía del Micro y las sugerencias de IA sin confirmar.
 
 ## Operating Context
 
@@ -30,9 +30,9 @@ El orden de las preguntas empieza por el propósito y deja los datos administrat
 
 ## Capabilities and Constraints
 
-- Capacidades confirmadas: conversación guiada por IA que entiende antes de pedir datos; generación **por hitos** (la ficha se llena desde el primer dato, no al final); edición total en pantalla de cada campo; secuencia didáctica con Inicio, Desarrollo y Cierre por sesión; evaluación con porcentajes que se validan y se ajustan a 100, con instrumento declarado por entregable; bibliografía que se propone como sugerencia y solo cuenta como obligatoria cuando el docente la confirma; **exportación a PDF de texto plano** y copia del Markdown; persistencia local con migración del estado anterior.
-- Terminología: universitaria. Microcurrículo, justificación, objetivos generales y específicos, unidades y resultados de aprendizaje, secuencia didáctica, estrategias metodológicas, cortes de evaluación con porcentajes e instrumentos, bibliografía obligatoria y complementaria.
-- Explícitamente fuera de alcance: persistencia en servidor, login, autenticación, roles, listas de múltiples microcurrículos, importación desde PDF/syllabus, PDF con estilos o tablas formales, y exportación a Word.
+- Capacidades confirmadas: conversación guiada por IA que entiende antes de pedir datos; generación **por hitos** (la ficha se llena desde el primer dato, no al final); edición total en pantalla de cada campo; tres niveles (marco, programa, asignatura) con varios documentos por nivel y conversaciones independientes; secuencia didáctica con Inicio, Desarrollo y Cierre por sesión; evaluación con porcentajes que se validan y se ajustan a 100, con instrumento declarado y RA vinculado por entregable; bibliografía que se propone como sugerencia y solo cuenta como obligatoria cuando el docente la confirma; citas a fuentes curriculares por afirmación (fuente + localizador); trazabilidad principio→resultado→RA editable en matrices; **exportación a PDF de texto plano** y copia del Markdown en los tres niveles más expediente curricular conjunto; persistencia local con migración del estado anterior.
+- Terminología: universitaria. Marco educativo institucional, programa académico, microcurrículo, justificación, objetivos generales y específicos, unidades y resultados de aprendizaje, secuencia didáctica, estrategias metodológicas, cortes de evaluación con porcentajes e instrumentos, bibliografía obligatoria y complementaria.
+- Explícitamente fuera de alcance: persistencia en servidor, login, autenticación, roles, importación desde PDF/syllabus, PDF con estilos o tablas formales, y exportación a Word.
 - El ISBN **no lo propone la IA**: un número inventado parece autoritativo y es comprobable como falso. El asistente propone año y edición como sugerencia, y pide el ISBN.
 - La intención del docente (`crear`, `editar`, `consultar`, `entender`) se detecta y se registra, pero todavía **no habilita ni deshabilita funciones**: editar y consultar aún no existen como capacidades de la app. Dejar lugar para ellas es intencional; simularlas, no.
 - Marco curricular: **educación superior únicamente**. No se usa el modelo escolar ni de otros países: nada de OA por nivel, SEP, NEM ni currículums de educación básica o media.
