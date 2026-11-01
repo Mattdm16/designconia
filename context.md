@@ -34,8 +34,8 @@
 | Conservar el Micro y migrar el guardado previo | **Implementado**: V1/V2→V3, respaldo, staging y protección frente a datos corruptos. | El Micro aún no tiene IDs estables propios para sus resultados/unidades/evidencias. |
 | Vincular Meso con Macro | **Implementado**: un marco principal activo por programa; al cambiarlo, el vínculo anterior se conserva como inactivo. | Hay tipos de alineación Macro→resultado Meso, pero no una matriz editable de alineación en la interfaz. |
 | Vincular Micro con Meso | **Implementado**: desde el editor Meso se vincula/desvincula una asignatura independiente; la ficha nunca se borra al desvincular. | El vínculo es a nivel de asignatura, no entre resultados específicos. Una asignatura solo admite un programa en este MVP. |
-| Elegir Macro/Meso/Micro desde un documento activo | **Implementado**: selector compacto Asignatura/Programa/Marco en la vista de documento, sin tercer riel. | En el chat inicial no hay selección explícita del nivel: el estado/sugerencias de apertura todavía son Micro-first. Se puede llegar a Macro/Meso después de crear un documento Micro, pero no iniciar directamente esos niveles en un proyecto vacío. |
-| Manejar varios Marcos, Programas y Asignaturas | **El modelo V3 admite colecciones.** | Falta una lista/selector y acciones claras para crear varios documentos en el mismo proyecto. La página muestra un documento activo por nivel y no permite cambiar entre varios; «Conversación nueva» descarta el proyecto completo. |
+| Elegir Macro/Meso/Micro desde la conversación inicial | **Implementado**: el chat inicial muestra «¿Por dónde empezamos?» (Asignatura/Programa/Marco) con saludo y sugerencias por nivel; el selector compacto sigue en el encabezado. | Verificado solo con tipos, pruebas y build; sin inspección visual en navegador. |
+| Manejar varios Marcos, Programas y Asignaturas | **Implementado**: selector de documento por nivel + «+ Nuevo» en modo conversación y en modo borrador; abrir/crear preserva el proyecto y sus hilos. | El documento recién creado tarda un instante en aparecer en la lista (autosave con debounce). «Conversación nueva» sigue siendo borrado total y explícito del proyecto. |
 | Trazabilidad pedagógica completa | **Parcial**: hay tipos de alineación Macro principio→resultado de programa Meso y vínculos Programa–Marco / Asignatura–Programa. | La alineación Macro→Meso no se edita en UI; tampoco se enlaza resultado Meso→RA Micro→actividad/evidencia. `Unidad.resultadosAprendizaje` y `ActividadEvaluacion.mide` todavía son texto, no IDs estables. |
 | Citas de fuentes curriculares | **Parcial**: V3 separa fuentes y citas; el editor Macro registra fuentes y muestra citas existentes. | Falta asociar/editar una cita (fuente + localizador/página/sección) desde cada afirmación en la interfaz. |
 | Exportación | **Implementada para Micro**: PDF de texto plano y copia Markdown. | No hay exportación de Macro/Meso ni expediente curricular conjunto. |
@@ -43,8 +43,8 @@
 
 ### Próximo orden recomendado
 
-1. Habilitar la elección Macro/Meso/Micro desde la conversación inicial sin dejar de empezar como chat.
-2. Añadir lista, selección y creación de varios documentos por nivel; no usar «Conversación nueva» para perder el proyecto al querer cambiar de documento.
+1. ~~Elección Macro/Meso/Micro desde la conversación inicial~~ Hecho: tarjetas «¿Por dónde empezamos?», saludo y sugerencias por nivel.
+2. ~~Lista, selección y creación de varios documentos por nivel~~ Hecho: selector + «+ Nuevo» por nivel con proyecto e hilos preservados.
 3. Completar citas curriculares y trazabilidad Macro→Meso→Micro→evaluación, empezando por IDs estables en RA/unidades/actividades del Micro.
 4. Añadir exportación de Macro y Meso, y decidir si se necesita un expediente conjunto.
 5. Probar flujos completos y revisar visualmente escritorio/móvil.
@@ -136,9 +136,9 @@ La adición Macro/Meso **hereda** el mundo visual confirmado en [DESIGN.md](DESI
 
 **Drift documental:** [PRODUCT.md](PRODUCT.md) y varias descripciones de [DESIGN.md](DESIGN.md) todavía describen el producto solo como Micro; DESIGN también limita Mora a sugerencias bibliográficas, mientras la UI Macro usa Mora para sugerencias de afirmaciones. No cambiar esos artefactos de diseño en este handoff: registrar la discrepancia y actualizarlos en la fase de documentación, conservando el mundo visual.
 
-- Estado inicial: chat, saludo y sugerencias; no aparece ficha hasta que hay contenido.
-- Al existir un documento: chat a la izquierda y ficha a la derecha, selector compacto **Asignatura / Programa / Marco**, sin tercer riel.
-- Macro muestra un marco por vez; Meso muestra un programa por vez. Las listas para elegir entre varios documentos son un pendiente.
+- Estado inicial: chat, tarjetas «¿Por dónde empezamos?» por nivel, saludo y sugerencias por nivel; no aparece ficha hasta que hay contenido.
+- Al existir un documento: chat a la izquierda y ficha a la derecha, selector compacto **Asignatura / Programa / Marco** más selector de documento del nivel con **+ Nuevo**, sin tercer riel.
+- Macro/Meso/Micro permiten varios documentos por proyecto: la lista cambia el documento activo y «+ Nuevo» vuelve al lienzo (inicio para Micro) preservando lo anterior y sus hilos.
 - **La interfaz no se ha inspeccionado visualmente en navegador.** Revisar al menos 375/768/1024/1280/1920 px, teclado/foco, estados vacíos, módulo activo, guardado y scopes no compatibles.
 
 ## 7. Alcance que sigue fuera
@@ -170,7 +170,8 @@ npm run build
 2. El dominio se trasladó de una ficha escolar a un microcurrículo universitario de ocho secciones.
 3. Se añadieron secuencia didáctica modular por unidad, instrumentos, recursos alineados y PDF de texto plano.
 4. Se integró Macro/Meso en V3, con migración segura desde `designconia.micro.v1/v2` y continuidad del Micro.
-5. Se añadieron los prompts, editores, API y vínculos Programa–Marco y Asignatura–Programa. El siguiente foco es gestión de múltiples documentos y trazabilidad por IDs hasta la evaluación.
+5. Se añadieron los prompts, editores, API y vínculos Programa–Marco y Asignatura–Programa.
+6. Se añadió gestión multi-documento (selector + «+ Nuevo» por nivel, entrada inicial por nivel con saludo/sugerencias). El siguiente foco es trazabilidad por IDs hasta la evaluación.
 
 > Si cualquier sección histórica de este archivo o [PRODUCT.md](PRODUCT.md) aún describe un producto solo Micro, esta sección y el código reciente describen el estado actual; actualiza las discrepancias cuando corresponda.
 

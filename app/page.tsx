@@ -136,6 +136,8 @@ export default function Page() {
   const [crudoMeso, setCrudoMeso] = useState("");
 
   const estadoV3Ref = useRef<EstadoGuardadoV3 | null>(null);
+  /** Tocada cada vez que el agregado V3 cambia, para refrescar listas sin mutar refs. */
+  const [versionProyecto, setVersionProyecto] = useState(0);
   const idProyectoNuevoRef = useRef<string | null>(null);
   const bloqueoPersistenciaRef = useRef(false);
   const scopeV3NoSoportadoRef = useRef(false);
@@ -412,6 +414,7 @@ export default function Page() {
         }
 
         estadoV3Ref.current = guardado.estado;
+        setVersionProyecto((v) => v + 1);
         const temporalPendiente = guardado.clavesTemporalesPendientes.length > 0;
         if (legadosPendientesRef.current) {
           // Una carga migrada en memoria puede guardar V3 en un turno posterior;
@@ -478,6 +481,7 @@ export default function Page() {
         }
 
         estadoV3Ref.current = guardado.estado;
+        setVersionProyecto((v) => v + 1);
         const temporalPendiente = guardado.clavesTemporalesPendientes.length > 0;
         if (legadosPendientesRef.current) {
           const limpieza = cargarEstadoPersistido(window.localStorage);
@@ -554,6 +558,7 @@ export default function Page() {
         }
 
         estadoV3Ref.current = guardado.estado;
+        setVersionProyecto((v) => v + 1);
         const temporalPendiente = guardado.clavesTemporalesPendientes.length > 0;
         if (legadosPendientesRef.current) {
           const limpieza = cargarEstadoPersistido(window.localStorage);
@@ -690,6 +695,7 @@ export default function Page() {
     }
     estadoV3Ref.current = guardado.estado;
     recargarMeso(guardado.estado);
+    setVersionProyecto((v) => v + 1);
     mostrarAviso(exito);
   }
 
@@ -724,41 +730,214 @@ export default function Page() {
   }
 
   /**
+   * Guarda la vista del módulo visible en el agregado en memoria, sin debounce
+   * y sin escribir al almacén. Devuelve el agregado actualizado o null si aún
+   * no hay proyecto. Nunca muta documentos ni conversaciones hermanas.
+   */
+  function guardarVistaActual(): EstadoGuardadoV3 | null {
+    const base = estadoV3Ref.current;
+    if (!base) return null;
+    if (moduloActivoRef.current === "micro") {
+      const vista = vistaMicroActual();
+      if (vista.microcurriculo === null && vista.mensajes.length === 0) return base;
+      const siguiente = aplicarVistaMicroV3(base, vista, idProyectoActual());
+      estadoV3Ref.current = siguiente;
+      return siguiente;
+    }
+    if (moduloActivoRef.current === "macro") {
+      const vista = vistaMacroActual();
+      if (vista.marco === null && vista.mensajes.length === 0) return base;
+      const siguiente = aplicarVistaMacroV3(base, vista, idProyectoActual());
+      estadoV3Ref.current = siguiente;
+      return siguiente;
+    }
+    const vista = vistaMesoActual();
+    if (vista.programa === null && vista.mensajes.length === 0) return base;
+    const siguiente = aplicarVistaMesoV3(base, vista, idProyectoActual());
+    estadoV3Ref.current = siguiente;
+    return siguiente;
+  }
+
+  /** Carga en los estados visibles la vista Macro de la selección dada. */
+  function mostrarVistaMacro(base: EstadoGuardadoV3) {
+    const r = leerVistaMacroV3(base);
+    if (!r.ok) throw new Error("la vista del marco no está disponible");
+    setMarco(r.vista.marco);
+    setFuentes(r.vista.fuentes);
+    setMensajesMacro(r.vista.mensajes);
+    setSugerenciasMacro(r.vista.sugerencias.length ? r.vista.sugerencias : SUGERENCIAS_APERTURA_MACRO);
+    setIntencionMacro(r.vista.intencion);
+    setSeccionActivaMacro(r.vista.seccionActiva);
+    setCrudoMacro(r.vista.crudo);
+    crudoMacroRef.current = r.vista.crudo;
+  }
+
+  /** Carga en los estados visibles la vista Micro de la selección dada. */
+  function mostrarVistaMicro(base: EstadoGuardadoV3) {
+    const r = leerVistaMicroV3(base);
+    if (!r.ok) throw new Error("la vista del microcurrículo no está disponible");
+    setMicro(r.vista.microcurriculo);
+    setMensajes(r.vista.mensajes);
+    setSugerencias(r.vista.sugerencias);
+    setIntencion(r.vista.intencion);
+    setSeccionActiva(esSeccionMicro(r.vista.seccionActiva) ? r.vista.seccionActiva : null);
+    setCrudoUltimo(r.vista.crudo);
+    crudoRef.current = r.vista.crudo;
+  }
+
+  function existeDocumento(base: EstadoGuardadoV3, modulo: ModuloActivo, id: string): boolean {
+    if (modulo === "micro") return base.proyecto.asignaturas.some((a) => a.id === id);
+    if (modulo === "macro") return base.proyecto.marcos.some((m) => m.id === id);
+    return base.proyecto.programas.some((p) => p.id === id);
+  }
+
+  /**
+   * Abre un documento existente (o el lienzo con id null) sin borrar nada.
+   * Para Micro, el lienzo es la conversación de inicio: nunca se usa una
+   * selección "micro:null" porque esa lista no es una ficha legible.
+   */
+  function abrirDocumento(modulo: ModuloActivo, id: string | null) {
+    if (enviando) return;
+    abortRef.current?.abort();
+    try {
+      const base = guardarVistaActual() ?? estadoV3Ref.current;
+      if (!base) {
+        if (modulo !== moduloActivoRef.current) setModuloActivo(modulo);
+        return;
+      }
+      if (id !== null && !existeDocumento(base, modulo, id)) {
+        throw new Error("ese documento ya no existe en el proyecto");
+      }
+      const seleccion =
+        modulo === "micro"
+          ? id === null
+            ? { modulo: "inicio" as const, documentoId: null }
+            : { modulo: "micro" as const, documentoId: id }
+          : { modulo, documentoId: id };
+      const conSeleccion: EstadoGuardadoV3 = { ...base, seleccion };
+      estadoV3Ref.current = conSeleccion;
+      docIdPorModuloRef.current[modulo] = id;
+
+      if (modulo === "macro") mostrarVistaMacro(conSeleccion);
+      else if (modulo === "meso") recargarMeso(conSeleccion);
+      else mostrarVistaMicro(conSeleccion);
+      if (modulo !== moduloActivoRef.current) setModuloActivo(modulo);
+
+      const guardado = guardarEstadoV3(window.localStorage, conSeleccion);
+      if (!guardado.ok) {
+        setAvisoPersistencia(
+          "El proyecto sigue disponible en esta sesión, pero no se pudo guardar en el navegador. No cierres la pestaña hasta resolverlo."
+        );
+      } else {
+        estadoV3Ref.current = guardado.estado;
+      }
+      setVersionProyecto((v) => v + 1);
+    } catch (errorCambio) {
+      setAvisoPersistencia(
+        `No pude abrir ese documento (${nombreErrorPersistencia(errorCambio)}). No se perdió nada: seguís donde estabas.`
+      );
+    }
+  }
+
+  /**
+   * Empieza un documento nuevo del módulo indicado sin descartar el proyecto.
+   * Guarda primero lo visible; el documento actual queda en la lista y el chat
+   * vuelve al lienzo (inicio para Micro) para conversar el nuevo desde cero.
+   * "Conversación nueva" sigue existiendo para el borrado total y explícito.
+   */
+  function nuevoDocumento(modulo: ModuloActivo) {
+    if (enviando || scopeV3NoSoportadoRef.current) return;
+    abortRef.current?.abort();
+    try {
+      const base = guardarVistaActual() ?? estadoV3Ref.current;
+      if (!base) {
+        if (modulo === "macro") {
+          const vacia = vistaMacroVacia();
+          setMarco(vacia.marco);
+          setMensajesMacro(vacia.mensajes);
+          setSugerenciasMacro(SUGERENCIAS_APERTURA_MACRO);
+          setIntencionMacro(vacia.intencion);
+          setSeccionActivaMacro(vacia.seccionActiva);
+          setCrudoMacro(vacia.crudo);
+          crudoMacroRef.current = vacia.crudo;
+        } else if (modulo === "meso") {
+          const vacia = vistaMesoVacia();
+          setPrograma(vacia.programa);
+          setVinculoMarcoId(vacia.vinculoMarcoId);
+          setMensajesMeso(vacia.mensajes);
+          setSugerenciasMeso(SUGERENCIAS_APERTURA_MESO);
+          setIntencionMeso(vacia.intencion);
+          setSeccionActivaMeso(vacia.seccionActiva);
+          setCrudoMeso(vacia.crudo);
+          crudoMesoRef.current = vacia.crudo;
+        } else {
+          const vacia = vistaMicroVacia();
+          setMicro(vacia.microcurriculo);
+          setMensajes(vacia.mensajes);
+          setSugerencias(SUGERENCIAS_APERTURA);
+          setIntencion(vacia.intencion);
+          setSeccionActiva(null);
+          setCrudoUltimo(vacia.crudo);
+          crudoRef.current = vacia.crudo;
+        }
+        if (modulo !== moduloActivoRef.current) setModuloActivo(modulo);
+        return;
+      }
+      const seleccion =
+        modulo === "micro"
+          ? { modulo: "inicio" as const, documentoId: null }
+          : { modulo, documentoId: null };
+      const conSeleccion: EstadoGuardadoV3 = { ...base, seleccion };
+      estadoV3Ref.current = conSeleccion;
+      docIdPorModuloRef.current[modulo] = null;
+
+      if (modulo === "macro") mostrarVistaMacro(conSeleccion);
+      else if (modulo === "meso") recargarMeso(conSeleccion);
+      else mostrarVistaMicro(conSeleccion);
+      if (modulo !== moduloActivoRef.current) setModuloActivo(modulo);
+
+      const guardado = guardarEstadoV3(window.localStorage, conSeleccion);
+      if (!guardado.ok) {
+        setAvisoPersistencia(
+          "El proyecto sigue disponible en esta sesión, pero no se pudo guardar en el navegador. No cierres la pestaña hasta resolverlo."
+        );
+      } else {
+        estadoV3Ref.current = guardado.estado;
+      }
+      setVersionProyecto((v) => v + 1);
+      mostrarAviso(
+        modulo === "micro"
+          ? "Listo para una nueva asignatura: lo anterior quedó guardado en el proyecto."
+          : modulo === "meso"
+            ? "Listo para un nuevo programa: lo anterior quedó guardado en el proyecto."
+            : "Listo para un nuevo marco: lo anterior quedó guardado en el proyecto."
+      );
+    } catch (errorNuevo) {
+      setAvisoPersistencia(
+        `No pude empezar un documento nuevo (${nombreErrorPersistencia(errorNuevo)}). No se perdió nada: seguís donde estabas.`
+      );
+    }
+  }
+
+  /**
    * Cambia de módulo guardando primero lo del módulo actual (sin debounce) y
    * cargando después la vista del destino desde el agregado. Nunca mezcla
    * conversaciones ni documentos entre módulos.
    */
   function cambiarModulo(destino: ModuloActivo) {
-    if (destino === moduloActivo || enviando) return;
+    if (destino === moduloActivoRef.current || enviando) return;
     abortRef.current?.abort();
     try {
-      let base = estadoV3Ref.current;
+      let base = guardarVistaActual() ?? estadoV3Ref.current;
       if (base) {
-        if (moduloActivo === "micro") {
-          const vista = vistaMicroActual();
-          if (vista.microcurriculo !== null || vista.mensajes.length > 0) {
-            base = aplicarVistaMicroV3(base, vista, idProyectoActual());
-            estadoV3Ref.current = base;
-          }
-        } else if (moduloActivo === "macro") {
-          const vista = vistaMacroActual();
-          if (vista.marco !== null || vista.mensajes.length > 0) {
-            base = aplicarVistaMacroV3(base, vista, idProyectoActual());
-            estadoV3Ref.current = base;
-          }
-        } else {
-          const vista = vistaMesoActual();
-          if (vista.programa !== null || vista.mensajes.length > 0) {
-            base = aplicarVistaMesoV3(base, vista, idProyectoActual());
-            estadoV3Ref.current = base;
-          }
-        }
         const sel = base.seleccion;
         if (sel.modulo === "micro" || sel.modulo === "macro" || sel.modulo === "meso") {
           docIdPorModuloRef.current[sel.modulo] = sel.documentoId;
         }
         // Apunta la selección al destino: documento recordado, primero que
         // exista, o lienzo. Se verifica que el recordado siga existiendo.
+        // Para Micro el lienzo es la conversación de inicio: una selección
+        // "micro:null" no es una ficha legible y rompería la lectura.
         const recordado = docIdPorModuloRef.current[destino];
         const primero =
           destino === "micro"
@@ -768,44 +947,23 @@ export default function Page() {
               : base.proyecto.programas[0]?.id;
         const candidato = recordado ?? primero ?? null;
         const existe =
-          candidato === null ||
-          (destino === "micro"
-            ? base.proyecto.asignaturas.some((a) => a.id === candidato)
-            : destino === "macro"
-              ? base.proyecto.marcos.some((m) => m.id === candidato)
-              : base.proyecto.programas.some((p) => p.id === candidato));
-        const conSeleccion: EstadoGuardadoV3 = {
-          ...base,
-          seleccion: { modulo: destino, documentoId: existe ? candidato : null }
-        };
+          candidato === null || existeDocumento(base, destino, candidato);
+        const elegido = existe ? candidato : null;
+        const conSeleccion: EstadoGuardadoV3 =
+          destino === "micro" && elegido === null
+            ? { ...base, seleccion: { modulo: "inicio", documentoId: null } }
+            : { ...base, seleccion: { modulo: destino, documentoId: elegido } };
         base = conSeleccion;
         estadoV3Ref.current = base;
 
         if (destino === "macro") {
-          const r = leerVistaMacroV3(base);
-          if (!r.ok) throw new Error("la vista del marco no está disponible");
-          setMarco(r.vista.marco);
-          setFuentes(r.vista.fuentes);
-          setMensajesMacro(r.vista.mensajes);
-          setSugerenciasMacro(r.vista.sugerencias.length ? r.vista.sugerencias : SUGERENCIAS_APERTURA_MACRO);
-          setIntencionMacro(r.vista.intencion);
-          setSeccionActivaMacro(r.vista.seccionActiva);
-          setCrudoMacro(r.vista.crudo);
-          crudoMacroRef.current = r.vista.crudo;
+          mostrarVistaMacro(base);
         } else if (destino === "meso") {
           recargarMeso(base);
         } else {
-          const r = leerVistaMicroV3(base);
-          if (!r.ok) throw new Error("la vista del microcurrículo no está disponible");
-          setMicro(r.vista.microcurriculo);
-          setMensajes(r.vista.mensajes);
-          setSugerencias(r.vista.sugerencias);
-          setIntencion(r.vista.intencion);
-          setSeccionActiva(esSeccionMicro(r.vista.seccionActiva) ? r.vista.seccionActiva : null);
-          setCrudoUltimo(r.vista.crudo);
-          crudoRef.current = r.vista.crudo;
+          mostrarVistaMicro(base);
         }
-        docIdPorModuloRef.current[destino] = conSeleccion.seleccion.documentoId;
+        docIdPorModuloRef.current[destino] = destino === "micro" && elegido === null ? null : elegido;
         setModuloActivo(destino);
 
         const guardado = guardarEstadoV3(window.localStorage, base);
@@ -816,6 +974,7 @@ export default function Page() {
         } else {
           estadoV3Ref.current = guardado.estado;
         }
+        setVersionProyecto((v) => v + 1);
       } else {
         // Sin proyecto todavía: el cambio es solo de vista.
         setModuloActivo(destino);
@@ -1589,12 +1748,40 @@ export default function Page() {
       ? "Tu programa se guarda en este navegador. Lo que genera el asistente es una propuesta: revísalo, confirma cada afirmación y ajústalo antes de presentarlo."
       : "Tu microcurrículo se guarda en este navegador. Lo que genera el asistente es una propuesta: revísalo, confirma la bibliografía y ajústalo antes de presentarlo.";
   /* Listas del proyecto para el editor del programa: se leen del agregado. */
+  // versionProyecto solo fuerza el re-render cuando el agregado cambia en memoria.
+  void versionProyecto;
   const proyectoEnVista = estadoV3Ref.current?.proyecto ?? null;
+  const seleccionEnVista = estadoV3Ref.current?.seleccion ?? null;
   const marcosDisponibles = (proyectoEnVista?.marcos ?? []).map((m) => ({
     id: m.id,
     nombre: m.nombre,
     estado: m.estado
   }));
+  /* Listas de documentos por nivel para el selector multi-documento. */
+  const documentosMicro = (proyectoEnVista?.asignaturas ?? []).map((a) => ({
+    id: a.id,
+    nombre: a.microcurriculo.ident.asignatura.trim() || `Asignatura ${a.microcurriculo.folio}`
+  }));
+  const documentosMacro = (proyectoEnVista?.marcos ?? []).map((m) => ({
+    id: m.id,
+    nombre: m.nombre.trim() || "Marco sin nombre"
+  }));
+  const documentosMeso = (proyectoEnVista?.programas ?? []).map((p) => ({
+    id: p.id,
+    nombre: p.nombre.trim() || "Programa sin nombre"
+  }));
+  const documentoActualId =
+    seleccionEnVista?.modulo === moduloActivo ? (seleccionEnVista.documentoId ?? null) : null;
+  const documentosDelModulo =
+    moduloActivo === "macro" ? documentosMacro : moduloActivo === "meso" ? documentosMeso : documentosMicro;
+  /* Saludo explícito por nivel: el chat sigue siendo la entrada, pero el docente
+     elige desde el inicio si empieza una asignatura, un programa o un marco. */
+  const saludoPorModulo =
+    moduloActivo === "macro"
+      ? "Hola. Soy tu asistente de diseño curricular para educación superior. ¿Qué marco institucional quieres redactar o revisar?"
+      : moduloActivo === "meso"
+        ? "Hola. Soy tu asistente de diseño curricular para educación superior. ¿Qué programa académico quieres diseñar o revisar?"
+        : SALUDO_APERTURA;
   const asignaturasVinculadas =
     programa === null || !proyectoEnVista
       ? []
@@ -1636,6 +1823,14 @@ export default function Page() {
             onCambiar={cambiarModulo}
             deshabilitado={enviando || scopeV3NoSoportado}
           />
+          <SelectorDocumento
+            modulo={moduloActivo}
+            documentos={documentosDelModulo}
+            seleccionadoId={documentoActualId}
+            onElegir={(id) => abrirDocumento(moduloActivo, id)}
+            onNuevo={() => nuevoDocumento(moduloActivo)}
+            deshabilitado={enviando || scopeV3NoSoportado || !hidratado}
+          />
           <span className="ml-auto flex items-center gap-2 text-[11px] text-black/50">
             <span
               className={`h-2 w-2 rounded-full ${sinClave ? "bg-terracotta" : salud === null ? "bg-mist" : "bg-rainfall"}`}
@@ -1658,6 +1853,9 @@ export default function Page() {
               </p>
             </div>
           )}
+          {chatMensajes.length === 0 && (
+            <NivelInicial activo={moduloActivo} onElegir={cambiarModulo} deshabilitado={enviando} />
+          )}
           <Chat
             mensajes={chatMensajes}
             enviando={enviando}
@@ -1666,7 +1864,7 @@ export default function Page() {
             onDetener={() => abortRef.current?.abort()}
             onReintentar={reintentar}
             sugerencias={chatMensajes.length === 0 ? chatSemillas : chatSugerencias}
-            saludo={SALUDO_APERTURA}
+            saludo={saludoPorModulo}
             variante="limpio"
             deshabilitado={!hidratado || sinClave || scopeV3NoSoportado}
             motivoDeshabilitado={
@@ -1737,7 +1935,7 @@ export default function Page() {
             onDetener={() => abortRef.current?.abort()}
             onReintentar={reintentar}
             sugerencias={chatSugerencias}
-            saludo={SALUDO_APERTURA}
+            saludo={saludoPorModulo}
             variante="lateral"
             deshabilitado={!hidratado || sinClave || scopeV3NoSoportado}
             motivoDeshabilitado={
@@ -1789,6 +1987,14 @@ export default function Page() {
             activo={moduloActivo}
             onCambiar={cambiarModulo}
             deshabilitado={enviando || scopeV3NoSoportado}
+          />
+          <SelectorDocumento
+            modulo={moduloActivo}
+            documentos={documentosDelModulo}
+            seleccionadoId={documentoActualId}
+            onElegir={(id) => abrirDocumento(moduloActivo, id)}
+            onNuevo={() => nuevoDocumento(moduloActivo)}
+            deshabilitado={enviando || scopeV3NoSoportado || !hidratado}
           />
 
           <div className="ml-auto flex items-center gap-1.5">
@@ -1938,6 +2144,124 @@ function SelectorModulo({
           {m.etiqueta}
         </button>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Selector de documento dentro del nivel activo. Lista los documentos del
+ * proyecto, abre el elegido y ofrece empezar uno nuevo sin borrar el proyecto.
+ * "Conversación nueva" queda reservada para el borrado total y explícito.
+ */
+function SelectorDocumento({
+  modulo,
+  documentos,
+  seleccionadoId,
+  onElegir,
+  onNuevo,
+  deshabilitado
+}: {
+  modulo: ModuloActivo;
+  documentos: { id: string; nombre: string }[];
+  seleccionadoId: string | null;
+  onElegir: (id: string | null) => void;
+  onNuevo: () => void;
+  deshabilitado?: boolean;
+}) {
+  const etiqueta =
+    modulo === "macro" ? "Marco" : modulo === "meso" ? "Programa" : "Asignatura";
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1">
+      <label className="sr-only" htmlFor={`selector-documento-${modulo}`}>
+        {etiqueta} activo
+      </label>
+      <select
+        id={`selector-documento-${modulo}`}
+        value={seleccionadoId ?? ""}
+        onChange={(e) => onElegir(e.target.value === "" ? null : e.target.value)}
+        disabled={deshabilitado}
+        title={documentos.length ? `Elegir ${etiqueta.toLowerCase()} del proyecto` : `Aún no hay documentos en este nivel`}
+        className="max-w-[11rem] truncate rounded-full border border-black/10 bg-white px-2 py-1 text-[11px] font-medium text-black/70 hover:border-black/25 disabled:opacity-60"
+      >
+        {documentos.length === 0 && <option value="">Sin documentos</option>}
+        {documentos.length > 0 && seleccionadoId === null && (
+          <option value="">Nuevo…</option>
+        )}
+        {documentos.map((d) => (
+          <option key={d.id} value={d.id}>
+            {d.nombre}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        onClick={onNuevo}
+        disabled={deshabilitado}
+        title={`Empezar un ${etiqueta.toLowerCase()} nuevo sin borrar el proyecto`}
+        className="inline-flex items-center rounded-full border border-black/10 bg-white px-2 py-1 text-[11px] font-medium text-black/60 hover:border-black/25 hover:text-black disabled:opacity-60"
+      >
+        + Nuevo
+      </button>
+    </span>
+  );
+}
+
+/**
+ * Entrada inicial por nivel: el chat sigue siendo lo primero, pero el docente
+ * ve de forma explícita que puede empezar una asignatura, un programa o un marco.
+ */
+function NivelInicial({
+  activo,
+  onElegir,
+  deshabilitado
+}: {
+  activo: ModuloActivo;
+  onElegir: (m: ModuloActivo) => void;
+  deshabilitado?: boolean;
+}) {
+  const opciones = [
+    {
+      id: "micro" as const,
+      titulo: "Asignatura",
+      detalle: "Microcurrículo de una materia"
+    },
+    {
+      id: "meso" as const,
+      titulo: "Programa",
+      detalle: "Perfil y resultados del programa"
+    },
+    {
+      id: "macro" as const,
+      titulo: "Marco",
+      detalle: "Modelo y principios institucionales"
+    }
+  ];
+  return (
+    <div className="mx-auto w-full max-w-[640px] pb-2">
+      <p className="px-1 pb-1.5 text-[11px] font-medium uppercase tracking-wide text-black/45">
+        ¿Por dónde empezamos?
+      </p>
+      <div className="flex flex-col gap-1.5 sm:flex-row">
+        {opciones.map((o) => (
+          <button
+            key={o.id}
+            type="button"
+            onClick={() => onElegir(o.id)}
+            disabled={deshabilitado}
+            aria-pressed={activo === o.id}
+            className={`flex-1 rounded-xl border px-3 py-2 text-left transition-colors disabled:opacity-60 ${
+              activo === o.id
+                ? "border-sow bg-sow text-seedling shadow-burbuja"
+                : "border-black/10 bg-white/80 text-black/70 hover:border-black/25 hover:text-black"
+            }`}
+          >
+            <span className="block text-[12.5px] font-semibold">{o.titulo}</span>
+            <span className={`block text-[11px] ${activo === o.id ? "opacity-80" : "text-black/50"}`}>
+              {o.detalle}
+            </span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
