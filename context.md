@@ -122,7 +122,7 @@ lib/
 
 ## 5. Verificación comprobada
 
-Último checkpoint de implementación antes de esta actualización: commit `177a4aa` (vínculo Micro–Meso) en la rama local `feature/curricular-project-foundation`. Los commits de desarrollo **no se han subido a GitHub**. Esta edición de `context.md` se confirma por separado; no cambiar el checkpoint de código al leerla.
+Último checkpoint de implementación: commit `09052a6` (trazabilidad Macro–Meso–Micro con IDs estables y matrices editables) en la rama local `feature/curricular-project-foundation`. Los commits de desarrollo **no se han subido a GitHub**.
 
 ```text
 npm test              → 246 pruebas (95 + 14 + 38 + 11 + 26 + 11 + 23 + 17 + 11)
