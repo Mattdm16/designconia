@@ -10,7 +10,9 @@ import {
   LIMITES,
   SIN_PRERREQUISITOS,
   TIPOS_SESION,
+  cargaHorariaCuadra,
   crearResultado,
+  herramientasNoDeclaradas,
   horasPorTipo,
   nuevaActividadEvaluacion,
   rasDelMicro,
@@ -534,11 +536,11 @@ export function SecuenciaSeccion({
 
   const mapeadas = horasPorTipo(sesiones);
   const declaradas = micro.ident.horas;
-  const difiere =
-    sesiones.length > 0 &&
-    (mapeadas.teoricas !== declaradas.teoricas ||
-      mapeadas.practicas !== declaradas.practicas ||
-      mapeadas.independientes !== declaradas.independientes);
+  const totalDeclarado = declaradas.teoricas + declaradas.practicas + declaradas.independientes;
+  // Con tolerancia de redondeo (sesiones de 45 min): si cuadra, se confirma
+  // en verde y el error desaparece; solo el desbalance real avisa.
+  const cuadra = sesiones.length === 0 || totalDeclarado <= 0 || cargaHorariaCuadra(micro);
+  const difiere = sesiones.length > 0 && totalDeclarado > 0 && !cuadra;
 
   /**
    * Renumera SIEMPRE sobre el conjunto completo, ordenando por unidad: con
@@ -595,6 +597,11 @@ export function SecuenciaSeccion({
             {difiere && (
               <span className="inline-flex items-center gap-1 text-terracotta">
                 <Icono nombre="alerta" className="h-3 w-3" /> no cuadra con la carga horaria
+              </span>
+            )}
+            {!difiere && (
+              <span className="inline-flex items-center gap-1 text-rainfall">
+                <Icono nombre="check" className="h-3 w-3" /> cuadra con la carga horaria
               </span>
             )}
           </div>
@@ -1472,8 +1479,17 @@ export function BibliografiaSeccion({
           <p className="mt-1 rounded-xl bg-terracotta/[0.07] px-3 py-2 text-[11px] leading-relaxed text-black/70">
             {recursosSinUso(micro).join(", ")}{" "}
             {recursosSinUso(micro).length === 1 ? "está declarado" : "están declarados"} pero no aparece
-            {recursosSinUso(micro).length === 1 ? "" : "n"} en ninguna actividad ni sesión. Una herramienta que no se
-            usa no alinea nada.
+            {recursosSinUso(micro).length === 1 ? "" : "n"} en ninguna actividad ni sesión. Exige su uso en el
+            Sistema de evaluación (herramientas del entregable, con su instrumento y sus RA) o en una sesión:
+            una herramienta que no se usa no alinea nada.
+          </p>
+        )}
+        {herramientasNoDeclaradas(micro).length > 0 && (
+          <p className="mt-1 rounded-xl bg-terracotta/[0.07] px-3 py-2 text-[11px] leading-relaxed text-black/70">
+            {herramientasNoDeclaradas(micro).join(", ")}{" "}
+            {herramientasNoDeclaradas(micro).length === 1 ? "se exige" : "se exigen"} en la evaluación pero no
+            {herramientasNoDeclaradas(micro).length === 1 ? " está" : " están"} en esta lista. Declárala
+            {herramientasNoDeclaradas(micro).length === 1 ? "la" : "s"} aquí para que el recurso quede trazado.
           </p>
         )}
       </div>

@@ -738,6 +738,9 @@ export function seccionCompleta(m: Microcurriculo, s: SeccionId): boolean {
       );
     case "secuencia":
       // Cada unidad con contenido necesita al menos una sesión que la dicte.
+      // La carga horaria se avisa en la ficha (con tolerancia de redondeo)
+      // pero no bloquea el cierre: durante la construcción es normal que
+      // lo planificado aún no sume el total declarado.
       return (
         m.secuencia.sesiones.length > 0 &&
         m.contenido.unidades.every(
@@ -747,16 +750,31 @@ export function seccionCompleta(m: Microcurriculo, s: SeccionId): boolean {
     case "metodologia":
       return m.metodologia.estrategias.length > 0;
     case "evaluacion":
-      // Un entregable sin instrumento no se puede calificar de forma auditable.
+      // Un entregable sin instrumento no se puede calificar de forma
+      // auditable; uno sin RA vinculado no se puede trazar; y una
+      // herramienta exigida que no está en los recursos rompe la
+      // alineación con la sección 8.
       return (
         m.evaluacion.cortes.length > 0 &&
         totalPorcentaje(m.evaluacion.cortes) === 100 &&
         m.evaluacion.cortes.every((c) =>
-          c.actividades.every((a) => !a.nombre.trim() || a.instrumento.trim().length > 0)
-        )
+          c.actividades.every(
+            (a) =>
+              !a.nombre.trim() ||
+              (a.instrumento.trim().length > 0 && a.mideIds.length > 0)
+          )
+        ) &&
+        herramientasNoDeclaradas(m).length === 0
       );
     case "bibliografia":
-      return m.bibliografia.obligatorias.length > 0;
+      // La sección solo cierra si no hay recursos sin uso declarado: una
+      // herramienta listada (GeoGebra, Zotero, aula virtual…) debe exigirse
+      // en un entregable o usarse en una sesión.
+      return (
+        m.bibliografia.obligatorias.length > 0 &&
+        recursosSinUso(m).length === 0 &&
+        herramientasNoDeclaradas(m).length === 0
+      );
   }
 }
 
@@ -958,35 +976,128 @@ export function unidadesConSesiones(m: Microcurriculo): number {
 }
 
 /**
- * Recursos declarados que no aparecen en ninguna actividad de evaluación ni
- * en ninguna sesión. Alimenta el aviso suave de alineación de herramientas.
+ * Normaliza un nombre de herramienta/recurso para comparar sin falsos
+ * negativos por mayúsculas, tildes o texto entre paréntesis: "GeoGebra
+ * (software)" debe coincidir con "GeoGebra", y "Aula virtual
+ * institucional" con "Aula virtual".
  */
-export function recursosSinUso(m: Microcurriculo): string[] {
-  const enActividades = new Set(
-    m.evaluacion.cortes.flatMap((c) => c.actividades.flatMap((a) => a.herramientas.map((h) => h.toLowerCase())))
-  );
-  const enSesiones = new Set(
-    m.secuencia.sesiones.flatMap((s) =>
-      [...s.inicio, ...s.desarrollo, ...s.cierre].flatMap((f) => f.recursos.map((r) => r.toLowerCase()))
-    )
-  );
-  return m.bibliografia.recursos.filter((r) => {
-    const clave = r.toLowerCase();
-    return !enActividades.has(clave) && !enSesiones.has(clave);
-  });
+export function normalizarHerramienta(v: string): string {
+  return v
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
-/** Cuántas actividades mencionan una herramienta concreta (para la insignia). */
+function tokensSignificativos(normalizado: string): string[] {
+  return normalizado.split(" ").filter((t) => t.length >= 3);
+}
+
+/**
+ * ¿Dos menciones hablan de la misma herramienta? Acepta igualdad exacta,
+ * contención en cualquier dirección ("aula virtual" en "aula virtual
+ * institucional") o cobertura de tokens significativos, para no marcar
+ * "(sin uso declarado)" cuando el docente sí la usó con otra redacción.
+ */
+export function mismaHerramienta(a: string, b: string): boolean {
+  const na = normalizarHerramienta(a);
+  const nb = normalizarHerramienta(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  if (na.includes(nb) || nb.includes(na)) return true;
+  const ta = tokensSignificativos(na);
+  const tb = tokensSignificativos(nb);
+  if (ta.length === 0 || tb.length === 0) return false;
+  const corta = ta.length <= tb.length ? ta : tb;
+  const larga = ta.length <= tb.length ? nb : na;
+  return corta.every((t) => larga.includes(t));
+}
+
+function coincideConAlguna(mencion: string, lista: string[]): boolean {
+  return lista.some((candidata) => mismaHerramienta(mencion, candidata));
+}
+
+/**
+ * Recursos declarados que no aparecen en ninguna actividad de evaluación ni
+ * en ninguna sesión. Alimenta el aviso de alineación de herramientas: un
+ * recurso listado debe exigirse en un entregable o usarse en una sesión.
+ */
+export function recursosSinUso(m: Microcurriculo): string[] {
+  const usadas = [
+    ...m.evaluacion.cortes.flatMap((c) => c.actividades.flatMap((a) => a.herramientas)),
+    ...m.secuencia.sesiones.flatMap((s) =>
+      [...s.inicio, ...s.desarrollo, ...s.cierre].flatMap((f) => f.recursos)
+    )
+  ];
+  return m.bibliografia.recursos.filter((r) => r.trim() && !coincideConAlguna(r, usadas));
+}
+
+/** Cuántas actividades/sesiones mencionan una herramienta concreta (insignia). */
 export function usosDeRecurso(m: Microcurriculo, recurso: string): number {
-  const clave = recurso.toLowerCase();
   const enAct = m.evaluacion.cortes.reduce(
-    (a, c) => a + c.actividades.filter((x) => x.herramientas.some((h) => h.toLowerCase() === clave)).length,
+    (a, c) => a + c.actividades.filter((x) => x.herramientas.some((h) => mismaHerramienta(h, recurso))).length,
     0
   );
   const enSes = m.secuencia.sesiones.filter((s) =>
-    [...s.inicio, ...s.desarrollo, ...s.cierre].some((f) => f.recursos.some((r) => r.toLowerCase() === clave))
+    [...s.inicio, ...s.desarrollo, ...s.cierre].some((f) => f.recursos.some((r) => mismaHerramienta(r, recurso)))
   ).length;
   return enAct + enSes;
+}
+
+/**
+ * Herramientas exigidas en actividades que no están declaradas en la
+ * bibliografía. Es la otra mitad del desalineamiento: si el entregable
+ * exige GeoGebra, GeoGebra debe estar en los recursos del curso.
+ */
+export function herramientasNoDeclaradas(m: Microcurriculo): string[] {
+  const declaradas = m.bibliografia.recursos;
+  const usadas = m.evaluacion.cortes.flatMap((c) => c.actividades.flatMap((a) => a.herramientas));
+  const faltantes: string[] = [];
+  for (const h of usadas) {
+    if (!h.trim()) continue;
+    if (!coincideConAlguna(h, declaradas) && !faltantes.some((x) => mismaHerramienta(x, h))) {
+      faltantes.push(h);
+    }
+  }
+  return faltantes;
+}
+
+/**
+ * Minutos planificados por tipo, sin redondeo: suma directa de duracionMin.
+ * (horasPorTipo redondea cada sesión a un decimal para mostrarla; aquí se
+ * compara el tiempo real para no castigar bloques de 45 o 50 min.)
+ */
+export function minutosPorTipo(sesiones: Sesion[]): Horas {
+  const acc: Horas = { teoricas: 0, practicas: 0, independientes: 0 };
+  for (const s of sesiones) {
+    const min = Number.isFinite(s.duracionMin) ? s.duracionMin : 0;
+    if (s.tipo === "practica") acc.practicas += min;
+    else if (s.tipo === "independiente") acc.independientes += min;
+    else acc.teoricas += min;
+  }
+  return acc;
+}
+
+/**
+ * ¿La secuencia planificada cuadra con la carga horaria declarada?
+ * Compara minutos reales por tipo (teórica/práctica/independiente) con una
+ * tolerancia de medio bloque de clase (30 min): absorbe restos de bloques
+ * de 45 o 50 min y el redondeo de la vista, pero un desbalance real
+ * (una sesión entera de más o de menos) sí se señala.
+ */
+export const TOLERANCIA_CARGA_MINUTOS = 30;
+
+export function cargaHorariaCuadra(m: Microcurriculo, toleranciaMin = TOLERANCIA_CARGA_MINUTOS): boolean {
+  if (m.secuencia.sesiones.length === 0) return true;
+  if (totalHoras(m.ident.horas) <= 0) return true;
+  const mins = minutosPorTipo(m.secuencia.sesiones);
+  return (
+    Math.abs(mins.teoricas - m.ident.horas.teoricas * 60) <= toleranciaMin &&
+    Math.abs(mins.practicas - m.ident.horas.practicas * 60) <= toleranciaMin &&
+    Math.abs(mins.independientes - m.ident.horas.independientes * 60) <= toleranciaMin
+  );
 }
 
 export function seccionesCompletas(m: Microcurriculo): number {
@@ -1155,7 +1266,21 @@ export function validarMicrocurriculo(m: Microcurriculo): string[] {
     );
   }
 
-  return problemas.slice(0, 3);
+  const sinUso = recursosSinUso(m);
+  if (sinUso.length > 0 && m.bibliografia.recursos.length > 0) {
+    problemas.push(
+      `${sinUso.join(", ")} ${sinUso.length === 1 ? "está declarado" : "están declarados"} en recursos pero sin uso en ninguna actividad ni sesión. Exige su uso en el Sistema de evaluación (herramientas del entregable) o úsalo en una sesión.`
+    );
+  }
+
+  const noDeclaradas = herramientasNoDeclaradas(m);
+  if (noDeclaradas.length > 0) {
+    problemas.push(
+      `${noDeclaradas.join(", ")} ${noDeclaradas.length === 1 ? "se exige" : "se exigen"} en la evaluación pero no ${noDeclaradas.length === 1 ? "está" : "están"} en los recursos. Declárala en Bibliografía y recursos.`
+    );
+  }
+
+  return problemas.slice(0, 4);
 }
 
 /* ------------------------------------------------------------------ */

@@ -37,6 +37,9 @@ import {
   GRUPO_SIN_UNIDAD,
   recursosSinUso,
   usosDeRecurso,
+  mismaHerramienta,
+  herramientasNoDeclaradas,
+  cargaHorariaCuadra,
   unidadesSinResultados,
   unidadesSinSesiones,
   actividadesSinInstrumento,
@@ -1041,6 +1044,105 @@ prueba("recursosSinUso detecta la herramienta que solo está listada", () => {
     bibliografia: { ...MICRO_COMPLETO.borrador.bibliografia, recursos: ["GitHub", "Trello"] }
   });
   assert.deepEqual(recursosSinUso(m), ["Trello"]);
+});
+
+prueba("la misma herramienta coincide aunque cambie la redacción", () => {
+  assert.equal(mismaHerramienta("GeoGebra", "GeoGebra (software de geometría)"), true);
+  assert.equal(mismaHerramienta("Aula virtual", "Aula virtual institucional"), true);
+  assert.equal(mismaHerramienta("Zotero", "Gestor Zotero"), true);
+  assert.equal(mismaHerramienta("GeoGebra", "GraphOnline"), false);
+  const m = normalizarMicrocurriculo({
+    ...MICRO_COMPLETO.borrador,
+    evaluacion: {
+      cortes: [
+        {
+          nombre: "Segundo corte",
+          porcentaje: 100,
+          actividades: [
+            {
+              nombre: "Trabajo de modelado con relaciones",
+              instrumento: "Rúbrica analítica",
+              herramientas: ["GeoGebra"]
+            }
+          ]
+        }
+      ]
+    },
+    bibliografia: {
+      ...MICRO_COMPLETO.borrador.bibliografia,
+      recursos: ["GeoGebra (software de geometría)", "Biblioteca digital"]
+    }
+  });
+  assert.deepEqual(recursosSinUso(m), ["Biblioteca digital"]);
+  assert.deepEqual(herramientasNoDeclaradas(m), []);
+});
+
+prueba("herramientasNoDeclaradas detecta lo exigido pero no listado", () => {
+  const m = normalizarMicrocurriculo({
+    ...MICRO_COMPLETO.borrador,
+    evaluacion: {
+      cortes: [
+        {
+          nombre: "Segundo corte",
+          porcentaje: 100,
+          actividades: [
+            { nombre: "Modelado", instrumento: "Rúbrica analítica", herramientas: ["GraphOnline"] }
+          ]
+        }
+      ]
+    }
+  });
+  assert.deepEqual(herramientasNoDeclaradas(m), ["GraphOnline"]);
+});
+
+prueba("cargaHorariaCuadra tolera el redondeo de sesiones de 45 min", () => {
+  const dosDe90 = [
+    { numero: 1, unidad: 1, tema: "A", duracionMin: 90, tipo: "teorica" },
+    { numero: 2, unidad: 1, tema: "B", duracionMin: 90, tipo: "teorica" }
+  ];
+  const exacta = normalizarMicrocurriculo({
+    ...MICRO_COMPLETO.borrador,
+    ident: { ...MICRO_COMPLETO.borrador.ident, horas: { teoricas: 3, practicas: 0, independientes: 0 } },
+    secuencia: { sesiones: dosDe90 }
+  });
+  assert.equal(cargaHorariaCuadra(exacta), true);
+  // Dos bloques de 45 min (90 min) frente a 2 h declaradas: el resto de
+  // medio bloque no es un error.
+  const restoMenor = normalizarMicrocurriculo({
+    ...MICRO_COMPLETO.borrador,
+    ident: { ...MICRO_COMPLETO.borrador.ident, horas: { teoricas: 2, practicas: 0, independientes: 0 } },
+    secuencia: {
+      sesiones: [
+        { numero: 1, unidad: 1, tema: "A", duracionMin: 45, tipo: "teorica" },
+        { numero: 2, unidad: 1, tema: "B", duracionMin: 45, tipo: "teorica" }
+      ]
+    }
+  });
+  assert.equal(cargaHorariaCuadra(restoMenor), true);
+  const desbalance = normalizarMicrocurriculo({ ...MICRO_COMPLETO.borrador });
+  assert.equal(cargaHorariaCuadra(desbalance), false);
+});
+
+prueba("la evaluación exige instrumento y RA vinculado; la bibliografía exige recursos usados", () => {
+  const sinRa = normalizarMicrocurriculo({
+    ...MICRO_COMPLETO.borrador,
+    evaluacion: {
+      cortes: [
+        {
+          nombre: "C",
+          porcentaje: 100,
+          actividades: [{ nombre: "Parcial", instrumento: "Rúbrica analítica" }]
+        }
+      ]
+    }
+  });
+  assert.equal(seccionCompleta(sinRa, "evaluacion"), false);
+  const conRecursoSinUso = normalizarMicrocurriculo({
+    ...MICRO_COMPLETO.borrador,
+    bibliografia: { ...MICRO_COMPLETO.borrador.bibliografia, recursos: ["GitHub", "Zotero"] }
+  });
+  assert.equal(seccionCompleta(conRecursoSinUso, "bibliografia"), false);
+  assert.ok(validarMicrocurriculo(conRecursoSinUso).some((p) => /Zotero/.test(p)));
 });
 
 prueba("validar avisa de RAs, sesiones e instrumentos faltantes", () => {

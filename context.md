@@ -136,7 +136,7 @@ lib/
 Último checkpoint: commit `1fc1a89` (context al día con chat-first, PDF y tope 3 años) en la rama local `feature/curricular-project-foundation`. Los commits de desarrollo **no se han subido a GitHub**.
 
 ```text
-npm test              → 271 pruebas (95 + 14 + 38 + 11 + 27 + 11 + 24 + 17 + 11 + 5 + 3 + 2 + 8 + 5)
+npm test              → 275 pruebas (99 + 14 + 38 + 11 + 27 + 11 + 24 + 17 + 11 + 5 + 3 + 2 + 8 + 5)
 impeccable detect     → [] sobre Citas, Marco, Meso, Secciones, Microcurriculo, Chat y page
 npx tsc --noEmit      → limpio
 npm run build         → correcto
@@ -192,6 +192,7 @@ npm run build
 9. Se implementó el expediente curricular conjunto (texto plano/Markdown/PDF de todo el proyecto con trazabilidad) con 3 pruebas nuevas.
 10. Se verificaron flujos completos a nivel de datos (2 pruebas en `flujos.test.ts`) y se resolvió la deriva en PRODUCT.md/DESIGN.md.
 11. Chat conversacional con enrutador por intención (sin selectores visibles), botón «+» con adjuntos PDF y documentos, PDFs como fuentes con tope de 3 años y citas por página.
+12. Alineación recursos↔evaluación (coincidencia flexible GeoGebra/Aula virtual, aviso doble con guía de corrección), carga horaria con tolerancia de 30 min y confirmación verde, y estado real de avance inyectado a la IA para no pedir avanzar sobre módulos terminados.
 
 > Si cualquier sección histórica de este archivo o [PRODUCT.md](PRODUCT.md) aún describe un producto solo Micro, esta sección y el código reciente describen el estado actual; actualiza las discrepancias cuando corresponda.
 

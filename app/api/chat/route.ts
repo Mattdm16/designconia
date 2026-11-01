@@ -9,12 +9,12 @@ import {
 } from "@/lib/prompt";
 import { SYSTEM_PROMPT_INICIO, turnoInicio } from "@/lib/promptInicio";
 import { SYSTEM_PROMPT_MACRO, turnoDocenteMacro } from "@/lib/promptMacro";
-import { marcoVacio, normalizarMarco } from "@/lib/macro";
+import { marcoVacio, normalizarMarco, seccionesMacroCompletas, validarMarco } from "@/lib/macro";
 import { SYSTEM_PROMPT_MESO, turnoDocenteMeso, type MarcoDisponible } from "@/lib/promptMeso";
-import { normalizarPrograma, programaVacio } from "@/lib/meso";
+import { normalizarPrograma, programaVacio, seccionesMesoCompletas, validarPrograma } from "@/lib/meso";
 import { normalizarClave, textoLegible } from "@/lib/errores";
 import type { MarcoEducativoInstitucional, ProgramaAcademico } from "@/lib/proyecto";
-import { microcurriculoVacio, normalizarMicrocurriculo, type Microcurriculo } from "@/lib/schema";
+import { cargaHorariaCuadra, horasPorTipo, microcurriculoVacio, normalizarMicrocurriculo, primeraIncompleta, recursosSinUso, seccionesCompletas, validarMicrocurriculo, type Microcurriculo } from "@/lib/schema";
 import { registrarTraza, type Traza } from "@/lib/traza";
 
 export const runtime = "nodejs";
@@ -202,6 +202,50 @@ function leerHistoria(v: unknown): Turno[] {
   return recortarHistoria(salida);
 }
 
+/**
+ * Estado real de avance del micro para el modelo: secciones completas,
+ * carga horaria y alineación de recursos. Si todo está completo, el
+ * modelo NO debe decir "avancemos al siguiente módulo".
+ */
+function bloqueAvanceMicro(m: Microcurriculo | null): string {
+  if (!m) return "";
+  const completas = seccionesCompletas(m);
+  const primera = primeraIncompleta(m);
+  const problemas = validarMicrocurriculo(m).slice(0, 2);
+  const mapeadas = horasPorTipo(m.secuencia.sesiones);
+  const carga = m.secuencia.sesiones.length === 0
+    ? "sin sesiones planificadas todavía"
+    : cargaHorariaCuadra(m)
+      ? `cuadra (${mapeadas.teoricas} T · ${mapeadas.practicas} P · ${mapeadas.independientes} I frente a ${m.ident.horas.teoricas} T · ${m.ident.horas.practicas} P · ${m.ident.horas.independientes} I declaradas)`
+      : `NO cuadra (mapeadas ${mapeadas.teoricas} T · ${mapeadas.practicas} P · ${mapeadas.independientes} I frente a declaradas ${m.ident.horas.teoricas} T · ${m.ident.horas.practicas} P · ${m.ident.horas.independientes} I)`;
+  const sinUso = recursosSinUso(m);
+  const recursos = sinUso.length === 0 ? "todos los recursos están usados" : `sin uso: ${sinUso.join(", ")}`;
+  const cierre = primera === null && problemas.length === 0
+    ? "El documento está TERMINADO. No digas que falta avanzar: confírmalo y ofrece revisar o exportar."
+    : `Primera sección incompleta: ${primera}. No presentes como pendientes las secciones ya completas.`;
+  return `\n\nESTADO REAL DE AVANCE (verificado por el sistema, no lo contradigas): ${completas}/8 secciones completas. Carga horaria ${carga}. Recursos: ${recursos}.${problemas.length ? ` Pendientes: ${problemas.join(" ")}` : ""} ${cierre}`;
+}
+
+function bloqueAvanceMacro(m: MarcoEducativoInstitucional | null): string {
+  if (!m) return "";
+  const completas = seccionesMacroCompletas(m);
+  const problemas = validarMarco(m).slice(0, 2);
+  const cierre = problemas.length === 0
+    ? "El marco está TERMINADO. No digas que falta avanzar: confírmalo y ofrece revisar o exportar."
+    : `Pendientes: ${problemas.join(" ")} No presentes como pendientes las partes ya completas.`;
+  return `\n\nESTADO REAL DE AVANCE (verificado por el sistema, no lo contradigas): ${completas} partes completas. ${cierre}`;
+}
+
+function bloqueAvanceMeso(p: ProgramaAcademico | null): string {
+  if (!p) return "";
+  const completas = seccionesMesoCompletas(p);
+  const problemas = validarPrograma(p).slice(0, 2);
+  const cierre = problemas.length === 0
+    ? "El programa está TERMINADO. No digas que falta avanzar: confírmalo y ofrece revisar o exportar."
+    : `Pendientes: ${problemas.join(" ")} No presentes como pendientes las partes ya completas.`;
+  return `\n\nESTADO REAL DE AVANCE (verificado por el sistema, no lo contradigas): ${completas} partes completas. ${cierre}`;
+}
+
 /** Extrae el texto de error que devuelve DeepSeek, sin reventar si no es JSON. */
 async function detalleDeError(res: Response): Promise<string> {
   try {
@@ -262,7 +306,7 @@ export async function POST(req: NextRequest) {
       : esMeso
         ? turnoDocenteMeso(mensajeUsuario, programaBase, marcosDisponibles)
         : turnoDocente(mensajeUsuario, borrador);
-  const turnoUsuario = turnoBase + bloqueFuentesPdf(fuentesPdf);
+  const turnoUsuario = turnoBase + bloqueFuentesPdf(fuentesPdf) + (esInicio ? "" : esMacro ? bloqueAvanceMacro(marcoBase) : esMeso ? bloqueAvanceMeso(programaBase) : bloqueAvanceMicro(borrador));
 
   const mensajes = [
     {
