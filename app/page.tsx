@@ -26,7 +26,11 @@ import { microcurriculoATexto } from "@/lib/exportarTexto";
 import { microcurriculoAMarkdown } from "@/lib/markdown";
 import {
   aplicarVistaMesoV3,
+  asignaturasDelPrograma,
+  asignaturasSinPrograma,
+  desvincularAsignatura,
   leerVistaMesoV3,
+  vincularAsignaturaAPrograma,
   vistaMesoVacia,
   type VistaMesoPersistible
 } from "@/lib/estadoMeso";
@@ -661,6 +665,57 @@ export default function Page() {
     };
   }
 
+  /** Recarga los estados visibles del programa desde el agregado. */
+  function recargarMeso(estado: EstadoGuardadoV3) {
+    const r = leerVistaMesoV3(estado);
+    if (!r.ok) throw new Error("la vista del programa no está disponible");
+    setPrograma(r.vista.programa);
+    setVinculoMarcoId(r.vista.vinculoMarcoId);
+    setMensajesMeso(r.vista.mensajes);
+    setSugerenciasMeso(r.vista.sugerencias.length ? r.vista.sugerencias : SUGERENCIAS_APERTURA_MESO);
+    setIntencionMeso(r.vista.intencion);
+    setSeccionActivaMeso(r.vista.seccionActiva);
+    setCrudoMeso(r.vista.crudo);
+    crudoMesoRef.current = r.vista.crudo;
+  }
+
+  /** Guarda el agregado y, si verifica, lo deja como fuente y refresca la vista. */
+  function persistirProyecto(estado: EstadoGuardadoV3, exito: string) {
+    const guardado = guardarEstadoV3(window.localStorage, estado);
+    if (!guardado.ok) {
+      setAvisoPersistencia(
+        "El proyecto sigue disponible en esta sesión, pero no se pudo guardar en el navegador. No cierres la pestaña hasta resolverlo."
+      );
+      return;
+    }
+    estadoV3Ref.current = guardado.estado;
+    recargarMeso(guardado.estado);
+    mostrarAviso(exito);
+  }
+
+  function vincularAsignaturaAlPrograma(asignaturaId: string) {
+    const base = estadoV3Ref.current;
+    const prog = programaRef.current;
+    if (!base || !prog) return;
+    const siguiente = vincularAsignaturaAPrograma(base, prog.id, asignaturaId);
+    if (!siguiente) {
+      setAvisoPersistencia("No pude vincular esa asignatura. No se cambió nada.");
+      return;
+    }
+    persistirProyecto(siguiente, "Asignatura vinculada al programa.");
+  }
+
+  function desvincularAsignaturaDelPrograma(asignaturaId: string) {
+    const base = estadoV3Ref.current;
+    if (!base) return;
+    const siguiente = desvincularAsignatura(base, asignaturaId);
+    if (!siguiente) {
+      setAvisoPersistencia("No pude desvincular esa asignatura. No se cambió nada.");
+      return;
+    }
+    persistirProyecto(siguiente, "Asignatura desvinculada. La ficha se conserva.");
+  }
+
   function idProyectoActual(): string {
     if (!idProyectoNuevoRef.current) {
       idProyectoNuevoRef.current = `proyecto_${folioNuevo()}`;
@@ -738,16 +793,7 @@ export default function Page() {
           setCrudoMacro(r.vista.crudo);
           crudoMacroRef.current = r.vista.crudo;
         } else if (destino === "meso") {
-          const r = leerVistaMesoV3(base);
-          if (!r.ok) throw new Error("la vista del programa no está disponible");
-          setPrograma(r.vista.programa);
-          setVinculoMarcoId(r.vista.vinculoMarcoId);
-          setMensajesMeso(r.vista.mensajes);
-          setSugerenciasMeso(r.vista.sugerencias.length ? r.vista.sugerencias : SUGERENCIAS_APERTURA_MESO);
-          setIntencionMeso(r.vista.intencion);
-          setSeccionActivaMeso(r.vista.seccionActiva);
-          setCrudoMeso(r.vista.crudo);
-          crudoMesoRef.current = r.vista.crudo;
+          recargarMeso(base);
         } else {
           const r = leerVistaMicroV3(base);
           if (!r.ok) throw new Error("la vista del microcurrículo no está disponible");
@@ -1549,15 +1595,11 @@ export default function Page() {
     nombre: m.nombre,
     estado: m.estado
   }));
-  const asignaturasDelPrograma =
-    programa === null
+  const asignaturasVinculadas =
+    programa === null || !proyectoEnVista
       ? []
-      : (proyectoEnVista?.asignaturas ?? [])
-          .filter((a) => a.programaId === programa.id)
-          .map((a) => ({
-            id: a.id,
-            nombre: a.microcurriculo.ident.asignatura.trim() || "Asignatura sin nombre"
-          }));
+      : asignaturasDelPrograma(proyectoEnVista, programa.id);
+  const asignaturasDisponibles = proyectoEnVista ? asignaturasSinPrograma(proyectoEnVista) : [];
 
   /* ------------------------------------------------------------------ */
   /* Modo conversación: solo el chat. Sin ficha, sin rieles, sin tabs.   */
@@ -1805,9 +1847,12 @@ export default function Page() {
                 programa={programa}
                 vinculoMarcoId={vinculoMarcoId}
                 marcos={marcosDisponibles}
-                asignaturas={asignaturasDelPrograma}
+                asignaturas={asignaturasVinculadas}
+                disponibles={asignaturasDisponibles}
                 activa={seccionActivaMeso}
                 onChange={editarPrograma}
+                onVincular={vincularAsignaturaAlPrograma}
+                onDesvincular={desvincularAsignaturaDelPrograma}
               />
             )
           ) : (

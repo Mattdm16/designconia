@@ -333,3 +333,66 @@ export function aplicarVistaMesoV3(
 export function vistaMesoVacia(): VistaMesoPersistible {
   return clonar(VISTA_VACIA);
 }
+
+/**
+ * Vincula una asignatura existente a un programa existente.
+ * Devuelve el agregado actualizado sin mutar la base, o null si alguno no
+ * existe. Solo reasigna el vínculo: nunca crea ni borra documentos.
+ */
+export function vincularAsignaturaAPrograma(
+  base: EstadoGuardadoV3,
+  programaId: string,
+  asignaturaId: string
+): EstadoGuardadoV3 | null {
+  if (!esEstadoGuardadoV3(base)) return null;
+  const programaExiste = base.proyecto.programas.some((p) => p.id === programaId);
+  const asignaturaExiste = base.proyecto.asignaturas.some((a) => a.id === asignaturaId);
+  if (!programaExiste || !asignaturaExiste) return null;
+
+  const estado = clonar(base);
+  estado.proyecto.asignaturas = estado.proyecto.asignaturas.map((a) =>
+    a.id === asignaturaId ? { ...a, programaId } : a
+  );
+  return esEstadoGuardadoV3(estado) ? estado : null;
+}
+
+/**
+ * Desvincula una asignatura de su programa, dejándola independiente.
+ * Devuelve el agregado actualizado sin mutar la base, o null si no existe.
+ */
+export function desvincularAsignatura(
+  base: EstadoGuardadoV3,
+  asignaturaId: string
+): EstadoGuardadoV3 | null {
+  if (!esEstadoGuardadoV3(base)) return null;
+  if (!base.proyecto.asignaturas.some((a) => a.id === asignaturaId)) return null;
+
+  const estado = clonar(base);
+  estado.proyecto.asignaturas = estado.proyecto.asignaturas.map((a) =>
+    a.id === asignaturaId ? { ...a, programaId: null } : a
+  );
+  return esEstadoGuardadoV3(estado) ? estado : null;
+}
+
+/** Asignaturas vinculadas a un programa, en el orden en que están guardadas. */
+export function asignaturasDelPrograma(
+  proyecto: EstadoGuardadoV3["proyecto"],
+  programaId: string
+): { id: string; nombre: string }[] {
+  return proyecto.asignaturas
+    .filter((a) => a.programaId === programaId)
+    .map((a) => ({
+      id: a.id,
+      nombre: a.microcurriculo.ident.asignatura.trim() || "Asignatura sin nombre"
+    }));
+}
+
+/** Asignaturas que todavía no pertenecen a ningún programa. */
+export function asignaturasSinPrograma(proyecto: EstadoGuardadoV3["proyecto"]): { id: string; nombre: string }[] {
+  return proyecto.asignaturas
+    .filter((a) => a.programaId === null)
+    .map((a) => ({
+      id: a.id,
+      nombre: a.microcurriculo.ident.asignatura.trim() || "Asignatura sin nombre"
+    }));
+}

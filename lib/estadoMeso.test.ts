@@ -5,7 +5,11 @@
 
 import {
   aplicarVistaMesoV3,
+  asignaturasDelPrograma,
+  asignaturasSinPrograma,
+  desvincularAsignatura,
   leerVistaMesoV3,
+  vincularAsignaturaAPrograma,
   vistaMesoVacia,
   type VistaMesoPersistible
 } from "./estadoMeso.ts";
@@ -312,6 +316,64 @@ caso("una vista nula no reemplaza un programa seleccionado", () => {
   }
   assert(lanzo, "rechaza la vista nula sobre un programa concreto");
   assert(JSON.stringify(creado) === snapshot, "no muta al rechazar");
+});
+
+caso("vincula una asignatura existente al programa", () => {
+  let estado = crearEstadoGuardadoV3Vacio("proyecto-vinculo");
+  estado = aplicarVistaMicroV3(
+    estado,
+    { microcurriculo: crearVacia(), mensajes: [], sugerencias: [], intencion: "entender", seccionActiva: null, crudo: "" },
+    "proyecto-vinculo"
+  );
+  const microId = estado.seleccion.documentoId;
+  assert(microId !== null, "asignatura creada");
+  estado = aplicarVistaMesoV3(estado, crearVista(crearPrograma()), "proyecto-vinculo");
+  const progId = estado.seleccion.documentoId;
+  assert(progId !== null, "programa creado");
+  assert(asignaturasSinPrograma(estado.proyecto).length === 1, "la asignatura nace independiente");
+
+  const vinculado = vincularAsignaturaAPrograma(estado, progId, microId);
+  assert(vinculado !== null, "el vínculo se aplica");
+  assert(esEstadoGuardadoV3(vinculado), "sigue siendo V3 válido");
+  igual(
+    asignaturasDelPrograma(vinculado.proyecto, progId).map((a) => a.id),
+    [microId],
+    "la asignatura aparece vinculada"
+  );
+  assert(asignaturasSinPrograma(vinculado.proyecto).length === 0, "ya no está independiente");
+  assert(vinculado.proyecto.asignaturas[0].programaId === progId, "programaId asignado");
+});
+
+caso("vincular ids inexistentes devuelve null sin mutar", () => {
+  const estado = crearEstadoGuardadoV3Vacio("proyecto-vinculo-mal");
+  const snapshot = JSON.stringify(estado);
+  assert(vincularAsignaturaAPrograma(estado, "prog-x", "asig-x") === null, "nada que vincular");
+  assert(vincularAsignaturaAPrograma("basura" as never, "p", "a") === null, "base inválida");
+  assert(JSON.stringify(estado) === snapshot, "no muta al rechazar");
+});
+
+caso("desvincular deja la asignatura independiente y conserva el resto", () => {
+  let estado = crearEstadoGuardadoV3Vacio("proyecto-desvinculo");
+  estado = aplicarVistaMicroV3(
+    estado,
+    { microcurriculo: crearVacia(), mensajes: [], sugerencias: [], intencion: "entender", seccionActiva: null, crudo: "" },
+    "proyecto-desvinculo"
+  );
+  const microId = estado.seleccion.documentoId as string;
+  estado = aplicarVistaMesoV3(estado, crearVista(crearPrograma()), "proyecto-desvinculo");
+  const progId = estado.seleccion.documentoId as string;
+  const vinculado = vincularAsignaturaAPrograma(estado, progId, microId);
+  assert(vinculado !== null, "base vinculada");
+  const snapshot = JSON.stringify(vinculado);
+
+  const libre = desvincularAsignatura(vinculado, microId);
+  assert(libre !== null, "se desvincula");
+  assert(esEstadoGuardadoV3(libre), "sigue siendo V3 válido");
+  assert(libre.proyecto.asignaturas[0].programaId === null, "programaId en null");
+  assert(asignaturasDelPrograma(libre.proyecto, progId).length === 0, "ya no aparece vinculada");
+  assert(asignaturasSinPrograma(libre.proyecto).length === 1, "vuelve a estar independiente");
+  assert(JSON.stringify(vinculado) === snapshot, "no muta la base");
+  assert(desvincularAsignatura(vinculado, "no-existe") === null, "id inexistente da null");
 });
 
 if (fallos > 0) {

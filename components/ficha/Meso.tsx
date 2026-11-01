@@ -220,6 +220,45 @@ function ListaAfirmaciones({
 }
 
 /* ------------------------------------------------------------------ */
+/* Vincular una asignatura independiente                               */
+/* ------------------------------------------------------------------ */
+
+function VincularAsignatura({
+  disponibles,
+  onVincular
+}: {
+  disponibles: AsignaturaVinculada[];
+  onVincular: (asignaturaId: string) => void;
+}) {
+  const [elegida, setElegida] = useState("");
+  return (
+    <div className="mt-1.5 flex items-center gap-1.5">
+      <label className="sr-only" htmlFor="vincular-asignatura">
+        Vincular una asignatura independiente a este programa
+      </label>
+      <select
+        id="vincular-asignatura"
+        value={elegida}
+        onChange={(e) => setElegida(e.target.value)}
+        className="min-w-0 flex-1 rounded-lg bg-black/[0.04] px-2 py-1.5 text-[13px] focus:outline-none"
+      >
+        <option value="" disabled>
+          Vincular asignatura independiente…
+        </option>
+        {disponibles.map((a) => (
+          <option key={a.id} value={a.id}>
+            {a.nombre}
+          </option>
+        ))}
+      </select>
+      <BotonMini onClick={() => elegida && (onVincular(elegida), setElegida(""))} disabled={!elegida}>
+        Vincular
+      </BotonMini>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Ficha del programa                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -228,17 +267,24 @@ export function MesoFicha({
   vinculoMarcoId,
   marcos,
   asignaturas,
+  disponibles,
   activa,
-  onChange
+  onChange,
+  onVincular,
+  onDesvincular
 }: {
   programa: ProgramaAcademico;
   /** Id del marco principal activo, o null si no hay vínculo. */
   vinculoMarcoId: string | null;
   marcos: MarcoOpcion[];
   asignaturas: AsignaturaVinculada[];
+  /** Asignaturas independientes que se pueden vincular a este programa. */
+  disponibles: AsignaturaVinculada[];
   /** Sección que el asistente está trabajando; si es null, la primera pendiente. */
   activa: SeccionMeso | null;
   onChange: (next: { programa: ProgramaAcademico; vinculoMarcoId: string | null }) => void;
+  onVincular: (asignaturaId: string) => void;
+  onDesvincular: (asignaturaId: string) => void;
 }) {
   const completas = SECCIONES_PROGRESO.filter((s) => seccionMesoCompleta(programa, s)).length;
   const enFoco =
@@ -419,12 +465,24 @@ export function MesoFicha({
               {asignaturas.map((a) => (
                 <li
                   key={a.id}
-                  className="truncate rounded-lg border border-black/[0.07] bg-white px-2.5 py-1.5 text-[13px]"
+                  className="flex items-center gap-1 rounded-lg border border-black/[0.07] bg-white px-2.5 py-1.5 text-[13px]"
                 >
-                  {a.nombre}
+                  <span className="min-w-0 flex-1 truncate">{a.nombre}</span>
+                  <button
+                    type="button"
+                    onClick={() => onDesvincular(a.id)}
+                    aria-label={`Desvincular ${a.nombre} de este programa`}
+                    title="Desvincular de este programa (la asignatura se conserva)"
+                    className="shrink-0 rounded-full p-1 text-black/25 hover:text-terracotta"
+                  >
+                    <Icono nombre="papelera" className="h-3 w-3" />
+                  </button>
                 </li>
               ))}
             </ul>
+          )}
+          {disponibles.length > 0 && (
+            <VincularAsignatura disponibles={disponibles} onVincular={onVincular} />
           )}
         </div>
       </SeccionMeso>
