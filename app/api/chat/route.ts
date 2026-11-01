@@ -9,8 +9,10 @@ import {
 } from "@/lib/prompt";
 import { SYSTEM_PROMPT_MACRO, turnoDocenteMacro } from "@/lib/promptMacro";
 import { marcoVacio, normalizarMarco } from "@/lib/macro";
+import { SYSTEM_PROMPT_MESO, turnoDocenteMeso, type MarcoDisponible } from "@/lib/promptMeso";
+import { normalizarPrograma, programaVacio } from "@/lib/meso";
 import { normalizarClave, textoLegible } from "@/lib/errores";
-import type { MarcoEducativoInstitucional } from "@/lib/proyecto";
+import type { MarcoEducativoInstitucional, ProgramaAcademico } from "@/lib/proyecto";
 import { microcurriculoVacio, normalizarMicrocurriculo, type Microcurriculo } from "@/lib/schema";
 import { registrarTraza, type Traza } from "@/lib/traza";
 
@@ -30,6 +32,10 @@ type Cuerpo = {
   modulo?: unknown;
   /** Documento del nivel Macro, solo cuando `modulo` es "macro". */
   marco?: unknown;
+  /** Documento del nivel Meso, solo cuando `modulo` es "meso". */
+  programa?: unknown;
+  /** Marcos del proyecto para citar por id, solo en el nivel Meso. */
+  marcos?: unknown;
 };
 
 function errorJson(status: number, code: string, mensaje: string) {
@@ -107,6 +113,30 @@ function comoMarco(v: unknown): MarcoEducativoInstitucional | null {
   return marcoVacio(normalizado) ? null : normalizado;
 }
 
+/**
+ * Interpreta el `programa` entrante como documento del nivel Meso.
+ *
+ * Igual que los otros niveles, un programa vacío equivale a no tener
+ * documento: la conversación va sin ficha.
+ */
+function comoPrograma(v: unknown): ProgramaAcademico | null {
+  const normalizado = normalizarPrograma(v);
+  return programaVacio(normalizado) ? null : normalizado;
+}
+
+/** Marcos que el cliente declara para poder citarlos por id en el nivel Meso. */
+function comoMarcosDisponibles(v: unknown): MarcoDisponible[] {
+  if (!Array.isArray(v)) return [];
+  const salida: MarcoDisponible[] = [];
+  for (const crudo of v) {
+    if (typeof crudo !== "object" || crudo === null || Array.isArray(crudo)) continue;
+    const o = crudo as Record<string, unknown>;
+    if (typeof o.id !== "string" || !o.id.trim() || typeof o.nombre !== "string") continue;
+    salida.push({ id: o.id.trim(), nombre: o.nombre });
+  }
+  return salida.slice(0, 20);
+}
+
 function leerHistoria(v: unknown): Turno[] {
   if (!Array.isArray(v)) return [];
   const salida: Turno[] = [];
@@ -158,21 +188,29 @@ export async function POST(req: NextRequest) {
     return errorJson(400, "mensaje_largo", "La petición es demasiado larga. Divídela en partes.");
   }
 
-  // Rama Macro: el cliente indica el nivel y manda solo ese documento. Sin
-  // `modulo: "macro"`, el comportamiento Micro queda intacto.
+  // Ramas por nivel: el cliente indica el nivel y manda solo ese documento.
+  // Sin `modulo`, el comportamiento Micro queda intacto.
   const esMacro = cuerpo.modulo === "macro";
+  const esMeso = cuerpo.modulo === "meso";
 
   // El documento es OPCIONAL: si no existe todavía, la conversación va sin
   // ficha y el modelo no puede inventarse que la tiene.
-  const borrador = esMacro ? null : comoBorrador(cuerpo.microcurriculo);
+  const borrador = esMacro || esMeso ? null : comoBorrador(cuerpo.microcurriculo);
   const marcoBase = esMacro ? comoMarco(cuerpo.marco) : null;
+  const programaBase = esMeso ? comoPrograma(cuerpo.programa) : null;
+  const marcosDisponibles = esMeso ? comoMarcosDisponibles(cuerpo.marcos) : [];
 
   const turnoUsuario = esMacro
     ? turnoDocenteMacro(mensajeUsuario, marcoBase)
-    : turnoDocente(mensajeUsuario, borrador);
+    : esMeso
+      ? turnoDocenteMeso(mensajeUsuario, programaBase, marcosDisponibles)
+      : turnoDocente(mensajeUsuario, borrador);
 
   const mensajes = [
-    { role: "system" as const, content: esMacro ? SYSTEM_PROMPT_MACRO : SYSTEM_PROMPT },
+    {
+      role: "system" as const,
+      content: esMacro ? SYSTEM_PROMPT_MACRO : esMeso ? SYSTEM_PROMPT_MESO : SYSTEM_PROMPT
+    },
     ...leerHistoria(cuerpo.historia),
     { role: "user" as const, content: turnoUsuario }
   ];
@@ -245,7 +283,7 @@ export async function POST(req: NextRequest) {
     upstream: respuesta.status,
     mensajeChars: mensajeUsuario.length,
     historiaChars: mensajes.reduce((a, m) => a + m.content.length, 0),
-    borradorEnviado: esMacro ? marcoBase !== null : borrador !== null,
+    borradorEnviado: esMacro ? marcoBase !== null : esMeso ? programaBase !== null : borrador !== null,
     eventos: 0,
     contenido: 0,
     fin: null,
