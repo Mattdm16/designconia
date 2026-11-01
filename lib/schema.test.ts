@@ -190,7 +190,7 @@ const MICRO_COMPLETO = {
               descripcion: "Escrito",
               instrumento: "Rúbrica analítica",
               herramientas: ["GitHub"],
-              mide: "RA de la unidad 1"
+              mide: "Distingue modelos de ciclo de vida"
             }
           ]
         },
@@ -270,8 +270,12 @@ prueba("acepta vallas de código y preámbulo", () => {
 
 prueba("un JSON cortado al final se repara en vez de fallar", () => {
   const completo = JSON.stringify(MICRO_COMPLETO);
-  // Cortado a la mitad: queda una cadena abierta y llaves sin cerrar.
-  const r = parsearRespuesta(completo.slice(0, Math.floor(completo.length / 2)));
+  // Corte determinista justo antes de "objetivos": queda una cadena abierta,
+  // una coma colgante y llaves sin cerrar. Cortar a la mitad es frágil porque
+  // cualquier cambio de longitud mueve el punto de corte.
+  const corte = completo.indexOf('"objetivos"');
+  assert.ok(corte > 0, "el punto de corte existe en la fixture");
+  const r = parsearRespuesta(completo.slice(0, corte));
   assert.equal(r.ok, true, "el reparador debe cerrar lo que quedó abierto");
 });
 

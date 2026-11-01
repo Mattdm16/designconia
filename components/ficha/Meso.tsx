@@ -15,7 +15,9 @@ import {
 import { ETIQUETA_SECCION_MESO, SECCIONES_MESO } from "@/lib/promptMeso";
 import type {
   AfirmacionCurricular,
+  AlineacionCurricular,
   EstadoPrograma,
+  NodoCurricular,
   ProgramaAcademico
 } from "@/lib/proyecto";
 
@@ -34,6 +36,16 @@ const SECCIONES_PROGRESO: SeccionMeso[] = ["identidad", "perfiles", "resultados"
 
 export type MarcoOpcion = { id: string; nombre: string; estado: string };
 export type AsignaturaVinculada = { id: string; nombre: string };
+/** Principio del marco vinculado, para alinear con resultados del programa. */
+export type PrincipioOpcion = { id: string; texto: string };
+/** RA de una asignatura vinculada, para alinear con resultados del programa. */
+export type RaOpcion = {
+  asignaturaId: string;
+  asignaturaNombre: string;
+  raId: string;
+  texto: string;
+  unidad: number;
+};
 
 /* ------------------------------------------------------------------ */
 /* Acordeón propio del programa                                        */
@@ -259,6 +271,208 @@ function VincularAsignatura({
 }
 
 /* ------------------------------------------------------------------ */
+/* Trazabilidad: matrices Macro → programa → asignaturas                */
+/* ------------------------------------------------------------------ */
+
+function coincide(
+  alineaciones: AlineacionCurricular[],
+  origen: NodoCurricular,
+  destino: NodoCurricular
+): boolean {
+  return alineaciones.some(
+    (a) =>
+      a.origen.tipo === origen.tipo &&
+      a.origen.id === origen.id &&
+      (a.origen.contextoId ?? undefined) === (origen.contextoId ?? undefined) &&
+      a.destino.tipo === destino.tipo &&
+      a.destino.id === destino.id &&
+      (a.destino.contextoId ?? undefined) === (destino.contextoId ?? undefined)
+  );
+}
+
+function TrazabilidadMeso({
+  programa,
+  principiosMarco,
+  nombreMarco,
+  rasAsignaturas,
+  alineaciones,
+  onToggleAlineacion
+}: {
+  programa: ProgramaAcademico;
+  principiosMarco: PrincipioOpcion[];
+  nombreMarco: string | null;
+  rasAsignaturas: RaOpcion[];
+  alineaciones: AlineacionCurricular[];
+  onToggleAlineacion: (origen: NodoCurricular, destino: NodoCurricular) => void;
+}) {
+  const resultados = programa.resultadosPrograma;
+  const sinResultados = resultados.length === 0;
+
+  const principiosDe = (resId: string) =>
+    principiosMarco.filter((p) =>
+      coincide(
+        alineaciones,
+        { tipo: "principio_marco", id: p.id },
+        { tipo: "resultado_programa", id: resId, contextoId: programa.id }
+      )
+    );
+  const rasDe = (resId: string, asignaturaId?: string) =>
+    rasAsignaturas.filter(
+      (r) =>
+        (asignaturaId === undefined || r.asignaturaId === asignaturaId) &&
+        coincide(
+          alineaciones,
+          { tipo: "resultado_programa", id: resId, contextoId: programa.id },
+          { tipo: "ra_micro", id: r.raId, contextoId: r.asignaturaId }
+        )
+    );
+
+  const resultadosSinPrincipio = sinResultados
+    ? 0
+    : resultados.filter((r) => principiosDe(r.id).length === 0).length;
+  const resultadosSinRa = sinResultados ? 0 : resultados.filter((r) => rasDe(r.id).length === 0).length;
+
+  return (
+    <section
+      aria-label="Trazabilidad del programa"
+      className="overflow-hidden rounded-[18px] border border-white/60 bg-crema shadow-lienzo"
+    >
+      <div className="px-4 py-3">
+        <h2 className="font-display text-sm font-semibold tracking-tight">Trazabilidad</h2>
+        <p className="mt-0.5 text-[11px] leading-relaxed text-black/45">
+          Qué principio sostiene cada resultado del programa y en qué RA de las asignaturas se concreta.
+          {!sinResultados && (
+            <>
+              {" "}
+              {resultadosSinPrincipio > 0 && (
+                <span className="text-terracotta">
+                  {resultadosSinPrincipio} resultado{resultadosSinPrincipio === 1 ? "" : "s"} sin principio.{" "}
+                </span>
+              )}
+              {resultadosSinRa > 0 && (
+                <span className="text-terracotta">
+                  {resultadosSinRa} resultado{resultadosSinRa === 1 ? "" : "s"} sin RA vinculado.
+                </span>
+              )}
+              {resultadosSinPrincipio === 0 && resultadosSinRa === 0 && (
+                <span className="text-rainfall">Todo resultado está sostenido y concretado.</span>
+              )}
+            </>
+          )}
+        </p>
+      </div>
+
+      <div className="space-y-3 border-t border-black/[0.07] p-4">
+        {sinResultados ? (
+          <p className="rounded-xl border border-dashed border-black/15 px-3 py-3 text-center text-[12px] text-black/45">
+            Redactá primero los resultados del programa para poder alinearlos.
+          </p>
+        ) : (
+          <>
+            <div>
+              <Rotulo>Marco → programa{nombreMarco ? ` · ${nombreMarco}` : ""}</Rotulo>
+              {principiosMarco.length === 0 ? (
+                <p className="mt-1 text-[12px] text-black/45">
+                  {nombreMarco
+                    ? "El marco vinculado no tiene principios todavía."
+                    : "Vinculá un marco institucional para alinear sus principios."}
+                </p>
+              ) : (
+                <ul className="mt-1.5 space-y-2">
+                  {resultados.map((res) => (
+                    <li key={res.id} className="rounded-xl border border-black/[0.07] bg-white p-2.5">
+                      <p className="text-[12.5px] font-medium">{res.texto || "Resultado sin texto"}</p>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {principiosMarco.map((p) => {
+                          const origen: NodoCurricular = { tipo: "principio_marco", id: p.id };
+                          const destino: NodoCurricular = {
+                            tipo: "resultado_programa",
+                            id: res.id,
+                            contextoId: programa.id
+                          };
+                          const activo = coincide(alineaciones, origen, destino);
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => onToggleAlineacion(origen, destino)}
+                              aria-pressed={activo}
+                              title={p.texto}
+                              className={`inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] ${
+                                activo
+                                  ? "bg-rainfall/15 text-rainfall"
+                                  : "bg-black/[0.04] text-black/55 hover:bg-black/[0.08] hover:text-black"
+                              }`}
+                            >
+                              <span className="truncate">{p.texto}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div>
+              <Rotulo>Programa → asignaturas</Rotulo>
+              {rasAsignaturas.length === 0 ? (
+                <p className="mt-1 text-[12px] text-black/45">
+                  No hay RA en las asignaturas vinculadas. Vinculá una asignatura con resultados redactados.
+                </p>
+              ) : (
+                <ul className="mt-1.5 space-y-2">
+                  {resultados.map((res) => (
+                    <li key={res.id} className="rounded-xl border border-black/[0.07] bg-white p-2.5">
+                      <p className="text-[12.5px] font-medium">{res.texto || "Resultado sin texto"}</p>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {rasAsignaturas.map((r) => {
+                          const origen: NodoCurricular = {
+                            tipo: "resultado_programa",
+                            id: res.id,
+                            contextoId: programa.id
+                          };
+                          const destino: NodoCurricular = {
+                            tipo: "ra_micro",
+                            id: r.raId,
+                            contextoId: r.asignaturaId
+                          };
+                          const activo = coincide(alineaciones, origen, destino);
+                          return (
+                            <button
+                              key={`${r.asignaturaId}:${r.raId}`}
+                              type="button"
+                              onClick={() => onToggleAlineacion(origen, destino)}
+                              aria-pressed={activo}
+                              title={`${r.asignaturaNombre} · Unidad ${r.unidad} · ${r.texto}`}
+                              className={`inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] ${
+                                activo
+                                  ? "bg-rainfall/15 text-rainfall"
+                                  : "bg-black/[0.04] text-black/55 hover:bg-black/[0.08] hover:text-black"
+                              }`}
+                            >
+                              <span className="shrink-0 font-mono">
+                                U{r.unidad}
+                              </span>
+                              <span className="truncate">{r.texto}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Ficha del programa                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -271,7 +485,12 @@ export function MesoFicha({
   activa,
   onChange,
   onVincular,
-  onDesvincular
+  onDesvincular,
+  principiosMarco,
+  nombreMarco,
+  rasAsignaturas,
+  alineaciones,
+  onToggleAlineacion
 }: {
   programa: ProgramaAcademico;
   /** Id del marco principal activo, o null si no hay vínculo. */
@@ -285,6 +504,16 @@ export function MesoFicha({
   onChange: (next: { programa: ProgramaAcademico; vinculoMarcoId: string | null }) => void;
   onVincular: (asignaturaId: string) => void;
   onDesvincular: (asignaturaId: string) => void;
+  /** Principios del marco vinculado, para la matriz Marco → programa. */
+  principiosMarco: PrincipioOpcion[];
+  /** Nombre del marco vinculado, o null si no hay vínculo. */
+  nombreMarco: string | null;
+  /** RA de las asignaturas vinculadas, para la matriz programa → asignaturas. */
+  rasAsignaturas: RaOpcion[];
+  /** Alineaciones del proyecto (se filtran aquí por borde). */
+  alineaciones: AlineacionCurricular[];
+  /** Crea o quita la alineación de un borde. */
+  onToggleAlineacion: (origen: NodoCurricular, destino: NodoCurricular) => void;
 }) {
   const completas = SECCIONES_PROGRESO.filter((s) => seccionMesoCompleta(programa, s)).length;
   const enFoco =
@@ -486,6 +715,15 @@ export function MesoFicha({
           )}
         </div>
       </SeccionMeso>
+
+      <TrazabilidadMeso
+        programa={programa}
+        principiosMarco={principiosMarco}
+        nombreMarco={nombreMarco}
+        rasAsignaturas={rasAsignaturas}
+        alineaciones={alineaciones}
+        onToggleAlineacion={onToggleAlineacion}
+      />
     </div>
   );
 }

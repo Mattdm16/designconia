@@ -14,6 +14,7 @@ import { crearEstadoGuardadoV3Vacio } from "./estadoMicro.ts";
 import { SECCIONES_MACRO, type SeccionMacro } from "./promptMacro.ts";
 import {
   esEstadoGuardadoV3,
+  podarAlineacionesHuerfanas,
   type ConversacionPersistida,
   type EstadoGuardadoV3,
   type FuenteCurricular,
@@ -309,6 +310,9 @@ export function aplicarVistaMacroV3(
   // La vista transporta la lista completa de fuentes: el editor Macro es quien
   // las gestiona en este corte, así que altas, ediciones y bajas se reflejan.
   estado.proyecto.fuentesCurriculares = clonar(vistaCopia.fuentes);
+
+  // Si la edición borró principios vinculados, se podan las huérfanas.
+  estado.proyecto.alineaciones = podarAlineacionesHuerfanas(estado.proyecto);
 
   const scopeId = scopeMacro(marcoId);
   const anterior = estado.conversaciones[scopeId];

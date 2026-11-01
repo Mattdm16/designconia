@@ -45,12 +45,15 @@ const ORDEN_DOCUMENTO: SeccionId[] = [
 export function MicrocurriculoFicha({
   micro,
   activa,
-  onChange
+  onChange,
+  vinculosRa
 }: {
   micro: Microcurriculo;
   /** Sección que el asistente está trabajando; si es null, la primera pendiente. */
   activa: SeccionId | null;
   onChange: (next: Microcurriculo) => void;
+  /** Resultado(s) del programa que responde cada RA (por id de RA). */
+  vinculosRa?: Record<string, string[]>;
 }) {
   const completas = seccionesCompletas(micro);
   const enFoco = activa ?? primeraIncompleta(micro);
@@ -196,6 +199,7 @@ export function MicrocurriculoFicha({
                 <ContenidoSeccion
                   contenido={micro.contenido}
                   onChange={(contenido) => onChange({ ...micro, contenido })}
+                  vinculosRa={vinculosRa}
                 />
               </Seccion>
             );
@@ -252,7 +256,7 @@ export function MicrocurriculoFicha({
                 }
               >
                 <EvaluacionSeccion
-                  evaluacion={micro.evaluacion}
+                  micro={micro}
                   onChange={(evaluacion) => onChange({ ...micro, evaluacion })}
                   onAjustar={() =>
                     onChange({

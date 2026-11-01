@@ -102,11 +102,21 @@ export type VinculoProgramaMarco = {
   principal: boolean;
 };
 
-export type TipoNodoCurricular = "principio_marco" | "resultado_programa";
+export type TipoNodoCurricular =
+  | "principio_marco"
+  | "resultado_programa"
+  | "ra_micro"
+  | "actividad_evaluacion";
 
 export type NodoCurricular = {
   tipo: TipoNodoCurricular;
   id: string;
+  /**
+   * Documento que contiene al nodo, para desambiguar ids repetidos entre
+   * micros: programa id para resultado_programa, asignatura id para ra_micro
+   * y actividad_evaluacion. Ausente en datos heredados: se resuelve global.
+   */
+  contextoId?: string;
 };
 
 /** Alineación entre entidades que ya tienen identidad estable en el proyecto. */
@@ -300,14 +310,20 @@ function esVinculo(valor: unknown): valor is VinculoProgramaMarco {
   );
 }
 
-const TIPOS_NODO: readonly TipoNodoCurricular[] = ["principio_marco", "resultado_programa"];
+const TIPOS_NODO: readonly TipoNodoCurricular[] = [
+  "principio_marco",
+  "resultado_programa",
+  "ra_micro",
+  "actividad_evaluacion"
+];
 
 function esNodo(valor: unknown): valor is NodoCurricular {
   return (
     esRegistro(valor) &&
     TIPOS_NODO.includes(valor.tipo as TipoNodoCurricular) &&
     esTexto(valor.id) &&
-    Boolean(valor.id.trim())
+    Boolean(valor.id.trim()) &&
+    esTextoOpcional(valor.contextoId)
   );
 }
 
@@ -323,13 +339,59 @@ function esAlineacion(valor: unknown): valor is AlineacionCurricular {
   );
 }
 
+/**
+ * Valida la trazabilidad anidada del micro: RA con id y texto, actividades con
+ * id, `mideIds` que apuntan a RA del mismo micro e ids únicos por micro.
+ * Acepta el formato heredado (RA como string, actividad sin ids) porque la
+ * normalización lo migra al leer; aquí solo se exige coherencia interna.
+ */
+function esTrazabilidadMicro(valor: unknown): boolean {
+  if (!esRegistro(valor) || !esRegistro(valor.contenido) || !esRegistro(valor.evaluacion)) return false;
+  const unidades = (valor.contenido as Registro).unidades;
+  const cortes = (valor.evaluacion as Registro).cortes;
+  if (!Array.isArray(unidades) || !Array.isArray(cortes)) return false;
+
+  const idsRa = new Set<string>();
+  for (const u of unidades) {
+    if (!esRegistro(u) || !Array.isArray(u.resultadosAprendizaje)) return false;
+    for (const ra of u.resultadosAprendizaje as unknown[]) {
+      // Formato heredado: string suelto, migrado al leer.
+      if (typeof ra === "string") continue;
+      if (!esRegistro(ra) || !esTexto(ra.id) || !ra.id.trim() || typeof ra.texto !== "string") {
+        return false;
+      }
+      if (idsRa.has(ra.id)) return false;
+      idsRa.add(ra.id);
+    }
+  }
+
+  const idsAct = new Set<string>();
+  for (const c of cortes) {
+    if (!esRegistro(c) || !Array.isArray(c.actividades)) return false;
+    for (const a of c.actividades as unknown[]) {
+      if (!esRegistro(a)) return false;
+      if (a.id !== undefined && (!esTexto(a.id) || !a.id.trim())) return false;
+      if (a.id !== undefined) {
+        if (idsAct.has(a.id)) return false;
+        idsAct.add(a.id);
+      }
+      if (a.mideIds !== undefined) {
+        if (!Array.isArray(a.mideIds) || !(a.mideIds as unknown[]).every(esTexto)) return false;
+        if ((a.mideIds as string[]).some((id) => !idsRa.has(id))) return false;
+      }
+    }
+  }
+  return true;
+}
+
 function esAsignatura(valor: unknown): valor is Asignatura {
   return (
     esRegistro(valor) &&
     esTexto(valor.id) &&
     Boolean(valor.id.trim()) &&
     (valor.programaId === null || esTexto(valor.programaId)) &&
-    esMicrocurriculo(valor.microcurriculo)
+    esMicrocurriculo(valor.microcurriculo) &&
+    esTrazabilidadMicro(valor.microcurriculo)
   );
 }
 
@@ -340,13 +402,75 @@ function afirmacionesDelProyecto(proyecto: ProyectoCurricular): AfirmacionCurric
   ];
 }
 
+/** RA de un micro por id, limitado a una asignatura si hay contexto. */
+function tieneRa(proyecto: ProyectoCurricular, id: string, contextoId?: string): boolean {
+  const asignaturas = contextoId
+    ? proyecto.asignaturas.filter((a) => a.id === contextoId)
+    : proyecto.asignaturas;
+  // Con contexto de una asignatura inexistente no hay nodo.
+  if (contextoId && asignaturas.length === 0) return false;
+  return asignaturas.some((a) =>
+    a.microcurriculo.contenido.unidades.some((u) =>
+      u.resultadosAprendizaje.some((ra) => ra.id === id)
+    )
+  );
+}
+
+/** Actividad de evaluación por id, limitada a una asignatura si hay contexto. */
+function tieneActividad(proyecto: ProyectoCurricular, id: string, contextoId?: string): boolean {
+  const asignaturas = contextoId
+    ? proyecto.asignaturas.filter((a) => a.id === contextoId)
+    : proyecto.asignaturas;
+  if (contextoId && asignaturas.length === 0) return false;
+  return asignaturas.some((a) =>
+    a.microcurriculo.evaluacion.cortes.some((c) => c.actividades.some((act) => act.id === id))
+  );
+}
+
 function tieneNodo(proyecto: ProyectoCurricular, nodo: NodoCurricular): boolean {
   switch (nodo.tipo) {
     case "principio_marco":
       return proyecto.marcos.some((m) => m.principios.some((a) => a.id === nodo.id));
     case "resultado_programa":
       return proyecto.programas.some((p) => p.resultadosPrograma.some((a) => a.id === nodo.id));
+    case "ra_micro":
+      return tieneRa(proyecto, nodo.id, nodo.contextoId);
+    case "actividad_evaluacion":
+      return tieneActividad(proyecto, nodo.id, nodo.contextoId);
   }
+}
+
+/** Pares ordenados permitidos en una alineación curricular. */
+const BORDES_ALINEACION: ReadonlyArray<[TipoNodoCurricular, TipoNodoCurricular]> = [
+  ["principio_marco", "resultado_programa"],
+  ["resultado_programa", "ra_micro"],
+  ["ra_micro", "actividad_evaluacion"]
+];
+
+function esBordePermitido(origen: TipoNodoCurricular, destino: TipoNodoCurricular): boolean {
+  return BORDES_ALINEACION.some(([o, d]) => o === origen && d === destino);
+}
+
+/** ¿Este par ordenado de nodos puede alinearse? (puerta pública del invariante). */
+export function esBordeAlineacionValido(
+  origen: TipoNodoCurricular,
+  destino: TipoNodoCurricular
+): boolean {
+  return esBordePermitido(origen, destino);
+}
+
+/** ¿Existe este nodo en el proyecto (respetando su contexto si lo trae)? */
+export function existeNodoCurricular(proyecto: ProyectoCurricular, nodo: NodoCurricular): boolean {
+  return tieneNodo(proyecto, nodo);
+}
+
+/**
+ * Filtra las alineaciones cuyos extremos ya no existen (p. ej. se borró un
+ * principio, un resultado, un RA o una actividad). Evita que una edición
+ * legítima deje el agregado en un estado inválido que bloquearía el guardado.
+ */
+export function podarAlineacionesHuerfanas(proyecto: ProyectoCurricular): AlineacionCurricular[] {
+  return proyecto.alineaciones.filter((a) => tieneNodo(proyecto, a.origen) && tieneNodo(proyecto, a.destino));
 }
 
 function idsUnicos(ids: string[]): boolean {
@@ -417,8 +541,7 @@ function esProyectoCurricular(valor: unknown): valor is ProyectoCurricular {
 
   return proyecto.alineaciones.every(
     (a) =>
-      a.origen.tipo === "principio_marco" &&
-      a.destino.tipo === "resultado_programa" &&
+      esBordePermitido(a.origen.tipo, a.destino.tipo) &&
       tieneNodo(proyecto, a.origen) &&
       tieneNodo(proyecto, a.destino)
   );

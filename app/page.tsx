@@ -36,9 +36,15 @@ import {
 } from "@/lib/estadoMeso";
 import { fusionarMarco, parsearRespuestaMacro, validarMarco, type SeccionMacro } from "@/lib/macro";
 import { fusionarPrograma, parsearRespuestaMeso, validarPrograma, type SeccionMeso } from "@/lib/meso";
+import { definirAlineacion, existeAlineacion, quitarAlineacion } from "@/lib/alineaciones";
 import { SUGERENCIAS_APERTURA_MACRO } from "@/lib/promptMacro";
 import { SUGERENCIAS_APERTURA_MESO } from "@/lib/promptMeso";
-import type { FuenteCurricular, MarcoEducativoInstitucional, ProgramaAcademico } from "@/lib/proyecto";
+import type {
+  FuenteCurricular,
+  MarcoEducativoInstitucional,
+  NodoCurricular,
+  ProgramaAcademico
+} from "@/lib/proyecto";
 import {
   CLAVE_MICRO_V1,
   CLAVE_MICRO_V2,
@@ -59,6 +65,7 @@ import {
   folioNuevo,
   mergeMicrocurriculo,
   parsearRespuesta,
+  rasDelMicro,
   validarMicrocurriculo,
   type ChatMensaje,
   type Intencion,
@@ -720,6 +727,32 @@ export default function Page() {
       return;
     }
     persistirProyecto(siguiente, "Asignatura desvinculada. La ficha se conserva.");
+  }
+
+  /**
+   * Crea o quita la alineación de un borde (Macro→Meso o Meso→Micro) sin tocar
+   * documentos ni conversaciones. La matriz se repinta sola con el cambio.
+   */
+  function alternarAlineacion(origen: NodoCurricular, destino: NodoCurricular) {
+    const base = estadoV3Ref.current;
+    if (!base || scopeV3NoSoportadoRef.current) return;
+    const siguiente = existeAlineacion(base.proyecto, origen, destino)
+      ? quitarAlineacion(base, origen, destino)
+      : definirAlineacion(base, origen, destino);
+    if (!siguiente) {
+      setAvisoPersistencia("No pude actualizar la alineación. No se cambió nada.");
+      return;
+    }
+    const guardado = guardarEstadoV3(window.localStorage, siguiente);
+    if (!guardado.ok) {
+      setAvisoPersistencia(
+        "La alineación cambió en esta sesión, pero no se pudo guardar en el navegador. No cierres la pestaña hasta resolverlo."
+      );
+      return;
+    }
+    estadoV3Ref.current = guardado.estado;
+    recargarMeso(guardado.estado);
+    setVersionProyecto((v) => v + 1);
   }
 
   function idProyectoActual(): string {
@@ -1787,6 +1820,47 @@ export default function Page() {
       ? []
       : asignaturasDelPrograma(proyectoEnVista, programa.id);
   const asignaturasDisponibles = proyectoEnVista ? asignaturasSinPrograma(proyectoEnVista) : [];
+  /* Datos para la matriz de trazabilidad del programa activo. */
+  const marcoVinculado =
+    vinculoMarcoId && proyectoEnVista
+      ? (proyectoEnVista.marcos.find((m) => m.id === vinculoMarcoId) ?? null)
+      : null;
+  const principiosMarco = (marcoVinculado?.principios ?? []).map((a) => ({ id: a.id, texto: a.texto }));
+  const microsDelPrograma =
+    programa === null || !proyectoEnVista
+      ? []
+      : proyectoEnVista.asignaturas.filter((a) => a.programaId === programa.id);
+  const rasAsignaturas = microsDelPrograma.flatMap((a) => {
+    const nombre = a.microcurriculo.ident.asignatura.trim() || "Asignatura sin nombre";
+    return rasDelMicro(a.microcurriculo).map((r) => ({
+      asignaturaId: a.id,
+      asignaturaNombre: nombre,
+      raId: r.id,
+      texto: r.texto,
+      unidad: r.unidad
+    }));
+  });
+  const alineacionesEnVista = proyectoEnVista?.alineaciones ?? [];
+  /* En la ficha Micro: qué resultados del programa responde cada RA. */
+  const asignaturaActualId =
+    seleccionEnVista?.modulo === "micro" ? (seleccionEnVista.documentoId ?? null) : null;
+  const vinculosRa: Record<string, string[]> = {};
+  if (asignaturaActualId && proyectoEnVista) {
+    const textosResultado = new Map<string, string>();
+    for (const p of proyectoEnVista.programas) {
+      for (const r of p.resultadosPrograma) textosResultado.set(`${p.id}:${r.id}`, r.texto);
+    }
+    for (const a of proyectoEnVista.alineaciones) {
+      if (a.destino.tipo !== "ra_micro" || (a.destino.contextoId ?? null) !== asignaturaActualId) continue;
+      if (a.origen.tipo !== "resultado_programa") continue;
+      const programaId = a.origen.contextoId ?? proyectoEnVista.programas.find((p) => p.resultadosPrograma.some((r) => r.id === a.origen.id))?.id;
+      const texto = programaId ? (textosResultado.get(`${programaId}:${a.origen.id}`) ?? null) : null;
+      if (!texto) continue;
+      const lista = vinculosRa[a.destino.id] ?? [];
+      if (!lista.includes(texto)) lista.push(texto);
+      vinculosRa[a.destino.id] = lista;
+    }
+  }
 
   /* ------------------------------------------------------------------ */
   /* Modo conversación: solo el chat. Sin ficha, sin rieles, sin tabs.   */
@@ -2059,6 +2133,11 @@ export default function Page() {
                 onChange={editarPrograma}
                 onVincular={vincularAsignaturaAlPrograma}
                 onDesvincular={desvincularAsignaturaDelPrograma}
+                principiosMarco={principiosMarco}
+                nombreMarco={marcoVinculado?.nombre ?? null}
+                rasAsignaturas={rasAsignaturas}
+                alineaciones={alineacionesEnVista}
+                onToggleAlineacion={alternarAlineacion}
               />
             )
           ) : (
@@ -2067,6 +2146,7 @@ export default function Page() {
                 micro={micro}
                 activa={seccionActiva}
                 onChange={editarMicro}
+                vinculosRa={vinculosRa}
               />
             )
           )}

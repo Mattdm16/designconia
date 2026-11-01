@@ -41,11 +41,19 @@ export type Tema = {
   subtemas: string[];
 };
 
+/** Resultado de aprendizaje con identidad estable para trazar la evaluación. */
+export type ResultadoAprendizaje = {
+  /** Identificador estable (p. ej. ra_abc1234); lo usa la trazabilidad. */
+  id: string;
+  /** Desempeño observable y medible: verbo de acción + qué logra el estudiante. */
+  texto: string;
+};
+
 export type Unidad = {
   numero: number;
   titulo: string;
   /** Resultados de aprendizaje de la unidad, con verbos medibles. */
-  resultadosAprendizaje: string[];
+  resultadosAprendizaje: ResultadoAprendizaje[];
   temas: Tema[];
 };
 
@@ -84,14 +92,21 @@ export type Sesion = {
 };
 
 export type ActividadEvaluacion = {
+  /** Identificador estable (p. ej. act_abc1234); lo usa la trazabilidad. */
+  id: string;
   nombre: string;
   descripcion: string;
   /** Rúbrica analítica, lista de cotejo, guía de observación… */
   instrumento: string;
   /** Herramientas que el entregable exige usar (GitHub, Jira…). */
   herramientas: string[];
-  /** Qué resultado de aprendizaje mide. Texto libre, con chequeo suave. */
+  /**
+   * Nota libre heredada sobre qué resultado mide. Se conserva por
+   * compatibilidad; el vínculo trazable vive en `mideIds`.
+   */
   mide: string;
+  /** Ids de resultados de aprendizaje del mismo micro que esta actividad mide. */
+  mideIds: string[];
 };
 
 export type Corte = {
@@ -317,19 +332,94 @@ function normalizarTema(v: unknown): Tema {
 }
 
 /**
+ * Hash FNV-1a corto para ids estables sin crypto ni dependencias.
+ * Determinista en navegador y Node: el mismo texto da el mismo id.
+ */
+function hashCorto(semilla: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < semilla.length; i++) hash = Math.imul(hash ^ semilla.charCodeAt(i), 0x01000193);
+  return (hash >>> 0).toString(36).padStart(7, "0");
+}
+
+/** Id base de un RA a partir de su texto normalizado. */
+function idRaDesdeTexto(textoNormalizado: string): string {
+  return `ra_${hashCorto(`ra:${textoNormalizado}`)}`;
+}
+
+/** Id base de una actividad a partir de su nombre normalizado. */
+function idActividadDesdeNombre(nombreNormalizado: string): string {
+  return `act_${hashCorto(`act:${nombreNormalizado}`)}`;
+}
+
+function esIdTrazable(v: unknown): v is string {
+  return typeof v === "string" && /^[a-z]+_[a-z0-9]+(?:_[0-9]+)?$/.test(v.trim());
+}
+
+/** Crea un RA nuevo con id único (para altas desde el editor). */
+export function crearResultado(texto: string): ResultadoAprendizaje {
+  const limpio = texto.trim().replace(/\s+/g, " ");
+  const base = limpio ? idRaDesdeTexto(limpio.toLowerCase()) : `ra_nuevo_${hashCorto(`${Date.now()}:${Math.random()}`)}`;
+  return { id: base, texto: limpio };
+}
+
+/** Crea una actividad de evaluación vacía con id único (para altas desde el editor). */
+export function nuevaActividadEvaluacion(): ActividadEvaluacion {
+  return {
+    id: `act_nueva_${hashCorto(`${Date.now()}:${Math.random()}`)}`,
+    nombre: "",
+    descripcion: "",
+    instrumento: "",
+    herramientas: [],
+    mide: "",
+    mideIds: []
+  };
+}
+
+/**
+ * Normaliza un resultado de aprendizaje aceptando el formato heredado
+ * (string suelto) y el nuevo ({ id?, texto }). El id se conserva si es
+ * válido; si falta, deriva del texto para que sea estable entre turnos.
+ */
+function normalizarResultado(v: unknown): ResultadoAprendizaje | null {
+  if (typeof v === "string") {
+    const textoNormalizado = v.trim().replace(/\s+/g, " ");
+    if (!textoNormalizado) return null;
+    return { id: idRaDesdeTexto(textoNormalizado.toLowerCase()), texto: textoNormalizado };
+  }
+  if (!esObjeto(v)) return null;
+  const textoNormalizado = texto(
+    v.texto ?? v.nombre ?? v.resultado ?? v.descripcion ?? v.valor,
+    ""
+  ).replace(/\s+/g, " ");
+  if (!textoNormalizado) return null;
+  const id =
+    esIdTrazable(v.id) ? (v.id as string).trim() : idRaDesdeTexto(textoNormalizado.toLowerCase());
+  return { id, texto: textoNormalizado };
+}
+
+/**
  * Las unidades se renumeran siempre: la numeración es responsabilidad de la
  * interfaz, no del modelo, que puede repetir números o saltearlos.
  */
 function normalizarUnidad(v: unknown, indice: number): Unidad {
   const o = esObjeto(v) ? v : {};
   const temasCrudos = Array.isArray(o.temas) ? o.temas : Array.isArray(o.contenidos) ? o.contenidos : [];
+  const crudos = o.resultadosAprendizaje ?? o.resultados ?? o.ra;
+  const listaCruda = Array.isArray(crudos) ? crudos : typeof crudos === "string" ? [crudos] : [];
+  const vistos = new Set<string>();
+  const resultadosAprendizaje: ResultadoAprendizaje[] = [];
+  for (const item of listaCruda.slice(0, LIMITES.resultadosPorUnidad)) {
+    const ra = normalizarResultado(item);
+    if (!ra) continue;
+    // Mismo id dentro de la unidad: se conserva el primero.
+    if (vistos.has(ra.id)) continue;
+    vistos.add(ra.id);
+    resultadosAprendizaje.push(ra);
+  }
   return {
     numero: indice + 1,
     titulo: texto(o.titulo ?? o.nombre ?? o.unidad, ""),
-    resultadosAprendizaje: lista(
-      o.resultadosAprendizaje ?? o.resultados ?? o.ra,
-      LIMITES.resultadosPorUnidad
-    ),
+    resultadosAprendizaje,
     temas: temasCrudos
       .slice(0, LIMITES.temasPorUnidad)
       .map(normalizarTema)
@@ -392,15 +482,36 @@ function normalizarSesion(v: unknown, indice: number): Sesion {
 
 function normalizarActividad(v: unknown): ActividadEvaluacion {
   if (typeof v === "string") {
-    return { nombre: v.trim(), descripcion: "", instrumento: "", herramientas: [], mide: "" };
+    const nombre = v.trim();
+    return {
+      id: idActividadDesdeNombre(nombre.toLowerCase() || "sin_nombre"),
+      nombre,
+      descripcion: "",
+      instrumento: "",
+      herramientas: [],
+      mide: "",
+      mideIds: []
+    };
   }
   const o = esObjeto(v) ? v : {};
+  const nombre = texto(o.nombre ?? o.actividad ?? o.evidencia, "");
+  const crudos = o.mideIds ?? o.mide_ids ?? o.raIds;
+  const listaCruda = Array.isArray(crudos) ? crudos : [];
+  const vistos = new Set<string>();
+  const mideIds: string[] = [];
+  for (const item of listaCruda) {
+    if (!esIdTrazable(item) || vistos.has((item as string).trim())) continue;
+    vistos.add((item as string).trim());
+    mideIds.push((item as string).trim());
+  }
   return {
-    nombre: texto(o.nombre ?? o.actividad ?? o.evidencia, ""),
+    id: esIdTrazable(o.id) ? (o.id as string).trim() : idActividadDesdeNombre(nombre.toLowerCase() || "sin_nombre"),
+    nombre,
     descripcion: textoOpcional(o.descripcion ?? o.detalle ?? o.criterio),
     instrumento: textoOpcional(o.instrumento ?? o.instrumentoEvaluacion),
     herramientas: lista(o.herramientas, LIMITES.recursos),
-    mide: textoOpcional(o.mide ?? o.resultadoQueMide ?? o.ra)
+    mide: textoOpcional(o.mide ?? o.resultadoQueMide ?? o.ra),
+    mideIds
   };
 }
 
@@ -513,10 +624,65 @@ function normalizarBibliografia(v: unknown): Microcurriculo["bibliografia"] {
   };
 }
 
+/**
+ * Garantiza los invariantes de trazabilidad dentro de un micro ya normalizado:
+ * ids de RA únicos en todo el micro, ids de actividad únicos, `mideIds` que
+ * apuntan a RA existentes y resolución del `mide` heredado (texto libre) al RA
+ * con el mismo texto, cuando hay coincidencia exacta.
+ */
+function asegurarTrazabilidadMicro(m: Microcurriculo): Microcurriculo {
+  const usadosRa = new Set<string>();
+  for (const u of m.contenido.unidades) {
+    for (const ra of u.resultadosAprendizaje) {
+      const base = ra.id;
+      let id = base;
+      let n = 2;
+      while (usadosRa.has(id)) {
+        id = `${base}_${n}`;
+        n++;
+      }
+      ra.id = id;
+      usadosRa.add(id);
+    }
+  }
+
+  const porTexto = new Map<string, string>();
+  for (const u of m.contenido.unidades) {
+    for (const ra of u.resultadosAprendizaje) {
+      const clave = ra.texto.trim().toLowerCase().replace(/\s+/g, " ");
+      if (!porTexto.has(clave)) porTexto.set(clave, ra.id);
+    }
+  }
+
+  const usadosAct = new Set<string>();
+  for (const c of m.evaluacion.cortes) {
+    for (const a of c.actividades) {
+      const base = a.id;
+      let id = base;
+      let n = 2;
+      while (usadosAct.has(id)) {
+        id = `${base}_${n}`;
+        n++;
+      }
+      a.id = id;
+      usadosAct.add(id);
+
+      let ids = a.mideIds.filter((x) => usadosRa.has(x));
+      if (ids.length === 0 && a.mide.trim()) {
+        const clave = a.mide.trim().toLowerCase().replace(/\s+/g, " ");
+        const exacto = porTexto.get(clave);
+        if (exacto) ids = [exacto];
+      }
+      a.mideIds = ids;
+    }
+  }
+  return m;
+}
+
 /** Reconstruye un Microcurriculo válido a partir de lo que devolvió el modelo. */
 export function normalizarMicrocurriculo(v: unknown): Microcurriculo {
   const o = esObjeto(v) ? v : {};
-  return {
+  return asegurarTrazabilidadMicro({
     folio: texto(o.folio, ""),
     ident: normalizarIdent(o.ident ?? o.identificacion),
     justificacion: texto(o.justificacion ?? o.proposito, ""),
@@ -526,7 +692,7 @@ export function normalizarMicrocurriculo(v: unknown): Microcurriculo {
     metodologia: normalizarMetodologia(o.metodologia),
     evaluacion: normalizarEvaluacion(o.evaluacion ?? o.sistemaEvaluacion),
     bibliografia: normalizarBibliografia(o.bibliografia ?? o.recursos)
-  };
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -612,6 +778,67 @@ export function actividadesSinInstrumento(m: Microcurriculo): number {
     (a, c) => a + c.actividades.filter((x) => x.nombre.trim() && !x.instrumento.trim()).length,
     0
   );
+}
+
+/* ------------------------------------------------------------------ */
+/* Trazabilidad Micro: RA con identidad y su vínculo con la evaluación  */
+/* ------------------------------------------------------------------ */
+
+/** Un RA con la unidad a la que pertenece, para matrices y resoluciones. */
+export type RaTrazable = {
+  id: string;
+  texto: string;
+  unidad: number;
+};
+
+/** Todos los RA del micro, en orden de unidades. */
+export function rasDelMicro(m: Microcurriculo): RaTrazable[] {
+  return m.contenido.unidades.flatMap((u) =>
+    u.resultadosAprendizaje.map((ra) => ({ id: ra.id, texto: ra.texto, unidad: u.numero }))
+  );
+}
+
+/** Busca un RA por id en todo el micro. */
+export function raPorId(m: Microcurriculo, id: string): RaTrazable | null {
+  for (const u of m.contenido.unidades) {
+    const ra = u.resultadosAprendizaje.find((r) => r.id === id);
+    if (ra) return { id: ra.id, texto: ra.texto, unidad: u.numero };
+  }
+  return null;
+}
+
+/** Texto de un RA por id, o null si no existe. */
+export function textoRa(m: Microcurriculo, id: string): string | null {
+  return raPorId(m, id)?.texto ?? null;
+}
+
+/** Todas las actividades con su corte y sus vínculos, en orden. */
+export function actividadesDelMicro(
+  m: Microcurriculo
+): { id: string; nombre: string; corte: string; mideIds: string[]; instrumento: string }[] {
+  return m.evaluacion.cortes.flatMap((c) =>
+    c.actividades.map((a) => ({
+      id: a.id,
+      nombre: a.nombre,
+      corte: c.nombre,
+      mideIds: [...a.mideIds],
+      instrumento: a.instrumento
+    }))
+  );
+}
+
+/** Actividades con nombre que no miden ningún RA por id. */
+export function actividadesSinVinculo(m: Microcurriculo): number {
+  return m.evaluacion.cortes.reduce(
+    (a, c) => a + c.actividades.filter((x) => x.nombre.trim() && x.mideIds.length === 0).length,
+    0
+  );
+}
+
+/** RA que ninguna actividad dice medir. */
+export function rasSinMedir(m: Microcurriculo): number {
+  const medidos = new Set(m.evaluacion.cortes.flatMap((c) => c.actividades.flatMap((a) => a.mideIds)));
+  return rasDelMicro(m).filter((ra) => !medidos.has(ra.id)).length;
 }
 
 /**
@@ -815,9 +1042,12 @@ export function resumenSeccion(m: Microcurriculo, s: SeccionId): string {
       const total = totalPorcentaje(m.evaluacion.cortes);
       const n = m.evaluacion.cortes.length;
       const sinInst = actividadesSinInstrumento(m);
+      const sinVinc = actividadesSinVinculo(m);
       if (!n) return "Sin cortes";
-      const base = `${n} corte${n === 1 ? "" : "s"} · ${total}%`;
-      return sinInst ? `${base} · ${sinInst} sin instrumento` : base;
+      let base = `${n} corte${n === 1 ? "" : "s"} · ${total}%`;
+      if (sinInst) base += ` · ${sinInst} sin instrumento`;
+      if (sinVinc) base += ` · ${sinVinc} sin RA`;
+      return base;
     }
     case "bibliografia": {
       const n = m.bibliografia.obligatorias.length + m.bibliografia.complementarias.length;
@@ -911,6 +1141,20 @@ export function validarMicrocurriculo(m: Microcurriculo): string[] {
     );
   }
 
+  const sinVinculo = actividadesSinVinculo(m);
+  if (sinVinculo > 0) {
+    problemas.push(
+      `${sinVinculo} actividad${sinVinculo === 1 ? "" : "es"} sin RA vinculado: no se sabe qué resultado mide.`
+    );
+  }
+
+  const huerfanos = rasSinMedir(m);
+  if (huerfanos > 0 && actividadesDelMicro(m).length > 0) {
+    problemas.push(
+      `${huerfanos} resultado${huerfanos === 1 ? "" : "s"} de aprendizaje sin actividad que lo mida.`
+    );
+  }
+
   return problemas.slice(0, 3);
 }
 
@@ -951,6 +1195,78 @@ function fusionarSesiones(anteriores: Sesion[], nuevas: Sesion[]): Sesion[] {
     .map((s, i) => ({ ...s, numero: i + 1 }));
 }
 
+function claveTexto(t: string): string {
+  return t.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/**
+ * Fusiona unidades preservando los ids de RA ya asignados: si un RA entrante
+ * tiene el mismo texto que uno anterior, hereda su id para no romper los
+ * vínculos de evaluación ni las alineaciones del proyecto.
+ */
+function fusionarUnidades(anteriores: Unidad[], nuevas: Unidad[]): Unidad[] {
+  const porTexto = new Map<string, string>();
+  for (const u of anteriores) {
+    for (const ra of u.resultadosAprendizaje) {
+      const clave = claveTexto(ra.texto);
+      if (clave && !porTexto.has(clave)) porTexto.set(clave, ra.id);
+    }
+  }
+  const copiadas: Unidad[] = nuevas.map((u) => ({
+    ...u,
+    resultadosAprendizaje: u.resultadosAprendizaje.map((ra) => {
+      const heredado = porTexto.get(claveTexto(ra.texto));
+      return heredado && heredado !== ra.id ? { ...ra, id: heredado } : ra;
+    })
+  }));
+  // Reordena colisiones de ids dentro del conjunto nuevo.
+  const usados = new Set<string>();
+  for (const u of copiadas) {
+    for (const ra of u.resultadosAprendizaje) {
+      const base = ra.id;
+      let id = base;
+      let n = 2;
+      while (usados.has(id)) {
+        id = `${base}_${n}`;
+        n++;
+      }
+      ra.id = id;
+      usados.add(id);
+    }
+  }
+  return copiadas;
+}
+
+/**
+ * Fusiona cortes preservando los ids de actividad ya asignados (por nombre) y
+ * los vínculos `mideIds` cuando la respuesta no trae unos nuevos. Los ids
+ * huérfanos se filtran contra los RA del micro resultante.
+ */
+function fusionarCortes(
+  anteriores: Corte[],
+  nuevos: Corte[],
+  rasDisponibles: Set<string>
+): Corte[] {
+  const porNombre = new Map<string, ActividadEvaluacion>();
+  for (const c of anteriores) {
+    for (const a of c.actividades) {
+      const clave = claveTexto(a.nombre);
+      if (clave && !porNombre.has(clave)) porNombre.set(clave, a);
+    }
+  }
+  return nuevos.map((c) => ({
+    ...c,
+    actividades: c.actividades.map((a) => {
+      const previa = porNombre.get(claveTexto(a.nombre));
+      if (!previa) return { ...a, mideIds: a.mideIds.filter((x) => rasDisponibles.has(x)) };
+      const mideIds = a.mideIds.length
+        ? a.mideIds.filter((x) => rasDisponibles.has(x))
+        : previa.mideIds.filter((x) => rasDisponibles.has(x));
+      return { ...a, id: previa.id, mideIds };
+    })
+  }));
+}
+
 /**
  * Aplica el microcurrículo que devolvió la IA sobre el anterior.
  * Conserva folio y evita que una iteración parcial borre secciones que el
@@ -961,6 +1277,11 @@ export function mergeMicrocurriculo(anterior: Microcurriculo | null, nueva: Micr
 
   const ident = nueva.ident;
   const prev = anterior.ident;
+
+  const unidades = nueva.contenido.unidades.length
+    ? fusionarUnidades(anterior.contenido.unidades, nueva.contenido.unidades)
+    : anterior.contenido.unidades;
+  const rasDisponibles = new Set(unidades.flatMap((u) => u.resultadosAprendizaje.map((ra) => ra.id)));
 
   return {
     folio: anterior.folio || nueva.folio,
@@ -984,9 +1305,7 @@ export function mergeMicrocurriculo(anterior: Microcurriculo | null, nueva: Micr
         ? nueva.objetivos.especificas
         : anterior.objetivos.especificas
     },
-    contenido: {
-      unidades: nueva.contenido.unidades.length ? nueva.contenido.unidades : anterior.contenido.unidades
-    },
+    contenido: { unidades },
     secuencia: {
       // La secuencia se acumula: pedir las sesiones de la unidad 2 no puede
       // borrar las de la unidad 1.
@@ -1002,7 +1321,10 @@ export function mergeMicrocurriculo(anterior: Microcurriculo | null, nueva: Micr
     evaluacion: {
       // Si los cortes vienen, se respetan tal cual (aunque sumen distinto de
       // 100): el desbalance lo señala la ficha y lo corrige el docente.
-      cortes: nueva.evaluacion.cortes.length ? nueva.evaluacion.cortes : anterior.evaluacion.cortes
+      // Los ids de actividad y sus vínculos se preservan por nombre.
+      cortes: nueva.evaluacion.cortes.length
+        ? fusionarCortes(anterior.evaluacion.cortes, nueva.evaluacion.cortes, rasDisponibles)
+        : anterior.evaluacion.cortes
     },
     bibliografia: {
       obligatorias: nueva.bibliografia.obligatorias.length

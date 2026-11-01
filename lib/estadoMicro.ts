@@ -5,11 +5,12 @@
 
 import {
   esEstadoGuardadoV3,
+  podarAlineacionesHuerfanas,
   type ConversacionPersistida,
   type EstadoGuardadoV3,
   type ProyectoCurricular
 } from "./proyecto.ts";
-import type { ChatMensaje, Intencion, Microcurriculo } from "./schema.ts";
+import { normalizarMicrocurriculo, type ChatMensaje, type Intencion, type Microcurriculo } from "./schema.ts";
 
 export type VistaMicroPersistible = {
   microcurriculo: Microcurriculo | null;
@@ -72,8 +73,11 @@ function vistaDesdeConversacion(
   documentoId: string | null
 ): VistaMicroPersistible {
   const datos = conversacion ?? conversacionVacia(scopeId, modulo, documentoId);
+  // Migra al leer: un micro heredado (RA como texto, actividades sin ids)
+  // se entrega ya normalizado y el autosave lo persiste migrado.
+  const micro = microcurriculo === null ? null : normalizarMicrocurriculo(clonar(microcurriculo));
   return {
-    microcurriculo: microcurriculo === null ? null : clonar(microcurriculo),
+    microcurriculo: micro,
     mensajes: clonar(datos.mensajes),
     sugerencias: clonar(datos.sugerencias),
     intencion: datos.intencion,
@@ -243,6 +247,11 @@ export function aplicarVistaMicroV3(
 
   const estado = base === null ? crearEstadoGuardadoV3Vacio(idProyectoSiNuevo) : clonar(base);
   const vistaCopia = clonar(vista);
+  // Normaliza lo que viene del editor o del chat: asigna ids estables a RA y
+  // actividades nuevas, resuelve el `mide` heredado y filtra vínculos rotos.
+  if (vistaCopia.microcurriculo !== null) {
+    vistaCopia.microcurriculo = normalizarMicrocurriculo(vistaCopia.microcurriculo);
+  }
 
   if (vistaCopia.microcurriculo === null) {
     const scopeId = scopeInicio();
@@ -277,6 +286,10 @@ export function aplicarVistaMicroV3(
       { id: asignaturaId, programaId: null, microcurriculo }
     ];
   }
+
+  // Una edición puede borrar RA o actividades vinculadas: las alineaciones
+  // huérfanas se podan para no dejar el agregado inválido ni bloquear el guardado.
+  estado.proyecto.alineaciones = podarAlineacionesHuerfanas(estado.proyecto);
 
   const scopeId = scopeMicro(asignaturaId);
   const anterior = estado.conversaciones[scopeId];

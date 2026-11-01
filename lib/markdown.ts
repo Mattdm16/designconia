@@ -12,6 +12,7 @@
 import {
   ETIQUETA_TIPO_SESION,
   POR_DEFINIR,
+  textoRa,
   totalPorcentaje,
   type Microcurriculo,
   type Referencia,
@@ -123,7 +124,7 @@ export function microcurriculoAMarkdown(m: Microcurriculo): string {
       if (u.resultadosAprendizaje.length) {
         l.push("**Resultados de aprendizaje**");
         l.push("");
-        for (const r of u.resultadosAprendizaje) l.push(`- ${r}`);
+        for (const r of u.resultadosAprendizaje) l.push(`- ${r.texto}`);
         l.push("");
       } else {
         l.push(`**Resultados de aprendizaje:** ${POR_DEFINIR}`);
@@ -181,8 +182,12 @@ export function microcurriculoAMarkdown(m: Microcurriculo): string {
       }
       for (const a of c.actividades) {
         const descripcion = a.descripcion ? `${a.nombre}: ${a.descripcion}` : a.nombre;
+        const vinculados = a.mideIds
+          .map((id) => textoRa(m, id))
+          .filter((t): t is string => t !== null);
+        const mide = vinculados.length ? vinculados.join("; ") : a.mide;
         l.push(
-          `| ${celda(c.nombre)} | ${c.porcentaje}% | ${celda(descripcion)} | ${celda(a.instrumento) || POR_DEFINIR} | ${celda(a.herramientas.join(", ")) || "—"} | ${celda(a.mide) || "—"} |`
+          `| ${celda(c.nombre)} | ${c.porcentaje}% | ${celda(descripcion)} | ${celda(a.instrumento) || POR_DEFINIR} | ${celda(a.herramientas.join(", ")) || "—"} | ${celda(mide) || "—"} |`
         );
       }
     }

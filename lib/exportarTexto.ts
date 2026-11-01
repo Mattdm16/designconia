@@ -10,6 +10,7 @@
 import {
   ETIQUETA_TIPO_SESION,
   POR_DEFINIR,
+  textoRa,
   totalPorcentaje,
   usosDeRecurso,
   horasPorTipo,
@@ -110,7 +111,7 @@ export function microcurriculoATexto(m: Microcurriculo): string {
       l.push(`Unidad ${u.numero}. ${u.titulo || POR_DEFINIR}`);
       if (u.resultadosAprendizaje.length) {
         l.push("  Resultados de aprendizaje:");
-        l.push(...listaPlana(u.resultadosAprendizaje, "    "));
+        l.push(...listaPlana(u.resultadosAprendizaje.map((r) => r.texto), "    "));
       } else {
         l.push(`  Resultados de aprendizaje: ${POR_DEFINIR}`);
       }
@@ -172,7 +173,12 @@ export function microcurriculoATexto(m: Microcurriculo): string {
         l.push(`  - ${a.nombre || POR_DEFINIR}${a.descripcion ? `: ${a.descripcion}` : ""}`);
         l.push(`      Instrumento: ${a.instrumento || POR_DEFINIR}`);
         if (a.herramientas.length) l.push(`      Herramientas: ${a.herramientas.join(", ")}`);
-        if (a.mide) l.push(`      Mide: ${a.mide}`);
+        if (a.mideIds.length) {
+          const vinculados = a.mideIds
+            .map((id) => textoRa(m, id))
+            .filter((t): t is string => t !== null);
+          if (vinculados.length) l.push(`      Mide: ${vinculados.join("; ")}`);
+        } else if (a.mide) l.push(`      Mide: ${a.mide}`);
       }
     }
     l.push(`Total: ${totalPorcentaje(m.evaluacion.cortes)}%`);

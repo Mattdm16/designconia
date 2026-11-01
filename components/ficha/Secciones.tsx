@@ -10,7 +10,10 @@ import {
   LIMITES,
   SIN_PRERREQUISITOS,
   TIPOS_SESION,
+  crearResultado,
   horasPorTipo,
+  nuevaActividadEvaluacion,
+  rasDelMicro,
   recursosSinUso,
   sesionesDeUnidad,
   totalPorcentaje,
@@ -21,6 +24,7 @@ import {
   type Horas,
   type Identificacion,
   type Microcurriculo,
+  type RaTrazable,
   type Referencia,
   type Sesion,
   type TipoSesion,
@@ -137,11 +141,14 @@ function TemaEditor({
 function UnidadEditor({
   unidad,
   onChange,
-  onQuitar
+  onQuitar,
+  vinculosRa
 }: {
   unidad: Unidad;
   onChange: (u: Unidad) => void;
   onQuitar: () => void;
+  /** Resultado(s) del programa que responde cada RA (por id de RA). */
+  vinculosRa?: Record<string, string[]>;
 }) {
   return (
     <li className="rounded-xl border border-black/[0.07] bg-arena/40 p-3">
@@ -167,13 +174,58 @@ function UnidadEditor({
       </div>
 
       <div className="mt-2">
-        <ListaTextos
-          etiqueta="Resultados de aprendizaje"
-          items={unidad.resultadosAprendizaje}
-          onChange={(resultadosAprendizaje) => onChange({ ...unidad, resultadosAprendizaje })}
-          max={LIMITES.resultadosPorUnidad}
-          placeholder="Qué podrá hacer el estudiante (diseña, evalúa, distingue…)"
-        />
+        <Rotulo>Resultados de aprendizaje</Rotulo>
+        <ul className="mt-1 space-y-1">
+          {unidad.resultadosAprendizaje.map((ra, i) => (
+            <li key={ra.id || i}>
+              <div className="flex items-start gap-1">
+                <input
+                  value={ra.texto}
+                  onChange={(e) =>
+                    onChange({
+                      ...unidad,
+                      resultadosAprendizaje: unidad.resultadosAprendizaje.map((x, j) =>
+                        j === i ? { ...x, texto: e.target.value } : x
+                      )
+                    })
+                  }
+                  aria-label={`Resultado de aprendizaje ${i + 1} de la unidad ${unidad.numero}`}
+                  placeholder="Qué podrá hacer el estudiante (diseña, evalúa, distingue…)"
+                  title={ra.id ? `id: ${ra.id}` : undefined}
+                  className="min-w-0 flex-1 rounded-lg border border-transparent bg-white px-2 py-1 text-[13px] hover:border-black/10 focus:border-black/20 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    onChange({
+                      ...unidad,
+                      resultadosAprendizaje: unidad.resultadosAprendizaje.filter((_, j) => j !== i)
+                    })
+                  }
+                  aria-label={`Quitar resultado de aprendizaje ${i + 1} de la unidad ${unidad.numero}`}
+                  className="mt-1 shrink-0 rounded-full p-1 text-black/25 hover:text-terracotta"
+                >
+                  <Icono nombre="papelera" className="h-3 w-3" />
+                </button>
+              </div>
+              {vinculosRa?.[ra.id]?.length ? (
+                <p className="truncate pl-1 text-[10.5px] text-rainfall" title={vinculosRa[ra.id].join(" · ")}>
+                  ↳ Responde a: {vinculosRa[ra.id].join(" · ")}
+                </p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+        <button
+          type="button"
+          onClick={() =>
+            onChange({ ...unidad, resultadosAprendizaje: [...unidad.resultadosAprendizaje, crearResultado("")] })
+          }
+          disabled={unidad.resultadosAprendizaje.length >= LIMITES.resultadosPorUnidad}
+          className="mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] text-black/45 hover:text-black disabled:opacity-35"
+        >
+          <Icono nombre="mas" className="h-3 w-3" /> Añadir
+        </button>
       </div>
 
       <ul className="mt-2 space-y-1.5">
@@ -200,10 +252,13 @@ function UnidadEditor({
 
 export function ContenidoSeccion({
   contenido,
-  onChange
+  onChange,
+  vinculosRa
 }: {
   contenido: Microcurriculo["contenido"];
   onChange: (v: Microcurriculo["contenido"]) => void;
+  /** Resultado(s) del programa que responde cada RA (por id de RA). */
+  vinculosRa?: Record<string, string[]>;
 }) {
   const vacia = (numero: number): Unidad => ({
     numero,
@@ -225,6 +280,7 @@ export function ContenidoSeccion({
           <UnidadEditor
             key={i}
             unidad={u}
+            vinculosRa={vinculosRa}
             onChange={(nueva) => onChange({ unidades: contenido.unidades.map((x, j) => (j === i ? nueva : x)) })}
             onQuitar={() =>
               onChange({
@@ -758,11 +814,14 @@ function HerramientaNueva({ onAgregar }: { onAgregar: (h: string) => void }) {
 function CorteEditor({
   corte,
   indice,
+  ras,
   onChange,
   onQuitar
 }: {
   corte: Corte;
   indice: number;
+  /** RA del micro para vincular cada actividad con lo que mide. */
+  ras: RaTrazable[];
   onChange: (c: Corte) => void;
   onQuitar: () => void;
 }) {
@@ -855,16 +914,62 @@ function CorteEditor({
                 </label>
                 <label className="flex items-center gap-1">
                   <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-black/40">
-                    Mide
+                    Nota
                   </span>
                   <input
                     value={a.mide}
                     onChange={(e) => cambiar({ mide: e.target.value })}
-                    aria-label={`Resultado de aprendizaje que mide la actividad ${i + 1} del corte ${indice + 1}`}
-                    placeholder="RA de la unidad 2"
+                    aria-label={`Nota libre sobre qué mide la actividad ${i + 1} del corte ${indice + 1}`}
+                    placeholder="Aclaración opcional"
                     className="min-w-0 flex-1 rounded-lg border border-transparent px-2 py-0.5 text-[11.5px] hover:border-black/10 focus:border-black/20 focus:bg-white focus:outline-none"
                   />
                 </label>
+              </div>
+
+              {/* Vínculo trazable: qué RA mide esta actividad. */}
+              <div className="mt-1 pl-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-black/40">
+                  Mide los RA
+                </p>
+                {ras.length === 0 ? (
+                  <p className="mt-0.5 text-[11px] text-black/45">
+                    Todavía no hay resultados de aprendizaje. Redáctalos en el contenido y vuelve aquí a vincularlos.
+                  </p>
+                ) : (
+                  <div className="mt-0.5 flex flex-wrap gap-1">
+                    {ras.map((r) => {
+                      const activo = a.mideIds.includes(r.id);
+                      return (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() =>
+                            cambiar({
+                              mideIds: activo
+                                ? a.mideIds.filter((x) => x !== r.id)
+                                : [...a.mideIds, r.id]
+                            })
+                          }
+                          aria-pressed={activo}
+                          title={r.texto}
+                          className={`inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] ${
+                            activo
+                              ? "bg-rainfall/15 text-rainfall"
+                              : "bg-black/[0.04] text-black/55 hover:bg-black/[0.08] hover:text-black"
+                          }`}
+                        >
+                          <span className="shrink-0 font-mono">U{r.unidad}</span>
+                          <span className="truncate">{r.texto}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {Boolean(a.nombre.trim()) && a.mideIds.length === 0 && (
+                  <p className="mt-1 flex items-center gap-1 text-[10.5px] text-terracotta">
+                    <Icono nombre="alerta" className="h-3 w-3" /> Sin RA vinculado: no se sabe qué resultado mide
+                  </p>
+                )}
               </div>
 
               {sinInstrumento && (
@@ -905,15 +1010,7 @@ function CorteEditor({
       </datalist>
 
       <BotonMini
-        onClick={() =>
-          onChange({
-            ...corte,
-            actividades: [
-              ...corte.actividades,
-              { nombre: "", descripcion: "", instrumento: "", herramientas: [], mide: "" }
-            ]
-          })
-        }
+        onClick={() => onChange({ ...corte, actividades: [...corte.actividades, nuevaActividadEvaluacion()] })}
         disabled={corte.actividades.length >= LIMITES.actividadesPorCorte}
       >
         Añadir actividad
@@ -923,16 +1020,18 @@ function CorteEditor({
 }
 
 export function EvaluacionSeccion({
-  evaluacion,
+  micro,
   onChange,
   onAjustar
 }: {
-  evaluacion: Microcurriculo["evaluacion"];
+  micro: Microcurriculo;
   onChange: (v: Microcurriculo["evaluacion"]) => void;
   onAjustar: () => void;
 }) {
+  const evaluacion = micro.evaluacion;
   const total = totalPorcentaje(evaluacion.cortes);
   const descuadra = evaluacion.cortes.length > 0 && total !== 100;
+  const ras = rasDelMicro(micro);
 
   return (
     <div>
@@ -955,6 +1054,7 @@ export function EvaluacionSeccion({
             key={i}
             corte={c}
             indice={i}
+            ras={ras}
             onChange={(nuevo) =>
               onChange({ cortes: evaluacion.cortes.map((x, j) => (j === i ? nuevo : x)) })
             }

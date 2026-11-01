@@ -36,7 +36,7 @@
 | Vincular Micro con Meso | **Implementado**: desde el editor Meso se vincula/desvincula una asignatura independiente; la ficha nunca se borra al desvincular. | El vínculo es a nivel de asignatura, no entre resultados específicos. Una asignatura solo admite un programa en este MVP. |
 | Elegir Macro/Meso/Micro desde la conversación inicial | **Implementado**: el chat inicial muestra «¿Por dónde empezamos?» (Asignatura/Programa/Marco) con saludo y sugerencias por nivel; el selector compacto sigue en el encabezado. | Verificado solo con tipos, pruebas y build; sin inspección visual en navegador. |
 | Manejar varios Marcos, Programas y Asignaturas | **Implementado**: selector de documento por nivel + «+ Nuevo» en modo conversación y en modo borrador; abrir/crear preserva el proyecto y sus hilos. | El documento recién creado tarda un instante en aparecer en la lista (autosave con debounce). «Conversación nueva» sigue siendo borrado total y explícito del proyecto. |
-| Trazabilidad pedagógica completa | **Parcial**: hay tipos de alineación Macro principio→resultado de programa Meso y vínculos Programa–Marco / Asignatura–Programa. | La alineación Macro→Meso no se edita en UI; tampoco se enlaza resultado Meso→RA Micro→actividad/evidencia. `Unidad.resultadosAprendizaje` y `ActividadEvaluacion.mide` todavía son texto, no IDs estables. |
+| Trazabilidad pedagógica completa | **Implementada**: RA con ids estables y actividades con `mideIds` en el Micro; bordes principio→resultado→RA (RA→actividad vive en `mideIds`); matrices editables Macro→programa y programa→RA en la ficha Meso; insignias «Responde a» en el contenido Micro; poda de huérfanas al editar. | Falta matriz RA→actividad como alineación editable (hoy vive en `mideIds` de cada actividad). `mide` se conserva como nota libre heredada. Sin inspección visual en navegador. |
 | Citas de fuentes curriculares | **Parcial**: V3 separa fuentes y citas; el editor Macro registra fuentes y muestra citas existentes. | Falta asociar/editar una cita (fuente + localizador/página/sección) desde cada afirmación en la interfaz. |
 | Exportación | **Implementada para Micro**: PDF de texto plano y copia Markdown. | No hay exportación de Macro/Meso ni expediente curricular conjunto. |
 | Revisión visual | El detector mecánico marcó 0 hallazgos en los objetivos examinados. | **No se hizo inspección visual en navegador ni capturas** de la interfaz Macro/Meso. |
@@ -45,7 +45,8 @@
 
 1. ~~Elección Macro/Meso/Micro desde la conversación inicial~~ Hecho: tarjetas «¿Por dónde empezamos?», saludo y sugerencias por nivel.
 2. ~~Lista, selección y creación de varios documentos por nivel~~ Hecho: selector + «+ Nuevo» por nivel con proyecto e hilos preservados.
-3. Completar citas curriculares y trazabilidad Macro→Meso→Micro→evaluación, empezando por IDs estables en RA/unidades/actividades del Micro.
+3. ~~Trazabilidad Macro→Meso→Micro→evaluación~~ Hecho: ids estables en RA/actividades, matrices editables en Meso, `mideIds` en evaluación, poda de huérfanas y migración de datos heredados al leer.
+4. Completar citas curriculares (fuente + localizador por afirmación) y exportación Macro/Meso.
 4. Añadir exportación de Macro y Meso, y decidir si se necesita un expediente conjunto.
 5. Probar flujos completos y revisar visualmente escritorio/móvil.
 
@@ -71,10 +72,11 @@ ProyectoCurricular
 - `AfirmacionCurricular`: id, texto, origen (`docente`, `documento`, `sugerencia_IA`, `derivado`), estado (`sin_confirmar`, `confirmado_por_docente`, `contrastado_con_fuente`) y citas.
 - `FuenteCurricular` no se mezcla con bibliografía. Una afirmación de origen documental o contrastada exige una cita válida.
 - Una alineación no equivale por sí sola a aprobación institucional.
+- Nodos: `principio_marco`, `resultado_programa`, `ra_micro`, `actividad_evaluacion`; bordes permitidos principio→resultado→RA. Los nodos Micro llevan `contextoId` (asignatura) para desambiguar. Operaciones puras en [alineaciones.ts](lib/alineaciones.ts).
 
 ### Contrato Micro existente
 
-El Micro canónico sigue en [schema.ts](lib/schema.ts). Conserva las ocho secciones y su flujo de generación por hitos. Los resultados por unidad y el campo `mide` de evaluación siguen siendo cadenas; por tanto no afirmar que existe aún una alineación por resultado/evidencia.
+El Micro canónico sigue en [schema.ts](lib/schema.ts). Conserva las ocho secciones y su flujo de generación por hitos. Los RA son `{id, texto}` con ids estables y las actividades llevan `{id, mide, mideIds}`; el `mide` heredado (texto libre) se resuelve al RA del mismo texto al normalizar. Los datos heredados se migran al leer sin romper el guard.
 
 ### Prompts y API
 
@@ -108,12 +110,14 @@ components/
 lib/
   schema.ts                      contrato Micro, normalización y 95 pruebas
   proyecto.ts                    agregado V3, guardas y migración Micro
+  alineaciones.ts                definir/quitar/matriz de alineaciones + 11 pruebas (en trazabilidad.test.ts)
+  trazabilidad.test.ts           11 pruebas de RA estables, bordes y poda
   persistencia.ts                migración/guardado local transaccional
-  estadoMicro.ts                 puente vista Micro ↔ V3
+  estadoMicro.ts                 puente vista Micro ↔ V3 (migra al leer, poda al editar)
   macro.ts / promptMacro.ts       lógica pura y prompt Macro
-  estadoMacro.ts                 puente vista Marco ↔ V3
+  estadoMacro.ts                 puente vista Marco ↔ V3 (poda al editar)
   meso.ts / promptMeso.ts         lógica pura y prompt Meso
-  estadoMeso.ts                  puente vista Programa ↔ V3 y vínculos Micro
+  estadoMeso.ts                  puente vista Programa ↔ V3 y vínculos Micro (poda al editar)
 ```
 
 ## 5. Verificación comprobada
@@ -121,7 +125,7 @@ lib/
 Último checkpoint de implementación antes de esta actualización: commit `177a4aa` (vínculo Micro–Meso) en la rama local `feature/curricular-project-foundation`. Los commits de desarrollo **no se han subido a GitHub**. Esta edición de `context.md` se confirma por separado; no cambiar el checkpoint de código al leerla.
 
 ```text
-npm test              → 235 pruebas (95 + 14 + 38 + 11 + 26 + 11 + 23 + 17)
+npm test              → 246 pruebas (95 + 14 + 38 + 11 + 26 + 11 + 23 + 17 + 11)
 npx tsc --noEmit      → limpio
 npm run build         → correcto
 impeccable detect     → [] en la última tanda de archivos UI revisada
@@ -171,7 +175,8 @@ npm run build
 3. Se añadieron secuencia didáctica modular por unidad, instrumentos, recursos alineados y PDF de texto plano.
 4. Se integró Macro/Meso en V3, con migración segura desde `designconia.micro.v1/v2` y continuidad del Micro.
 5. Se añadieron los prompts, editores, API y vínculos Programa–Marco y Asignatura–Programa.
-6. Se añadió gestión multi-documento (selector + «+ Nuevo» por nivel, entrada inicial por nivel con saludo/sugerencias). El siguiente foco es trazabilidad por IDs hasta la evaluación.
+6. Se añadió gestión multi-documento (selector + «+ Nuevo» por nivel, entrada inicial por nivel con saludo/sugerencias).
+7. Se implementó trazabilidad: RA/actividades con ids, bordes extendidos, matrices en Meso, `mideIds` en evaluación y poda de huérfanas. El siguiente foco es citas por afirmación y exportación Macro/Meso.
 
 > Si cualquier sección histórica de este archivo o [PRODUCT.md](PRODUCT.md) aún describe un producto solo Micro, esta sección y el código reciente describen el estado actual; actualiza las discrepancias cuando corresponda.
 

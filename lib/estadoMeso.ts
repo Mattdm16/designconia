@@ -14,6 +14,7 @@ import { crearEstadoGuardadoV3Vacio } from "./estadoMicro.ts";
 import { SECCIONES_MESO, type SeccionMeso } from "./promptMeso.ts";
 import {
   esEstadoGuardadoV3,
+  podarAlineacionesHuerfanas,
   type ConversacionPersistida,
   type EstadoGuardadoV3,
   type ProgramaAcademico,
@@ -319,6 +320,10 @@ export function aplicarVistaMesoV3(
       ];
     }
   }
+
+  // Si la edición borró resultados vinculados, las alineaciones huérfanas se
+  // podan para no dejar el agregado inválido ni bloquear el guardado.
+  estado.proyecto.alineaciones = podarAlineacionesHuerfanas(estado.proyecto);
 
   const scopeId = scopeMeso(programaId);
   const anterior = estado.conversaciones[scopeId];

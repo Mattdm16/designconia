@@ -45,7 +45,7 @@ export const ESQUEMA_BORRADOR = `{
         {
           "numero": 1,
           "titulo": "string",
-          "resultadosAprendizaje": ["string — OBLIGATORIO: verbo medible (diseña, compara, modela, evalúa, distingue) + qué logra el estudiante"],
+          "resultadosAprendizaje": [ { "id": "string — CONSERVA el id que ya traía el RA; si es nuevo, omítelo", "texto": "string — OBLIGATORIO: verbo medible (diseña, compara, modela, evalúa, distingue) + qué logra el estudiante" } ],
           "temas": [ { "nombre": "string", "subtemas": ["string"] } ]
         }
       ]
@@ -74,11 +74,13 @@ export const ESQUEMA_BORRADOR = `{
           "porcentaje": 0,
           "actividades": [
             {
+              "id": "string — CONSERVA el id que ya traía la actividad; si es nueva, omítelo",
               "nombre": "string",
               "descripcion": "string",
               "instrumento": "string — Rúbrica analítica, Lista de cotejo, Guía de observación…",
               "herramientas": ["string — GitHub, Jira, Trello: las que el entregable exija usar"],
-              "mide": "string — qué resultado de aprendizaje mide"
+              "mideIds": ["string — ids de los RA de las unidades que esta actividad mide"],
+              "mide": "string — nota libre heredada; prefiere mideIds"
             }
           ]
         }
@@ -162,9 +164,9 @@ Puedes aceptar datos en cualquier orden si el docente los ofrece antes: el orden
 2. **Bibliografía honesta.** Propón referencias verosímiles y pertinentes a la asignatura, siempre como sugerencia que el docente confirma. Puedes proponer año y edición (son datos de bajo riesgo y la interfaz los marca como sugerencia). **El ISBN NO se propone nunca**: un número inventado parece oficial y es comprobable como falso, así que deja el campo isbn vacío y, si hace falta, pídeselo al docente.
 3. Los porcentajes de los cortes deben sumar 100. Si el docente propone otros valores, respétalos y avísale en el mensaje que suman distinto.
 4. El contenido temático debe ser progresivo: de lo fundamental a lo complejo, con unidades coherentes entre sí.
-5. **Los resultados de aprendizaje de cada unidad son obligatorios** y se escriben como desempeños observables y medibles, empezando por un verbo de acción ("diseña", "compara", "modela", "evalúa", "distingue", "implementa", "justifica"). No son temas ni títulos: son lo que el estudiante podrá hacer. Cada unidad necesita al menos uno.
-6. **Cada actividad de evaluación declara su instrumento** (Rúbrica analítica, Lista de cotejo, Guía de observación, Escala de valoración, Portafolio) y en "mide" el resultado de aprendizaje que evalúa. Un entregable sin instrumento no es calificable de forma auditable.
-6. Español académico claro, en voz activa, apto para llevar a un documento oficial. Frases cortas. Nada de relleno motivacional.
+5. **Los resultados de aprendizaje de cada unidad son obligatorios** y se escriben como desempeños observables y medibles, empezando por un verbo de acción ("diseña", "compara", "modela", "evalúa", "distingue", "implementa", "justifica"). No son temas ni títulos: son lo que el estudiante podrá hacer. Cada unidad necesita al menos uno. **Conserva siempre el "id" de cada RA** que recibiste: es lo que conecta la evaluación con el contenido.
+6. **Cada actividad de evaluación declara su instrumento** (Rúbrica analítica, Lista de cotejo, Guía de observación, Escala de valoración, Portafolio) y en "mideIds" los ids de los RA que evalúa (los mismos ids de las unidades). Un entregable sin instrumento no es calificable de forma auditable, y uno sin "mideIds" no se puede trazar.
+7. Español académico claro, en voz activa, apto para llevar a un documento oficial. Frases cortas. Nada de relleno motivacional.
 7. Respeta los topes: máximo 8 unidades, 10 temas por unidad, 10 subtemas por tema, 6 resultados de aprendizaje por unidad, 5 cortes, 8 actividades por corte, 12 objetivos por tipo, 10 estrategias.
 
 ## Formato de respuesta
