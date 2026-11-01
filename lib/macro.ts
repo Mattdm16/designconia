@@ -116,6 +116,12 @@ function normalizarVigencia(v: unknown): Vigencia | null {
   return { desde, hasta };
 }
 
+/**
+ * Normaliza citas a fuentes curriculares. Solo se conservan las citas con
+ * localizador (localizador, sección o página): una cita sin localizador no
+ * pasa el guard del agregado y bloquearía el guardado, así que se descarta y
+ * la afirmación que la necesitaba se degrada a sugerencia.
+ */
 function normalizarCitas(v: unknown): CitaFuenteCurricular[] {
   if (!Array.isArray(v)) return [];
   const salida: CitaFuenteCurricular[] = [];
@@ -131,6 +137,7 @@ function normalizarCitas(v: unknown): CitaFuenteCurricular[] {
     if (seccion) cita.seccion = seccion;
     if (typeof pagina === "number" && Number.isFinite(pagina)) cita.pagina = pagina;
     else if (typeof pagina === "string" && pagina.trim()) cita.pagina = pagina.trim();
+    if (!cita.localizador && !cita.seccion && cita.pagina === undefined) continue;
     salida.push(cita);
   }
   return salida;

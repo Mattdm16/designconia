@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 
 import { Icono } from "@/components/Icono";
-import { Area, BotonMini, Campo, Rotulo } from "@/components/ficha/Campos";
+import { BotonMini, Campo, Rotulo } from "@/components/ficha/Campos";
+import { AfirmacionEditor } from "@/components/ficha/Citas";
 import {
   ETIQUETA_ESTADO_MARCO,
   LIMITES_MACRO,
@@ -103,87 +104,20 @@ function SeccionMarco({
 }
 
 /* ------------------------------------------------------------------ */
-/* Afirmaciones con confirmación del docente                           */
+/* Afirmaciones con confirmación del docente y citas a fuentes         */
 /* ------------------------------------------------------------------ */
-
-function AfirmacionEditor({
-  afirmacion,
-  indice,
-  tituloFuente,
-  onChange,
-  onQuitar
-}: {
-  afirmacion: AfirmacionCurricular;
-  indice: number;
-  tituloFuente: (fuenteId: string) => string | null;
-  onChange: (a: AfirmacionCurricular) => void;
-  onQuitar: () => void;
-}) {
-  const confirmada = afirmacion.estado !== "sin_confirmar";
-  return (
-    <li className="rounded-xl border border-black/[0.07] bg-white p-2.5">
-      <div className="flex items-center gap-1.5">
-        <span className="font-mono text-[10px] text-black/35">{String(indice + 1).padStart(2, "0")}</span>
-        {afirmacion.origen === "sugerencia_IA" && afirmacion.estado === "sin_confirmar" ? (
-          <span className="shrink-0 rounded-full bg-mora px-2 py-0.5 text-[10px] font-semibold text-white">
-            Sugerencia de IA
-          </span>
-        ) : (
-          <span className="shrink-0 rounded-full bg-rainfall px-2 py-0.5 text-[10px] font-semibold text-white">
-            Confirmada
-          </span>
-        )}
-        <button
-          type="button"
-          onClick={onQuitar}
-          aria-label={`Quitar afirmación ${indice + 1}`}
-          className="ml-auto shrink-0 rounded-full p-1 text-black/25 hover:text-terracotta"
-        >
-          <Icono nombre="papelera" className="h-3 w-3" />
-        </button>
-      </div>
-      <Area
-        valor={afirmacion.texto}
-        onChange={(texto) =>
-          // Editarla la vuelve palabras del docente: hay que confirmarla de nuevo.
-          onChange({ ...afirmacion, texto, origen: "docente", estado: "sin_confirmar", citas: [] })
-        }
-        label={`Afirmación ${indice + 1}`}
-        placeholder="Redactá la afirmación como declaración, no como tema"
-        rows={2}
-        className="mt-1 text-[13px] leading-relaxed"
-      />
-      {afirmacion.citas.length > 0 && (
-        <p className="mt-1 px-2 font-mono text-[10.5px] text-black/45">
-          {afirmacion.citas
-            .map((c) => tituloFuente(c.fuenteId) ?? c.fuenteId)
-            .map((t) => `Fuente: ${t}`)
-            .join(" · ")}
-        </p>
-      )}
-      {!confirmada && (
-        <BotonMini
-          icono="check"
-          onClick={() => onChange({ ...afirmacion, estado: "confirmado_por_docente" })}
-        >
-          Confirmar
-        </BotonMini>
-      )}
-    </li>
-  );
-}
 
 function ListaAfirmaciones({
   etiqueta,
   items,
-  tituloFuente,
+  fuentes,
   onChange,
   max,
   placeholder
 }: {
   etiqueta: string;
   items: AfirmacionCurricular[];
-  tituloFuente: (fuenteId: string) => string | null;
+  fuentes: FuenteCurricular[];
   onChange: (v: AfirmacionCurricular[]) => void;
   max: number;
   placeholder: string;
@@ -202,7 +136,7 @@ function ListaAfirmaciones({
             key={a.id}
             afirmacion={a}
             indice={i}
-            tituloFuente={tituloFuente}
+            fuentes={fuentes}
             onChange={(nueva) => onChange(items.map((x, j) => (j === i ? nueva : x)))}
             onQuitar={() => onChange(items.filter((_, j) => j !== i))}
           />
@@ -331,8 +265,6 @@ export function MarcoFicha({
   const enFoco =
     activa ?? (SECCIONES_PROGRESO.find((s) => !seccionMacroCompleta(marco, s)) as SeccionMacro | undefined) ?? null;
   const sinConfirmar = afirmacionesSinConfirmar(marco);
-  const tituloFuente = (fuenteId: string) =>
-    fuentes.find((f) => f.id === fuenteId)?.titulo ?? null;
 
   const conEstado = (id: SeccionMacro) => ({
     id,
@@ -479,7 +411,7 @@ export function MarcoFicha({
         <ListaAfirmaciones
           etiqueta="Principios"
           items={marco.principios}
-          tituloFuente={tituloFuente}
+          fuentes={fuentes}
           onChange={(principios) => cambiarMarco({ principios })}
           max={LIMITES_MACRO.principios}
           placeholder="Los principios propuestos por la IA nacen como sugerencia: confirmalos uno por uno."
@@ -490,7 +422,7 @@ export function MarcoFicha({
         <ListaAfirmaciones
           etiqueta="Orientaciones"
           items={marco.afirmaciones}
-          tituloFuente={tituloFuente}
+          fuentes={fuentes}
           onChange={(afirmaciones) => cambiarMarco({ afirmaciones })}
           max={LIMITES_MACRO.orientaciones}
           placeholder="Indicaciones concretas que los programas deben cumplir."

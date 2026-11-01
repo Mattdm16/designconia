@@ -18,6 +18,8 @@ import {
   type Referencia,
   type Sesion
 } from "./schema.ts";
+import type { FuenteCurricular, MarcoEducativoInstitucional, ProgramaAcademico } from "./proyecto.ts";
+import type { ContextoProgramaTexto } from "./exportarMesoTexto.ts";
 
 /** Escapa lo mínimo para que una celda de tabla no rompa el documento. */
 function celda(v: string): string {
@@ -226,5 +228,113 @@ export function microcurriculoAMarkdown(m: Microcurriculo): string {
     l.push("");
   }
 
+  return l.join("\n");
+}
+
+/* ------------------------------------------------------------------ */
+/* Marco y programa (para «Copiar» y pegar)                             */
+/* ------------------------------------------------------------------ */
+
+function respaldoMd(
+  citas: { fuenteId: string; localizador?: string; pagina?: number | string; seccion?: string }[],
+  fuentes: FuenteCurricular[]
+): string {
+  return citas
+    .map((c) => {
+      const titulo = fuentes.find((f) => f.id === c.fuenteId)?.titulo?.trim() || c.fuenteId;
+      const partes = [titulo];
+      if (c.localizador?.trim()) partes.push(c.localizador.trim());
+      if (c.seccion?.trim()) partes.push(`secc. ${c.seccion.trim()}`);
+      if (c.pagina !== undefined && String(c.pagina).trim()) partes.push(`p. ${String(c.pagina).trim()}`);
+      return `_Respaldo: ${partes.join(" · ")}_`;
+    })
+    .join("\n");
+}
+
+function estadoAfirmacionMd(a: { origen: string; estado: string }): string {
+  if (a.origen === "sugerencia_IA" && a.estado === "sin_confirmar") return "sugerencia de IA";
+  if (a.estado === "contrastado_con_fuente") return "contrastada";
+  if (a.origen === "documento") return "documento";
+  if (a.estado === "confirmado_por_docente") return "confirmada";
+  return "sin confirmar";
+}
+
+function afirmacionesMd(
+  items: { id: string; texto: string; origen: string; estado: string; citas: Parameters<typeof respaldoMd>[0] }[],
+  fuentes: FuenteCurricular[],
+  extra?: (id: string) => string[]
+): string[] {
+  if (items.length === 0) return [`- ${POR_DEFINIR}`];
+  const l: string[] = [];
+  for (const a of items) {
+    l.push(`- **${(a.texto || "").trim() || POR_DEFINIR}** (${estadoAfirmacionMd(a)})`);
+    const respaldo = respaldoMd(a.citas as Parameters<typeof respaldoMd>[0], fuentes);
+    if (respaldo) l.push(respaldo);
+    for (const t of extra?.(a.id) ?? []) l.push(`  - ${t}`);
+  }
+  return l;
+}
+
+/** Marco institucional en Markdown. */
+export function marcoAMarkdown(m: MarcoEducativoInstitucional, fuentes: FuenteCurricular[]): string {
+  const l: string[] = [];
+  l.push(`# ${m.nombre.trim() || POR_DEFINIR}`);
+  l.push("");
+  l.push(`**Emite:** ${m.emisor?.trim() || POR_DEFINIR} · **Versión:** ${m.version.trim() || POR_DEFINIR}`);
+  l.push("");
+  l.push("## Principios");
+  l.push("");
+  l.push(...afirmacionesMd(m.principios, fuentes));
+  l.push("");
+  l.push("## Orientaciones");
+  l.push("");
+  l.push(...afirmacionesMd(m.afirmaciones, fuentes));
+  l.push("");
+  l.push("## Fuentes");
+  l.push("");
+  l.push(
+    fuentes.length
+      ? fuentes.map((f) => `- **${f.titulo.trim() || POR_DEFINIR}** (${f.tipo})`).join("\n")
+      : `- ${POR_DEFINIR}`
+  );
+  l.push("");
+  return l.join("\n");
+}
+
+/** Programa académico en Markdown, con su trazabilidad resumida. */
+export function programaAMarkdown(p: ProgramaAcademico, ctx: ContextoProgramaTexto): string {
+  const l: string[] = [];
+  l.push(`# ${p.nombre.trim() || POR_DEFINIR}`);
+  l.push("");
+  l.push(`**Código:** ${(p.codigo ?? "").trim() || POR_DEFINIR} · **Estado:** ${p.estado}`);
+  l.push("");
+  l.push(`**Marco que lo orienta:** ${(ctx.marcoNombre ?? "").trim() || POR_DEFINIR}`);
+  l.push("");
+  l.push("## Perfil de ingreso");
+  l.push("");
+  l.push(...afirmacionesMd(p.perfilIngreso, ctx.fuentes));
+  l.push("");
+  l.push("## Perfil de egreso");
+  l.push("");
+  l.push(...afirmacionesMd(p.perfilEgreso, ctx.fuentes));
+  l.push("");
+  l.push("## Resultados del programa");
+  l.push("");
+  if (p.resultadosPrograma.length === 0) {
+    l.push(`- ${POR_DEFINIR}`);
+  } else {
+    for (const r of p.resultadosPrograma) {
+      l.push(`- **${r.texto.trim() || POR_DEFINIR}** (${estadoAfirmacionMd(r)})`);
+      const respaldo = respaldoMd(r.citas, ctx.fuentes);
+      if (respaldo) l.push(respaldo);
+      for (const s of ctx.principiosPorResultado[r.id] ?? []) l.push(`  - Sostenido por: ${s}`);
+      for (const s of ctx.rasPorResultado[r.id] ?? []) l.push(`  - Se concreta en: ${s}`);
+    }
+  }
+  l.push("");
+  l.push("## Asignaturas vinculadas");
+  l.push("");
+  l.push(ctx.asignaturas.length ? ctx.asignaturas.map((n) => `- ${n.trim() || POR_DEFINIR}`).join("\n") : `- ${POR_DEFINIR}`);
+  l.push("");
   return l.join("\n");
 }

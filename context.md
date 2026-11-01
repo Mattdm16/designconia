@@ -37,8 +37,8 @@
 | Elegir Macro/Meso/Micro desde la conversación inicial | **Implementado**: el chat inicial muestra «¿Por dónde empezamos?» (Asignatura/Programa/Marco) con saludo y sugerencias por nivel; el selector compacto sigue en el encabezado. | Verificado solo con tipos, pruebas y build; sin inspección visual en navegador. |
 | Manejar varios Marcos, Programas y Asignaturas | **Implementado**: selector de documento por nivel + «+ Nuevo» en modo conversación y en modo borrador; abrir/crear preserva el proyecto y sus hilos. | El documento recién creado tarda un instante en aparecer en la lista (autosave con debounce). «Conversación nueva» sigue siendo borrado total y explícito del proyecto. |
 | Trazabilidad pedagógica completa | **Implementada**: RA con ids estables y actividades con `mideIds` en el Micro; bordes principio→resultado→RA (RA→actividad vive en `mideIds`); matrices editables Macro→programa y programa→RA en la ficha Meso; insignias «Responde a» en el contenido Micro; poda de huérfanas al editar. | Falta matriz RA→actividad como alineación editable (hoy vive en `mideIds` de cada actividad). `mide` se conserva como nota libre heredada. Sin inspección visual en navegador. |
-| Citas de fuentes curriculares | **Parcial**: V3 separa fuentes y citas; el editor Macro registra fuentes y muestra citas existentes. | Falta asociar/editar una cita (fuente + localizador/página/sección) desde cada afirmación en la interfaz. |
-| Exportación | **Implementada para Micro**: PDF de texto plano y copia Markdown. | No hay exportación de Macro/Meso ni expediente curricular conjunto. |
+| Citas de fuentes curriculares | **Implementada**: editor compartido de citas (fuente + localizador/página/sección) en cada afirmación Macro/Meso, con selectores de origen y estado; el cambio a documento/contrastada exige cita válida y la última cita respaldada no se puede quitar. | Sin inspección visual en navegador. |
+| Exportación | **Implementada para Micro, Macro y Meso**: PDF de texto plano y copia Markdown en los tres niveles; el programa incluye trazabilidad (principios y RA vinculados) y asignaturas. | Falta decidir si se necesita un expediente curricular conjunto. |
 | Revisión visual | El detector mecánico marcó 0 hallazgos en los objetivos examinados. | **No se hizo inspección visual en navegador ni capturas** de la interfaz Macro/Meso. |
 
 ### Próximo orden recomendado
@@ -46,9 +46,8 @@
 1. ~~Elección Macro/Meso/Micro desde la conversación inicial~~ Hecho: tarjetas «¿Por dónde empezamos?», saludo y sugerencias por nivel.
 2. ~~Lista, selección y creación de varios documentos por nivel~~ Hecho: selector + «+ Nuevo» por nivel con proyecto e hilos preservados.
 3. ~~Trazabilidad Macro→Meso→Micro→evaluación~~ Hecho: ids estables en RA/actividades, matrices editables en Meso, `mideIds` en evaluación, poda de huérfanas y migración de datos heredados al leer.
-4. Completar citas curriculares (fuente + localizador por afirmación) y exportación Macro/Meso.
-4. Añadir exportación de Macro y Meso, y decidir si se necesita un expediente conjunto.
-5. Probar flujos completos y revisar visualmente escritorio/móvil.
+4. ~~Citas curriculares y exportación Macro/Meso~~ Hecho: citas editables por afirmación con localizador, paridad de normalizadores y PDF/Markdown en los tres niveles.
+5. Decidir el expediente curricular conjunto; probar flujos completos y revisar visualmente escritorio/móvil.
 
 ## 3. Datos y contratos
 
@@ -107,7 +106,11 @@ components/
   ficha/Meso.tsx                 editor del programa y vínculos
   ficha/Seccion.tsx              acordeón del Micro
   ficha/Campos.tsx               controles editables reutilizables
+  ficha/Citas.tsx                editor compartido de citas y afirmaciones Macro/Meso
 lib/
+  exportarMacroTexto.ts          marco a texto plano (para PDF)
+  exportarMesoTexto.ts           programa a texto plano con trazabilidad (para PDF)
+  exportarCurricular.test.ts     5 pruebas de exportación Macro/Meso
   schema.ts                      contrato Micro, normalización y 95 pruebas
   proyecto.ts                    agregado V3, guardas y migración Micro
   alineaciones.ts                definir/quitar/matriz de alineaciones + 11 pruebas (en trazabilidad.test.ts)
@@ -125,7 +128,7 @@ lib/
 Último checkpoint de implementación: commit `09052a6` (trazabilidad Macro–Meso–Micro con IDs estables y matrices editables) en la rama local `feature/curricular-project-foundation`. Los commits de desarrollo **no se han subido a GitHub**.
 
 ```text
-npm test              → 246 pruebas (95 + 14 + 38 + 11 + 26 + 11 + 23 + 17 + 11)
+npm test              → 253 pruebas (95 + 14 + 38 + 11 + 27 + 11 + 24 + 17 + 11 + 5)
 npx tsc --noEmit      → limpio
 npm run build         → correcto
 impeccable detect     → [] en la última tanda de archivos UI revisada
@@ -176,7 +179,8 @@ npm run build
 4. Se integró Macro/Meso en V3, con migración segura desde `designconia.micro.v1/v2` y continuidad del Micro.
 5. Se añadieron los prompts, editores, API y vínculos Programa–Marco y Asignatura–Programa.
 6. Se añadió gestión multi-documento (selector + «+ Nuevo» por nivel, entrada inicial por nivel con saludo/sugerencias).
-7. Se implementó trazabilidad: RA/actividades con ids, bordes extendidos, matrices en Meso, `mideIds` en evaluación y poda de huérfanas. El siguiente foco es citas por afirmación y exportación Macro/Meso.
+7. Se implementó trazabilidad: RA/actividades con ids, bordes extendidos, matrices en Meso, `mideIds` en evaluación y poda de huérfanas.
+8. Se implementaron citas editables por afirmación (fuente + localizador, con paridad macro/meso en normalizadores) y exportación Macro/Meso a PDF de texto plano y Markdown. Queda decidir el expediente curricular conjunto.
 
 > Si cualquier sección histórica de este archivo o [PRODUCT.md](PRODUCT.md) aún describe un producto solo Micro, esta sección y el código reciente describen el estado actual; actualiza las discrepancias cuando corresponda.
 

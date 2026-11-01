@@ -73,6 +73,12 @@ function claveTexto(v: string): string {
 /* Normalización                                                       */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Normaliza citas a fuentes curriculares, igual que en el marco: conserva el
+ * localizador (localizador, sección o página) y descarta las citas sin
+ * localizador, que no pasan el guard del agregado. Una cita sin localizador
+ * no puede respaldar una afirmación documental.
+ */
 function normalizarCitas(v: unknown): AfirmacionCurricular["citas"] {
   if (!Array.isArray(v)) return [];
   const salida: AfirmacionCurricular["citas"] = [];
@@ -80,7 +86,16 @@ function normalizarCitas(v: unknown): AfirmacionCurricular["citas"] {
     if (!esObjeto(cruda)) continue;
     const fuenteId = textoOpcional(cruda.fuenteId).trim();
     if (!fuenteId) continue;
-    salida.push({ fuenteId });
+    const localizador = textoOpcional(cruda.localizador).trim();
+    const seccion = textoOpcional(cruda.seccion).trim();
+    const pagina = cruda.pagina;
+    const cita: AfirmacionCurricular["citas"][number] = { fuenteId };
+    if (localizador) cita.localizador = localizador;
+    if (seccion) cita.seccion = seccion;
+    if (typeof pagina === "number" && Number.isFinite(pagina)) cita.pagina = pagina;
+    else if (typeof pagina === "string" && pagina.trim()) cita.pagina = pagina.trim();
+    if (!cita.localizador && !cita.seccion && cita.pagina === undefined) continue;
+    salida.push(cita);
   }
   return salida;
 }

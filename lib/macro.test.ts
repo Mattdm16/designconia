@@ -146,6 +146,15 @@ prueba("una afirmación documentada con cita conserva su origen", () => {
   assert(m.principios[0].citas.length === 1, "cita conservada");
 });
 
+prueba("una cita sin localizador se descarta y degrada la afirmación", () => {
+  const m = normalizarMarco({
+    nombre: "Marco",
+    principios: [{ texto: "Aprender es activo.", origen: "documento", citas: [{ fuenteId: "f1" }] }]
+  });
+  assert(m.principios[0].citas.length === 0, "cita sin localizador descartada");
+  assert(m.principios[0].origen === "sugerencia_IA", "origen degradado sin respaldo válido");
+});
+
 prueba("deduplica afirmaciones por texto normalizado", () => {
   const m = normalizarMarco({
     nombre: "Marco",

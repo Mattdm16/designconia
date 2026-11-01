@@ -91,9 +91,21 @@ prueba("una afirmación documentada sin cita se degrada a sugerencia", () => {
 prueba("una afirmación documentada con cita conserva su origen", () => {
   const p = normalizarPrograma({
     nombre: "P",
-    perfilEgreso: [{ texto: "Diseña soluciones.", origen: "documento", citas: [{ fuenteId: "f1" }] }]
+    perfilEgreso: [
+      { texto: "Diseña soluciones.", origen: "documento", citas: [{ fuenteId: "f1", seccion: "Perfil" }] }
+    ]
   });
   assert(p.perfilEgreso[0].origen === "documento", "origen conservado con respaldo");
+  assert(p.perfilEgreso[0].citas[0].seccion === "Perfil", "localizador conservado");
+});
+
+prueba("una cita sin localizador se descarta y degrada la afirmación", () => {
+  const p = normalizarPrograma({
+    nombre: "P",
+    perfilEgreso: [{ texto: "Diseña soluciones.", origen: "documento", citas: [{ fuenteId: "f1" }] }]
+  });
+  assert(p.perfilEgreso[0].citas.length === 0, "cita sin localizador descartada");
+  assert(p.perfilEgreso[0].origen === "sugerencia_IA", "origen degradado sin respaldo válido");
 });
 
 prueba("deduplica afirmaciones por texto normalizado", () => {

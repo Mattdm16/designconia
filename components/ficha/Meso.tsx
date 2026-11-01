@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 
 import { Icono } from "@/components/Icono";
-import { Area, BotonMini, Campo, Rotulo } from "@/components/ficha/Campos";
+import { BotonMini, Campo, Rotulo } from "@/components/ficha/Campos";
+import { AfirmacionEditor } from "@/components/ficha/Citas";
 import {
   ETIQUETA_ESTADO_PROGRAMA,
   LIMITES_MESO,
@@ -17,6 +18,7 @@ import type {
   AfirmacionCurricular,
   AlineacionCurricular,
   EstadoPrograma,
+  FuenteCurricular,
   NodoCurricular,
   ProgramaAcademico
 } from "@/lib/proyecto";
@@ -116,74 +118,20 @@ function SeccionMeso({
 }
 
 /* ------------------------------------------------------------------ */
-/* Afirmaciones con confirmación del docente                           */
+/* Afirmaciones con confirmación del docente y citas a fuentes         */
 /* ------------------------------------------------------------------ */
-
-function AfirmacionEditor({
-  afirmacion,
-  indice,
-  onChange,
-  onQuitar
-}: {
-  afirmacion: AfirmacionCurricular;
-  indice: number;
-  onChange: (a: AfirmacionCurricular) => void;
-  onQuitar: () => void;
-}) {
-  const confirmada = afirmacion.estado !== "sin_confirmar";
-  return (
-    <li className="rounded-xl border border-black/[0.07] bg-white p-2.5">
-      <div className="flex items-center gap-1.5">
-        <span className="font-mono text-[10px] text-black/35">{String(indice + 1).padStart(2, "0")}</span>
-        {afirmacion.origen === "sugerencia_IA" && afirmacion.estado === "sin_confirmar" ? (
-          <span className="shrink-0 rounded-full bg-mora px-2 py-0.5 text-[10px] font-semibold text-white">
-            Sugerencia de IA
-          </span>
-        ) : (
-          <span className="shrink-0 rounded-full bg-rainfall px-2 py-0.5 text-[10px] font-semibold text-white">
-            Confirmada
-          </span>
-        )}
-        <button
-          type="button"
-          onClick={onQuitar}
-          aria-label={`Quitar afirmación ${indice + 1}`}
-          className="ml-auto shrink-0 rounded-full p-1 text-black/25 hover:text-terracotta"
-        >
-          <Icono nombre="papelera" className="h-3 w-3" />
-        </button>
-      </div>
-      <Area
-        valor={afirmacion.texto}
-        onChange={(texto) =>
-          onChange({ ...afirmacion, texto, origen: "docente", estado: "sin_confirmar", citas: [] })
-        }
-        label={`Afirmación ${indice + 1}`}
-        placeholder="Redactala como declaración, no como tema"
-        rows={2}
-        className="mt-1 text-[13px] leading-relaxed"
-      />
-      {!confirmada && (
-        <BotonMini
-          icono="check"
-          onClick={() => onChange({ ...afirmacion, estado: "confirmado_por_docente" })}
-        >
-          Confirmar
-        </BotonMini>
-      )}
-    </li>
-  );
-}
 
 function ListaAfirmaciones({
   etiqueta,
   items,
+  fuentes,
   onChange,
   max,
   placeholder
 }: {
   etiqueta: string;
   items: AfirmacionCurricular[];
+  fuentes: FuenteCurricular[];
   onChange: (v: AfirmacionCurricular[]) => void;
   max: number;
   placeholder: string;
@@ -202,6 +150,7 @@ function ListaAfirmaciones({
             key={a.id}
             afirmacion={a}
             indice={i}
+            fuentes={fuentes}
             onChange={(nueva) => onChange(items.map((x, j) => (j === i ? nueva : x)))}
             onQuitar={() => onChange(items.filter((_, j) => j !== i))}
           />
@@ -482,6 +431,7 @@ export function MesoFicha({
   marcos,
   asignaturas,
   disponibles,
+  fuentes,
   activa,
   onChange,
   onVincular,
@@ -499,6 +449,8 @@ export function MesoFicha({
   asignaturas: AsignaturaVinculada[];
   /** Asignaturas independientes que se pueden vincular a este programa. */
   disponibles: AsignaturaVinculada[];
+  /** Fuentes del proyecto, para citar el respaldo de cada afirmación. */
+  fuentes: FuenteCurricular[];
   /** Sección que el asistente está trabajando; si es null, la primera pendiente. */
   activa: SeccionMeso | null;
   onChange: (next: { programa: ProgramaAcademico; vinculoMarcoId: string | null }) => void;
@@ -633,6 +585,7 @@ export function MesoFicha({
           <ListaAfirmaciones
             etiqueta="Perfil de ingreso"
             items={programa.perfilIngreso}
+            fuentes={fuentes}
             onChange={(perfilIngreso) => cambiarPrograma({ perfilIngreso })}
             max={LIMITES_MESO.ingreso}
             placeholder="Qué trae quien ingresa al programa."
@@ -640,6 +593,7 @@ export function MesoFicha({
           <ListaAfirmaciones
             etiqueta="Perfil de egreso"
             items={programa.perfilEgreso}
+            fuentes={fuentes}
             onChange={(perfilEgreso) => cambiarPrograma({ perfilEgreso })}
             max={LIMITES_MESO.egreso}
             placeholder="Qué distingue a quien egresa."
@@ -651,6 +605,7 @@ export function MesoFicha({
         <ListaAfirmaciones
           etiqueta="Resultados del programa"
           items={programa.resultadosPrograma}
+          fuentes={fuentes}
           onChange={(resultadosPrograma) => cambiarPrograma({ resultadosPrograma })}
           max={LIMITES_MESO.resultados}
           placeholder="Desempeños observables del egresado, con verbo medible."

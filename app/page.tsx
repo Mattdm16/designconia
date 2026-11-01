@@ -23,7 +23,9 @@ import {
 } from "@/lib/estadoMicro";
 import { nombreArchivo, textoAPdf } from "@/lib/exportarPdf";
 import { microcurriculoATexto } from "@/lib/exportarTexto";
-import { microcurriculoAMarkdown } from "@/lib/markdown";
+import { marcoATexto } from "@/lib/exportarMacroTexto";
+import { programaATexto, type ContextoProgramaTexto } from "@/lib/exportarMesoTexto";
+import { marcoAMarkdown, microcurriculoAMarkdown, programaAMarkdown } from "@/lib/markdown";
 import {
   aplicarVistaMesoV3,
   asignaturasDelPrograma,
@@ -1133,6 +1135,86 @@ export default function Page() {
     }
   }
 
+  function descargarTextoPdf(texto: string, base: string, etiqueta: string) {
+    try {
+      const bytes = textoAPdf(texto);
+      const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+      const blob = new Blob([buffer], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = nombreArchivo(base, "pdf");
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      mostrarAviso(`No se pudo generar el PDF del ${etiqueta}. Prueba con «Copiar» y pégalo en un documento.`);
+    }
+  }
+
+  /** Contexto de trazabilidad para exportar el programa activo. */
+  function contextoPrograma(): ContextoProgramaTexto | null {
+    if (!programa || !proyectoEnVista) return null;
+    const principiosPorId = new Map((marcoVinculado?.principios ?? []).map((a) => [a.id, a.texto] as const));
+    const rasPorId = new Map(
+      rasAsignaturas.map((r) => [r.raId, `${r.texto} (${r.asignaturaNombre} · U${r.unidad})`] as const)
+    );
+    const principiosPorResultado: Record<string, string[]> = {};
+    const rasPorResultado: Record<string, string[]> = {};
+    for (const al of alineacionesEnVista) {
+      if (al.origen.tipo === "principio_marco" && al.destino.tipo === "resultado_programa") {
+        const t = principiosPorId.get(al.origen.id);
+        if (t) (principiosPorResultado[al.destino.id] ??= []).push(t);
+      }
+      if (al.origen.tipo === "resultado_programa" && al.destino.tipo === "ra_micro") {
+        const t = rasPorId.get(al.destino.id);
+        if (t) (rasPorResultado[al.origen.id] ??= []).push(t);
+      }
+    }
+    return {
+      marcoNombre: marcoVinculado?.nombre ?? null,
+      principiosPorResultado,
+      rasPorResultado,
+      asignaturas: microsDelPrograma.map(
+        (a) => a.microcurriculo.ident.asignatura.trim() || "Asignatura sin nombre"
+      ),
+      fuentes: proyectoEnVista.fuentesCurriculares
+    };
+  }
+
+  async function copiarMarco() {
+    if (!marco) return;
+    try {
+      await navigator.clipboard.writeText(marcoAMarkdown(marco, fuentes));
+      mostrarAviso("Marco copiado como Markdown, listo para pegar.");
+    } catch {
+      mostrarAviso("El navegador no permitió copiar al portapapeles.");
+    }
+  }
+
+  function descargarMarcoPdf() {
+    if (!marco) return;
+    descargarTextoPdf(marcoATexto(marco, fuentes), marco.nombre || "marco", "marco");
+  }
+
+  async function copiarPrograma() {
+    if (!programa) return;
+    const ctx = contextoPrograma();
+    if (!ctx) return;
+    try {
+      await navigator.clipboard.writeText(programaAMarkdown(programa, ctx));
+      mostrarAviso("Programa copiado como Markdown, listo para pegar.");
+    } catch {
+      mostrarAviso("El navegador no permitió copiar al portapapeles.");
+    }
+  }
+
+  function descargarProgramaPdf() {
+    if (!programa) return;
+    const ctx = contextoPrograma();
+    if (!ctx) return;
+    descargarTextoPdf(programaATexto(programa, ctx), programa.nombre || "programa", "programa");
+  }
+
   /* -------- el núcleo: conversar e iterar -------- */
   const enviar = useCallback(
     async (texto: string, opciones?: { reintento?: boolean }) => {
@@ -2093,6 +2175,48 @@ export default function Page() {
                 <Icono nombre="descargar" className="h-3.5 w-3.5" /> Exportar PDF
               </button>
             )}
+            {moduloActivo === "macro" && marco && (
+              <button
+                type="button"
+                onClick={copiarMarco}
+                aria-label="Copiar el marco como Markdown, para pegar"
+                title="Copiar como Markdown para pegar"
+                className="rounded-full border border-black/10 bg-white p-1.5 hover:border-black/25"
+              >
+                <Icono nombre="copiar" />
+              </button>
+            )}
+            {moduloActivo === "macro" && marco && (
+              <button
+                type="button"
+                onClick={descargarMarcoPdf}
+                title="Descargar como PDF de texto plano"
+                className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
+              >
+                <Icono nombre="descargar" className="h-3.5 w-3.5" /> Exportar PDF
+              </button>
+            )}
+            {moduloActivo === "meso" && programa && (
+              <button
+                type="button"
+                onClick={copiarPrograma}
+                aria-label="Copiar el programa como Markdown, para pegar"
+                title="Copiar como Markdown para pegar"
+                className="rounded-full border border-black/10 bg-white p-1.5 hover:border-black/25"
+              >
+                <Icono nombre="copiar" />
+              </button>
+            )}
+            {moduloActivo === "meso" && programa && (
+              <button
+                type="button"
+                onClick={descargarProgramaPdf}
+                title="Descargar como PDF de texto plano"
+                className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
+              >
+                <Icono nombre="descargar" className="h-3.5 w-3.5" /> Exportar PDF
+              </button>
+            )}
           </div>
         </header>
 
@@ -2129,6 +2253,7 @@ export default function Page() {
                 marcos={marcosDisponibles}
                 asignaturas={asignaturasVinculadas}
                 disponibles={asignaturasDisponibles}
+                fuentes={proyectoEnVista?.fuentesCurriculares ?? []}
                 activa={seccionActivaMeso}
                 onChange={editarPrograma}
                 onVincular={vincularAsignaturaAlPrograma}
