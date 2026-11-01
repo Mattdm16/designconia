@@ -128,7 +128,7 @@ lib/
 
 ## 5. Verificación comprobada
 
-Último checkpoint de implementación: commit `aa51603` (citas editables por afirmación y exportación Macro/Meso) en la rama local `feature/curricular-project-foundation`. Los commits de desarrollo **no se han subido a GitHub**.
+Último checkpoint de implementación: commit `62c55f7` (expediente curricular conjunto con exportación PDF/Markdown) en la rama local `feature/curricular-project-foundation`. Los commits de desarrollo **no se han subido a GitHub**.
 
 ```text
 npm test              → 256 pruebas (95 + 14 + 38 + 11 + 27 + 11 + 24 + 17 + 11 + 5 + 3)
