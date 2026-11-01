@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Chat } from "@/components/Chat";
 import { Icono } from "@/components/Icono";
 import { MarcoFicha } from "@/components/ficha/Marco";
+import { MesoFicha } from "@/components/ficha/Meso";
 import { MicrocurriculoFicha } from "@/components/ficha/Microcurriculo";
 import { textoLegible } from "@/lib/errores";
 import {
@@ -23,9 +24,17 @@ import {
 import { nombreArchivo, textoAPdf } from "@/lib/exportarPdf";
 import { microcurriculoATexto } from "@/lib/exportarTexto";
 import { microcurriculoAMarkdown } from "@/lib/markdown";
+import {
+  aplicarVistaMesoV3,
+  leerVistaMesoV3,
+  vistaMesoVacia,
+  type VistaMesoPersistible
+} from "@/lib/estadoMeso";
 import { fusionarMarco, parsearRespuestaMacro, validarMarco, type SeccionMacro } from "@/lib/macro";
+import { fusionarPrograma, parsearRespuestaMeso, validarPrograma, type SeccionMeso } from "@/lib/meso";
 import { SUGERENCIAS_APERTURA_MACRO } from "@/lib/promptMacro";
-import type { FuenteCurricular, MarcoEducativoInstitucional } from "@/lib/proyecto";
+import { SUGERENCIAS_APERTURA_MESO } from "@/lib/promptMeso";
+import type { FuenteCurricular, MarcoEducativoInstitucional, ProgramaAcademico } from "@/lib/proyecto";
 import {
   CLAVE_MICRO_V1,
   CLAVE_MICRO_V2,
@@ -78,6 +87,9 @@ type Salud = {
   mensaje: string;
 };
 
+/** Niveles curriculares con interfaz en esta página. */
+type ModuloActivo = "micro" | "macro" | "meso";
+
 /* ------------------------------------------------------------------ */
 /* Página                                                              */
 /* ------------------------------------------------------------------ */
@@ -101,7 +113,7 @@ export default function Page() {
   const [chatVisible, setChatVisible] = useState(true);
 
   /* -------- módulo Macro: marco institucional y su conversación -------- */
-  const [moduloActivo, setModuloActivo] = useState<"micro" | "macro">("micro");
+  const [moduloActivo, setModuloActivo] = useState<ModuloActivo>("micro");
   const [marco, setMarco] = useState<MarcoEducativoInstitucional | null>(null);
   const [fuentes, setFuentes] = useState<FuenteCurricular[]>([]);
   const [mensajesMacro, setMensajesMacro] = useState<ChatMensaje[]>([]);
@@ -109,6 +121,15 @@ export default function Page() {
   const [intencionMacro, setIntencionMacro] = useState<Intencion>("entender");
   const [seccionActivaMacro, setSeccionActivaMacro] = useState<SeccionMacro | null>(null);
   const [crudoMacro, setCrudoMacro] = useState("");
+
+  /* -------- módulo Meso: programa académico y su conversación -------- */
+  const [programa, setPrograma] = useState<ProgramaAcademico | null>(null);
+  const [vinculoMarcoId, setVinculoMarcoId] = useState<string | null>(null);
+  const [mensajesMeso, setMensajesMeso] = useState<ChatMensaje[]>([]);
+  const [sugerenciasMeso, setSugerenciasMeso] = useState<string[]>(SUGERENCIAS_APERTURA_MESO);
+  const [intencionMeso, setIntencionMeso] = useState<Intencion>("entender");
+  const [seccionActivaMeso, setSeccionActivaMeso] = useState<SeccionMeso | null>(null);
+  const [crudoMeso, setCrudoMeso] = useState("");
 
   const estadoV3Ref = useRef<EstadoGuardadoV3 | null>(null);
   const idProyectoNuevoRef = useRef<string | null>(null);
@@ -150,20 +171,30 @@ export default function Page() {
   /** El marco vivo y el módulo visible, por la misma razón. */
   const marcoRef = useRef<MarcoEducativoInstitucional | null>(null);
   marcoRef.current = marco;
-  const moduloActivoRef = useRef<"micro" | "macro">("micro");
+  const moduloActivoRef = useRef<ModuloActivo>("micro");
   moduloActivoRef.current = moduloActivo;
   /** Último documento abierto en cada módulo, para volver a él al cambiar. */
-  const docIdPorModuloRef = useRef<{ micro: string | null; macro: string | null }>({
+  const docIdPorModuloRef = useRef<Record<ModuloActivo, string | null>>({
     micro: null,
-    macro: null
+    macro: null,
+    meso: null
   });
   /** Última respuesta cruda del módulo Macro, para su historial. */
   const crudoMacroRef = useRef("");
+  /** Última respuesta cruda del módulo Meso, para su historial. */
+  const crudoMesoRef = useRef("");
+  /** El programa vivo, para leerlo dentro de callbacks sin stale state. */
+  const programaRef = useRef<ProgramaAcademico | null>(null);
+  programaRef.current = programa;
+  /** El vínculo principal en edición, por la misma razón. */
+  const vinculoMarcoIdRef = useRef<string | null>(null);
+  vinculoMarcoIdRef.current = vinculoMarcoId;
 
   const saludRef = useRef<Salud | null>(null);
   saludRef.current = salud;
 
-  const hayBorrador = moduloActivo === "macro" ? marco !== null : micro !== null;
+  const hayBorrador =
+    moduloActivo === "macro" ? marco !== null : moduloActivo === "meso" ? programa !== null : micro !== null;
 
   /* -------- avisos efímeros -------- */
   const mostrarAviso = useCallback((texto: string) => {
@@ -229,7 +260,8 @@ export default function Page() {
             const vista = resultadoVista.vista;
             docIdPorModuloRef.current = {
               micro: carga.estado.proyecto.asignaturas[0]?.id ?? null,
-              macro: carga.estado.seleccion.documentoId
+              macro: carga.estado.seleccion.documentoId,
+              meso: carga.estado.proyecto.programas[0]?.id ?? null
             };
             setModuloActivo("macro");
             setMarco(vista.marco);
@@ -242,6 +274,34 @@ export default function Page() {
             setSeccionActivaMacro(vista.seccionActiva);
             setCrudoMacro(vista.crudo);
             crudoMacroRef.current = vista.crudo;
+            avisarCarga();
+            if (carga.migrado && carga.guardado) {
+              mostrarAviso("Tu proyecto se migró al formato V3.");
+            }
+          }
+        } else if (carga.estado.seleccion.modulo === "meso") {
+          const resultadoVista = leerVistaMesoV3(carga.estado);
+          if (!resultadoVista.ok) {
+            bloquearScope();
+          } else {
+            desbloquear();
+            const vista = resultadoVista.vista;
+            docIdPorModuloRef.current = {
+              micro: carga.estado.proyecto.asignaturas[0]?.id ?? null,
+              macro: carga.estado.proyecto.marcos[0]?.id ?? null,
+              meso: carga.estado.seleccion.documentoId
+            };
+            setModuloActivo("meso");
+            setPrograma(vista.programa);
+            setVinculoMarcoId(vista.vinculoMarcoId);
+            setMensajesMeso(vista.mensajes);
+            setSugerenciasMeso(
+              vista.sugerencias.length ? vista.sugerencias : SUGERENCIAS_APERTURA_MESO
+            );
+            setIntencionMeso(vista.intencion);
+            setSeccionActivaMeso(vista.seccionActiva);
+            setCrudoMeso(vista.crudo);
+            crudoMesoRef.current = vista.crudo;
             avisarCarga();
             if (carga.migrado && carga.guardado) {
               mostrarAviso("Tu proyecto se migró al formato V3.");
@@ -260,7 +320,8 @@ export default function Page() {
                 carga.estado.seleccion.modulo === "micro"
                   ? carga.estado.seleccion.documentoId
                   : (carga.estado.proyecto.asignaturas[0]?.id ?? null),
-              macro: carga.estado.proyecto.marcos[0]?.id ?? null
+              macro: carga.estado.proyecto.marcos[0]?.id ?? null,
+              meso: carga.estado.proyecto.programas[0]?.id ?? null
             };
             setMicro(vista.microcurriculo);
             setMensajes(vista.mensajes);
@@ -451,6 +512,74 @@ export default function Page() {
     crudoMacroRef.current = crudoMacro;
   }, [crudoMacro]);
 
+  useEffect(() => {
+    crudoMesoRef.current = crudoMeso;
+  }, [crudoMeso]);
+
+  /* -------- autosave del módulo Meso (espejo de los anteriores) -------- */
+  useEffect(() => {
+    if (!hidratado || bloqueoPersistenciaRef.current || scopeV3NoSoportadoRef.current) return;
+    if (moduloActivo !== "meso") return;
+    // No se escribe un proyecto vacío por el mero hecho de abrir la página.
+    if (programa === null && mensajesMeso.length === 0) return;
+
+    const id = window.setTimeout(() => {
+      try {
+        if (!idProyectoNuevoRef.current) {
+          idProyectoNuevoRef.current = `proyecto_${folioNuevo()}`;
+        }
+        const vista: VistaMesoPersistible = {
+          programa,
+          vinculoMarcoId,
+          mensajes: mensajesMeso,
+          sugerencias: sugerenciasMeso,
+          intencion: intencionMeso,
+          seccionActiva: seccionActivaMeso,
+          crudo: crudoMeso
+        };
+        const base =
+          estadoV3Ref.current ?? crearEstadoGuardadoV3Vacio(idProyectoNuevoRef.current);
+        const siguiente = aplicarVistaMesoV3(base, vista, idProyectoNuevoRef.current);
+        estadoV3Ref.current = siguiente;
+        const guardado = guardarEstadoV3(window.localStorage, siguiente);
+        if (!guardado.ok) {
+          setAvisoPersistencia(
+            `El proyecto sigue disponible en esta sesión, pero no se pudo guardar en el navegador (${guardado.error}). No cierres la pestaña hasta resolverlo.`
+          );
+          return;
+        }
+
+        estadoV3Ref.current = guardado.estado;
+        const temporalPendiente = guardado.clavesTemporalesPendientes.length > 0;
+        if (legadosPendientesRef.current) {
+          const limpieza = cargarEstadoPersistido(window.localStorage);
+          if (limpieza.ok && limpieza.guardado) {
+            estadoV3Ref.current = limpieza.estado;
+            legadosPendientesRef.current =
+              limpieza.clavesLegadasPendientes.length > 0 ||
+              limpieza.clavesTemporalesPendientes.length > 0 ||
+              limpieza.clavesConflictivas.length > 0;
+            if (limpieza.clavesConflictivas.length) {
+              setAvisoPersistencia("El proyecto se guardó; conservé copias antiguas que no pude validar.");
+              return;
+            }
+          }
+        }
+
+        if (temporalPendiente || legadosPendientesRef.current) {
+          setAvisoPersistencia("El proyecto se guardó, pero quedaron claves locales pendientes de limpieza.");
+        } else {
+          setAvisoPersistencia(null);
+        }
+      } catch (errorPersistencia) {
+        setAvisoPersistencia(
+          `El proyecto sigue disponible en esta sesión, pero no se pudo guardar (${nombreErrorPersistencia(errorPersistencia)}). No cierres la pestaña hasta resolverlo.`
+        );
+      }
+    }, 400);
+    return () => window.clearTimeout(id);
+  }, [programa, vinculoMarcoId, mensajesMeso, sugerenciasMeso, intencionMeso, seccionActivaMeso, crudoMeso, hidratado, moduloActivo]);
+
   /* -------- configuración del asistente -------- */
   useEffect(() => {
     let vivo = true;
@@ -491,6 +620,12 @@ export default function Page() {
     setFuentes(siguiente.fuentes);
   }
 
+  /* -------- edición del programa académico -------- */
+  function editarPrograma(siguiente: { programa: ProgramaAcademico; vinculoMarcoId: string | null }) {
+    setPrograma(siguiente.programa);
+    setVinculoMarcoId(siguiente.vinculoMarcoId);
+  }
+
   function vistaMicroActual(): VistaMicroPersistible {
     return {
       microcurriculo: microRef.current,
@@ -514,6 +649,18 @@ export default function Page() {
     };
   }
 
+  function vistaMesoActual(): VistaMesoPersistible {
+    return {
+      programa: programaRef.current,
+      vinculoMarcoId,
+      mensajes: mensajesMeso,
+      sugerencias: sugerenciasMeso,
+      intencion: intencionMeso,
+      seccionActiva: seccionActivaMeso,
+      crudo: crudoMeso
+    };
+  }
+
   function idProyectoActual(): string {
     if (!idProyectoNuevoRef.current) {
       idProyectoNuevoRef.current = `proyecto_${folioNuevo()}`;
@@ -526,7 +673,7 @@ export default function Page() {
    * cargando después la vista del destino desde el agregado. Nunca mezcla
    * conversaciones ni documentos entre módulos.
    */
-  function cambiarModulo(destino: "micro" | "macro") {
+  function cambiarModulo(destino: ModuloActivo) {
     if (destino === moduloActivo || enviando) return;
     abortRef.current?.abort();
     try {
@@ -538,28 +685,40 @@ export default function Page() {
             base = aplicarVistaMicroV3(base, vista, idProyectoActual());
             estadoV3Ref.current = base;
           }
-        } else {
+        } else if (moduloActivo === "macro") {
           const vista = vistaMacroActual();
           if (vista.marco !== null || vista.mensajes.length > 0) {
             base = aplicarVistaMacroV3(base, vista, idProyectoActual());
             estadoV3Ref.current = base;
           }
+        } else {
+          const vista = vistaMesoActual();
+          if (vista.programa !== null || vista.mensajes.length > 0) {
+            base = aplicarVistaMesoV3(base, vista, idProyectoActual());
+            estadoV3Ref.current = base;
+          }
         }
         const sel = base.seleccion;
-        if (sel.modulo === "micro" || sel.modulo === "macro") {
+        if (sel.modulo === "micro" || sel.modulo === "macro" || sel.modulo === "meso") {
           docIdPorModuloRef.current[sel.modulo] = sel.documentoId;
         }
         // Apunta la selección al destino: documento recordado, primero que
         // exista, o lienzo. Se verifica que el recordado siga existiendo.
         const recordado = docIdPorModuloRef.current[destino];
         const primero =
-          destino === "micro" ? base.proyecto.asignaturas[0]?.id : base.proyecto.marcos[0]?.id;
+          destino === "micro"
+            ? base.proyecto.asignaturas[0]?.id
+            : destino === "macro"
+              ? base.proyecto.marcos[0]?.id
+              : base.proyecto.programas[0]?.id;
         const candidato = recordado ?? primero ?? null;
         const existe =
           candidato === null ||
           (destino === "micro"
             ? base.proyecto.asignaturas.some((a) => a.id === candidato)
-            : base.proyecto.marcos.some((m) => m.id === candidato));
+            : destino === "macro"
+              ? base.proyecto.marcos.some((m) => m.id === candidato)
+              : base.proyecto.programas.some((p) => p.id === candidato));
         const conSeleccion: EstadoGuardadoV3 = {
           ...base,
           seleccion: { modulo: destino, documentoId: existe ? candidato : null }
@@ -578,6 +737,17 @@ export default function Page() {
           setSeccionActivaMacro(r.vista.seccionActiva);
           setCrudoMacro(r.vista.crudo);
           crudoMacroRef.current = r.vista.crudo;
+        } else if (destino === "meso") {
+          const r = leerVistaMesoV3(base);
+          if (!r.ok) throw new Error("la vista del programa no está disponible");
+          setPrograma(r.vista.programa);
+          setVinculoMarcoId(r.vista.vinculoMarcoId);
+          setMensajesMeso(r.vista.mensajes);
+          setSugerenciasMeso(r.vista.sugerencias.length ? r.vista.sugerencias : SUGERENCIAS_APERTURA_MESO);
+          setIntencionMeso(r.vista.intencion);
+          setSeccionActivaMeso(r.vista.seccionActiva);
+          setCrudoMeso(r.vista.crudo);
+          crudoMesoRef.current = r.vista.crudo;
         } else {
           const r = leerVistaMicroV3(base);
           if (!r.ok) throw new Error("la vista del microcurrículo no está disponible");
@@ -612,8 +782,7 @@ export default function Page() {
   }
 
   function nuevo() {
-    // Esta página solo puede descartar scopes Inicio/Micro. Nunca borra un
-    // proyecto seleccionado en Macro/Meso que todavía no sabe abrir.
+    // Nunca borra un proyecto en un scope que la página no sabe abrir.
     if (scopeV3NoSoportadoRef.current) return;
 
     if (hayAlgoQueBorrar) {
@@ -621,7 +790,7 @@ export default function Page() {
         ? " También se eliminarán las claves guardadas que no se pudieron leer y sus respaldos."
         : "";
       const ok = window.confirm(
-        `¿Descartar este proyecto y empezar de cero?\n\nSe borrarán de este navegador las conversaciones, el microcurrículo, el marco y los respaldos del proyecto. No se puede deshacer.${detalleRecuperacion}`
+        `¿Descartar este proyecto y empezar de cero?\n\nSe borrarán de este navegador las conversaciones, el microcurrículo, el marco, el programa y los respaldos del proyecto. No se puede deshacer.${detalleRecuperacion}`
       );
       if (!ok) return;
     }
@@ -644,6 +813,15 @@ export default function Page() {
     setSeccionActivaMacro(vistaMacroVaciaNueva.seccionActiva);
     setCrudoMacro(vistaMacroVaciaNueva.crudo);
     crudoMacroRef.current = vistaMacroVaciaNueva.crudo;
+    const vistaMesoVaciaNueva = vistaMesoVacia();
+    setPrograma(vistaMesoVaciaNueva.programa);
+    setVinculoMarcoId(vistaMesoVaciaNueva.vinculoMarcoId);
+    setMensajesMeso(vistaMesoVaciaNueva.mensajes);
+    setSugerenciasMeso(SUGERENCIAS_APERTURA_MESO);
+    setIntencionMeso(vistaMesoVaciaNueva.intencion);
+    setSeccionActivaMeso(vistaMesoVaciaNueva.seccionActiva);
+    setCrudoMeso(vistaMesoVaciaNueva.crudo);
+    crudoMesoRef.current = vistaMesoVaciaNueva.crudo;
     setModuloActivo("micro");
     setError(null);
     setPildoraBorrador(false);
@@ -652,7 +830,7 @@ export default function Page() {
     estadoV3Ref.current = null;
     idProyectoNuevoRef.current = null;
     legadosPendientesRef.current = false;
-    docIdPorModuloRef.current = { micro: null, macro: null };
+    docIdPorModuloRef.current = { micro: null, macro: null, meso: null };
     scopeV3NoSoportadoRef.current = false;
     setScopeV3NoSoportado(false);
 
@@ -1115,6 +1293,191 @@ export default function Page() {
     [enviando, mensajesMacro, mostrarAviso, hidratado]
   );
 
+  /* -------- el núcleo Meso: conversar e iterar sobre el programa -------- */
+  const enviarMeso = useCallback(
+    async (texto: string, opciones?: { reintento?: boolean }) => {
+      const t = texto.trim();
+      if (!t || enviando) return;
+      if (saludRef.current && !saludRef.current.ia && saludRef.current.conexion === "sin_clave") {
+        setError(saludRef.current.mensaje);
+        return;
+      }
+
+      ultimaPeticion.current = t;
+      setError(null);
+      setEnviando(true);
+
+      const idUsuario = `u${Date.now()}`;
+      const idIA = `a${Date.now()}-b`;
+      setMensajesMeso((m) => [...m, { id: idUsuario, role: "usuario", texto: t }, { id: idIA, role: "asistente", texto: "" }]);
+
+      const control = new AbortController();
+      abortRef.current = control;
+
+      /** El programa viaja SIEMPRE que exista: es la fuente de verdad del nivel. */
+      const programaEnviar = programaRef.current;
+      /** Marcos disponibles para que el modelo cite el vínculo por id. */
+      const marcosDisponibles =
+        estadoV3Ref.current?.proyecto.marcos.map((m) => ({ id: m.id, nombre: m.nombre })) ?? [];
+
+      const historia: { role: string; content: string }[] = [];
+      if (crudoMesoRef.current) historia.push({ role: "assistant", content: crudoMesoRef.current });
+      for (const m of mensajesMeso.slice(-8)) {
+        historia.push({ role: m.role === "usuario" ? "user" : "assistant", content: m.texto });
+      }
+
+      let bruto = "";
+      let meta: { fin?: string | null; tokens?: number | null; vacio?: boolean; error?: string | null } = {};
+      let respuestaLlego = false;
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: control.signal,
+          body: JSON.stringify({ mensaje: t, modulo: "meso", programa: programaEnviar, marcos: marcosDisponibles, historia })
+        });
+        respuestaLlego = true;
+
+        const tipo = res.headers.get("content-type") ?? "";
+        if (!res.ok || !tipo.includes("text/event-stream")) {
+          if (res.status === 404) {
+            throw new Error(
+              `El servidor respondió 404 en ${res.url || "/api/chat"}. ` +
+                "La petición no llegó al servidor de la app: comprueba que `npm run dev` esté corriendo en el puerto de esta pestaña y recarga con Ctrl+Shift+R."
+            );
+          }
+          let motivo = `El asistente respondió ${res.status}.`;
+          try {
+            const j = (await res.json()) as unknown;
+            const detalle = textoLegible(j);
+            if (detalle) motivo = detalle;
+          } catch {
+            /* respuesta sin JSON: nos quedamos con el estado */
+          }
+          throw new Error(motivo);
+        }
+
+        const lector = res.body!.getReader();
+        const decodificador = new TextDecoder();
+        let buffer = "";
+        let cerradoPorServidor = false;
+
+        for (;;) {
+          const { done, value } = await lector.read();
+          if (done) break;
+          buffer += decodificador.decode(value, { stream: true });
+
+          let corte: number;
+          while ((corte = buffer.indexOf("\n\n")) !== -1) {
+            const evento = buffer.slice(0, corte);
+            buffer = buffer.slice(corte + 2);
+
+            for (const linea of evento.split("\n")) {
+              if (!linea.startsWith("data:")) continue;
+              const carga = linea.slice(5).trim();
+              if (!carga || carga === "[DONE]") continue;
+              try {
+                const trozo = JSON.parse(carga) as { t?: string; meta?: typeof meta };
+                if (trozo.t) bruto += trozo.t;
+                if (trozo.meta) {
+                  meta = trozo.meta;
+                  if (trozo.meta.fin) cerradoPorServidor = true;
+                }
+              } catch {
+                /* un trozo ilegible no invalida lo ya recibido */
+              }
+            }
+
+            const parcial = extraerMensajeParcial(bruto);
+            if (parcial) {
+              setMensajesMeso((m) => m.map((x) => (x.id === idIA ? { ...x, texto: parcial } : x)));
+            }
+          }
+        }
+
+        if (!cerradoPorServidor) {
+          throw new Error(
+            "La conexión se cortó antes de que el asistente terminara de responder. " +
+              "Suele pasar si el servidor se reinició mientras se generaba. Reintenta."
+          );
+        }
+
+        if (!bruto.trim() && !meta.error) {
+          if (!opciones?.reintento) {
+            reintentarVacio.current = true;
+            return;
+          }
+          throw new Error(
+            "El asistente devolvió un turno vacío dos veces seguidas. Vuelve a intentarlo: si se repite, reformula la petición o continúa desde la ficha."
+          );
+        }
+
+        const resultado = parsearRespuestaMeso(
+          bruto,
+          programaRef.current,
+          marcosDisponibles.map((m) => m.id),
+          meta
+        );
+        if (!resultado.ok) {
+          const causaReal = meta.error ? ` El proveedor reportó: ${meta.error}` : "";
+          const motivo = resultado.motivo + causaReal;
+          ultimoErrorRef.current = { motivo, fin: meta.fin ?? null, bruto };
+          throw new Error(motivo);
+        }
+        ultimoErrorRef.current = null;
+
+        setMensajesMeso((m) => m.map((x) => (x.id === idIA ? { ...x, texto: resultado.mensaje } : x)));
+        setSugerenciasMeso(resultado.sugerencias);
+        setIntencionMeso(resultado.intencion);
+        setSeccionActivaMeso(resultado.seccionActiva);
+        setCrudoMeso(bruto);
+        crudoMesoRef.current = bruto;
+
+        // SOLO con borrador se toca el documento. Un turno conversacional no
+        // puede borrar lo que el docente ya tenía.
+        if (resultado.borrador) {
+          const fusionado = fusionarPrograma(programaRef.current, resultado.programa);
+          const problemas = validarPrograma(fusionado);
+          const primero = programaRef.current === null;
+
+          setPrograma(fusionado);
+          // El vínculo solo cambia si el modelo cita un marco válido; un
+          // borrador sin vínculo no borra el que el docente ya eligió.
+          if (resultado.marcoPrincipalId !== null) setVinculoMarcoId(resultado.marcoPrincipalId);
+          if (primero) {
+            setPildoraBorrador(true);
+            setChatVisible(true);
+          }
+          if (problemas.length) mostrarAviso(problemas.join(" "));
+        }
+      } catch (e) {
+        const abortado = e instanceof DOMException && e.name === "AbortError";
+        const falloDeRed = !abortado && !respuestaLlego;
+        const motivo = abortado
+          ? "Detuviste la respuesta. El programa quedó como estaba."
+          : falloDeRed
+            ? "No se pudo contactar al servidor de la app. Comprueba que `npm run dev` siga corriendo y recarga la página."
+            : e instanceof Error
+              ? e.message
+              : "Ocurrió un error inesperado.";
+
+        setMensajesMeso((m) => m.map((x) => (x.id === idIA ? { ...x, texto: x.texto || motivo, incompleto: true } : x)));
+        if (!abortado) setError(motivo);
+      } finally {
+        setEnviando(false);
+        abortRef.current = null;
+
+        if (reintentarVacio.current) {
+          reintentarVacio.current = false;
+          setMensajesMeso((m) => m.filter((x) => x.id !== idIA));
+          window.setTimeout(() => void enviarMeso(t, { reintento: true }), 0);
+          return;
+        }
+      }
+    },
+    [enviando, mensajesMeso, mostrarAviso, hidratado]
+  );
+
   const reintentar = useCallback(() => {
     const base = ultimaPeticion.current;
     if (!base) return;
@@ -1124,8 +1487,9 @@ export default function Page() {
         `devuelve algo más acotado y bien formado.]`
       : base;
     if (moduloActivoRef.current === "macro") void enviarMacro(conContexto);
+    else if (moduloActivoRef.current === "meso") void enviarMeso(conContexto);
     else void enviar(conContexto);
-  }, [enviar, enviarMacro]);
+  }, [enviar, enviarMacro, enviarMeso]);
 
   const sinClave = salud !== null && salud.conexion === "sin_clave";
   const problemaClave =
@@ -1139,6 +1503,8 @@ export default function Page() {
     micro !== null ||
     mensajesMacro.length > 0 ||
     marco !== null ||
+    mensajesMeso.length > 0 ||
+    programa !== null ||
     (persistenciaBloqueada && !scopeV3NoSoportado);
 
   const etiquetaSalud = (() => {
@@ -1161,10 +1527,37 @@ export default function Page() {
 
   /* -------- vista por módulo: el chat y la ficha siguen al nivel activo -------- */
   const esMacro = moduloActivo === "macro";
-  const chatMensajes = esMacro ? mensajesMacro : mensajes;
-  const chatSugerencias = esMacro ? sugerenciasMacro : sugerencias;
-  const chatSemillas = esMacro ? SUGERENCIAS_APERTURA_MACRO : SUGERENCIAS_APERTURA;
-  const chatEnviar = (t: string) => void (esMacro ? enviarMacro(t) : enviar(t));
+  const esMeso = moduloActivo === "meso";
+  const chatMensajes = esMacro ? mensajesMacro : esMeso ? mensajesMeso : mensajes;
+  const chatSugerencias = esMacro ? sugerenciasMacro : esMeso ? sugerenciasMeso : sugerencias;
+  const chatSemillas = esMacro ? SUGERENCIAS_APERTURA_MACRO : esMeso ? SUGERENCIAS_APERTURA_MESO : SUGERENCIAS_APERTURA;
+  const chatEnviar = (t: string) => void (esMacro ? enviarMacro(t) : esMeso ? enviarMeso(t) : enviar(t));
+  const textoPildora = esMacro
+    ? "Aquí va tomando forma tu marco. Sigue conversando: cada dato cae en su sección."
+    : esMeso
+      ? "Aquí va tomando forma tu programa. Sigue conversando: cada dato cae en su sección."
+      : "Aquí va tomando forma tu microcurrículo. Sigue conversando: cada dato cae en su sección.";
+  const notaGuardado = esMacro
+    ? "Tu marco se guarda en este navegador. Lo que genera el asistente es una propuesta: revísalo, confirma cada afirmación y ajústalo antes de presentarlo."
+    : esMeso
+      ? "Tu programa se guarda en este navegador. Lo que genera el asistente es una propuesta: revísalo, confirma cada afirmación y ajústalo antes de presentarlo."
+      : "Tu microcurrículo se guarda en este navegador. Lo que genera el asistente es una propuesta: revísalo, confirma la bibliografía y ajústalo antes de presentarlo.";
+  /* Listas del proyecto para el editor del programa: se leen del agregado. */
+  const proyectoEnVista = estadoV3Ref.current?.proyecto ?? null;
+  const marcosDisponibles = (proyectoEnVista?.marcos ?? []).map((m) => ({
+    id: m.id,
+    nombre: m.nombre,
+    estado: m.estado
+  }));
+  const asignaturasDelPrograma =
+    programa === null
+      ? []
+      : (proyectoEnVista?.asignaturas ?? [])
+          .filter((a) => a.programaId === programa.id)
+          .map((a) => ({
+            id: a.id,
+            nombre: a.microcurriculo.ident.asignatura.trim() || "Asignatura sin nombre"
+          }));
 
   /* ------------------------------------------------------------------ */
   /* Modo conversación: solo el chat. Sin ficha, sin rieles, sin tabs.   */
@@ -1357,7 +1750,7 @@ export default function Page() {
           />
 
           <div className="ml-auto flex items-center gap-1.5">
-            {!esMacro && (
+            {moduloActivo === "micro" && (
               <button
                 type="button"
                 onClick={copiar}
@@ -1368,7 +1761,7 @@ export default function Page() {
                 <Icono nombre="copiar" />
               </button>
             )}
-            {!esMacro && (
+            {moduloActivo === "micro" && (
               <button
                 type="button"
                 onClick={descargarPdf}
@@ -1384,11 +1777,7 @@ export default function Page() {
         {pildoraBorrador && (
           <div className="flex shrink-0 items-center gap-2.5 rounded-[18px] border border-white/60 bg-sprout/50 px-3 py-2 text-[12px] text-black/75">
             <Icono nombre="chispa" className="h-4 w-4 shrink-0 text-redwood" />
-            <p className="min-w-0 flex-1">
-              {esMacro
-                ? "Aquí va tomando forma tu marco. Sigue conversando: cada dato cae en su sección."
-                : "Aquí va tomando forma tu microcurrículo. Sigue conversando: cada dato cae en su sección."}
-            </p>
+            <p className="min-w-0 flex-1">{textoPildora}</p>
             <button
               type="button"
               onClick={() => setPildoraBorrador(false)}
@@ -1410,6 +1799,17 @@ export default function Page() {
                 onChange={editarMarco}
               />
             )
+          ) : esMeso ? (
+            programa && (
+              <MesoFicha
+                programa={programa}
+                vinculoMarcoId={vinculoMarcoId}
+                marcos={marcosDisponibles}
+                asignaturas={asignaturasDelPrograma}
+                activa={seccionActivaMeso}
+                onChange={editarPrograma}
+              />
+            )
           ) : (
             micro && (
               <MicrocurriculoFicha
@@ -1419,11 +1819,7 @@ export default function Page() {
               />
             )
           )}
-          <p className="px-1 pb-2 pt-3 text-[11px] leading-relaxed text-black/40">
-            {esMacro
-              ? "Tu marco se guarda en este navegador. Lo que genera el asistente es una propuesta: revísalo, confirma cada afirmación y ajústalo antes de presentarlo."
-              : "Tu microcurrículo se guarda en este navegador. Lo que genera el asistente es una propuesta: revísalo, confirma la bibliografía y ajústalo antes de presentarlo."}
-          </p>
+          <p className="px-1 pb-2 pt-3 text-[11px] leading-relaxed text-black/40">{notaGuardado}</p>
         </div>
       </div>
 
@@ -1467,8 +1863,8 @@ function SelectorModulo({
   onCambiar,
   deshabilitado
 }: {
-  activo: "micro" | "macro";
-  onCambiar: (m: "micro" | "macro") => void;
+  activo: ModuloActivo;
+  onCambiar: (m: ModuloActivo) => void;
   deshabilitado?: boolean;
 }) {
   const base = "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors";
@@ -1481,6 +1877,7 @@ function SelectorModulo({
       {(
         [
           { id: "micro", etiqueta: "Asignatura", titulo: "Microcurrículo de asignatura" },
+          { id: "meso", etiqueta: "Programa", titulo: "Programa académico" },
           { id: "macro", etiqueta: "Marco", titulo: "Marco educativo institucional" }
         ] as const
       ).map((m) => (
