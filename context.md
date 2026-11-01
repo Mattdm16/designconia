@@ -38,7 +38,7 @@
 | Manejar varios Marcos, Programas y Asignaturas | **Implementado**: selector de documento por nivel + «+ Nuevo» en modo conversación y en modo borrador; abrir/crear preserva el proyecto y sus hilos. | El documento recién creado tarda un instante en aparecer en la lista (autosave con debounce). «Conversación nueva» sigue siendo borrado total y explícito del proyecto. |
 | Trazabilidad pedagógica completa | **Implementada**: RA con ids estables y actividades con `mideIds` en el Micro; bordes principio→resultado→RA (RA→actividad vive en `mideIds`); matrices editables Macro→programa y programa→RA en la ficha Meso; insignias «Responde a» en el contenido Micro; poda de huérfanas al editar. | Falta matriz RA→actividad como alineación editable (hoy vive en `mideIds` de cada actividad). `mide` se conserva como nota libre heredada. Sin inspección visual en navegador. |
 | Citas de fuentes curriculares | **Implementada**: editor compartido de citas (fuente + localizador/página/sección) en cada afirmación Macro/Meso, con selectores de origen y estado; el cambio a documento/contrastada exige cita válida y la última cita respaldada no se puede quitar. | Sin inspección visual en navegador. |
-| Exportación | **Implementada para Micro, Macro y Meso**: PDF de texto plano y copia Markdown en los tres niveles; el programa incluye trazabilidad (principios y RA vinculados) y asignaturas. | Falta decidir si se necesita un expediente curricular conjunto. |
+| Exportación | **Implementada para Micro, Macro y Meso**: PDF de texto plano y copia Markdown en los tres niveles; el programa incluye trazabilidad (principios y RA vinculados) y asignaturas. | Resuelta con el expediente conjunto (ver abajo). |
 | Revisión visual | El detector mecánico marcó 0 hallazgos en los objetivos examinados. | **No se hizo inspección visual en navegador ni capturas** de la interfaz Macro/Meso. |
 
 ### Próximo orden recomendado
@@ -47,7 +47,8 @@
 2. ~~Lista, selección y creación de varios documentos por nivel~~ Hecho: selector + «+ Nuevo» por nivel con proyecto e hilos preservados.
 3. ~~Trazabilidad Macro→Meso→Micro→evaluación~~ Hecho: ids estables en RA/actividades, matrices editables en Meso, `mideIds` en evaluación, poda de huérfanas y migración de datos heredados al leer.
 4. ~~Citas curriculares y exportación Macro/Meso~~ Hecho: citas editables por afirmación con localizador, paridad de normalizadores y PDF/Markdown en los tres niveles.
-5. Decidir el expediente curricular conjunto; probar flujos completos y revisar visualmente escritorio/móvil.
+5. ~~Expediente curricular conjunto~~ Hecho: `exportarExpediente.ts` reúne marcos, programas, asignaturas y alineaciones en texto plano/Markdown/PDF, con botones Copiar/Expediente en el encabezado.
+6. Probar flujos completos y revisar visualmente escritorio/móvil (detector mecánico limpio; sin inspección en navegador).
 
 ## 3. Datos y contratos
 
@@ -110,6 +111,8 @@ components/
 lib/
   exportarMacroTexto.ts          marco a texto plano (para PDF)
   exportarMesoTexto.ts           programa a texto plano con trazabilidad (para PDF)
+  exportarExpediente.ts          expediente conjunto texto/Markdown de todo el proyecto
+  exportarExpediente.test.ts     3 pruebas del expediente
   exportarCurricular.test.ts     5 pruebas de exportación Macro/Meso
   schema.ts                      contrato Micro, normalización y 95 pruebas
   proyecto.ts                    agregado V3, guardas y migración Micro
@@ -128,10 +131,10 @@ lib/
 Último checkpoint de implementación: commit `aa51603` (citas editables por afirmación y exportación Macro/Meso) en la rama local `feature/curricular-project-foundation`. Los commits de desarrollo **no se han subido a GitHub**.
 
 ```text
-npm test              → 253 pruebas (95 + 14 + 38 + 11 + 27 + 11 + 24 + 17 + 11 + 5)
+npm test              → 256 pruebas (95 + 14 + 38 + 11 + 27 + 11 + 24 + 17 + 11 + 5 + 3)
+impeccable detect     → [] sobre Citas, Marco, Meso, Secciones, Microcurriculo y page
 npx tsc --noEmit      → limpio
 npm run build         → correcto
-impeccable detect     → [] en la última tanda de archivos UI revisada
 API real Macro/Meso   → turnos conversacionales probados por HTTP; cierre SSE stop/[DONE]
 ```
 
@@ -180,7 +183,8 @@ npm run build
 5. Se añadieron los prompts, editores, API y vínculos Programa–Marco y Asignatura–Programa.
 6. Se añadió gestión multi-documento (selector + «+ Nuevo» por nivel, entrada inicial por nivel con saludo/sugerencias).
 7. Se implementó trazabilidad: RA/actividades con ids, bordes extendidos, matrices en Meso, `mideIds` en evaluación y poda de huérfanas.
-8. Se implementaron citas editables por afirmación (fuente + localizador, con paridad macro/meso en normalizadores) y exportación Macro/Meso a PDF de texto plano y Markdown. Queda decidir el expediente curricular conjunto.
+8. Se implementaron citas editables por afirmación (fuente + localizador, con paridad macro/meso en normalizadores) y exportación Macro/Meso a PDF de texto plano y Markdown.
+9. Se implementó el expediente curricular conjunto (texto plano/Markdown/PDF de todo el proyecto con trazabilidad) con 3 pruebas nuevas.
 
 > Si cualquier sección histórica de este archivo o [PRODUCT.md](PRODUCT.md) aún describe un producto solo Micro, esta sección y el código reciente describen el estado actual; actualiza las discrepancias cuando corresponda.
 

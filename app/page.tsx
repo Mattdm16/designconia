@@ -25,6 +25,7 @@ import { nombreArchivo, textoAPdf } from "@/lib/exportarPdf";
 import { microcurriculoATexto } from "@/lib/exportarTexto";
 import { marcoATexto } from "@/lib/exportarMacroTexto";
 import { programaATexto, type ContextoProgramaTexto } from "@/lib/exportarMesoTexto";
+import { expedienteAMarkdown, expedienteATexto } from "@/lib/exportarExpediente";
 import { marcoAMarkdown, microcurriculoAMarkdown, programaAMarkdown } from "@/lib/markdown";
 import {
   aplicarVistaMesoV3,
@@ -1208,6 +1209,23 @@ export default function Page() {
     }
   }
 
+  /** Expediente conjunto: todo el proyecto en un solo documento. */
+  async function copiarExpediente() {
+    if (!proyectoEnVista) return;
+    try {
+      await navigator.clipboard.writeText(expedienteAMarkdown(proyectoEnVista));
+      mostrarAviso("Expediente copiado como Markdown, listo para pegar.");
+    } catch {
+      mostrarAviso("El navegador no permitió copiar al portapapeles.");
+    }
+  }
+
+  function descargarExpedientePdf() {
+    if (!proyectoEnVista) return;
+    const nombre = proyectoEnVista.nombre || "expediente";
+    descargarTextoPdf(expedienteATexto(proyectoEnVista), nombre, "expediente");
+  }
+
   function descargarProgramaPdf() {
     if (!programa) return;
     const ctx = contextoPrograma();
@@ -2154,6 +2172,30 @@ export default function Page() {
           />
 
           <div className="ml-auto flex items-center gap-1.5">
+            {proyectoEnVista &&
+              (proyectoEnVista.marcos.length > 0 ||
+                proyectoEnVista.programas.length > 0 ||
+                proyectoEnVista.asignaturas.length > 0) && (
+                <>
+                  <button
+                    type="button"
+                    onClick={copiarExpediente}
+                    aria-label="Copiar el expediente curricular como Markdown, para pegar"
+                    title="Copiar expediente como Markdown para pegar"
+                    className="rounded-full border border-black/10 bg-white p-1.5 hover:border-black/25"
+                  >
+                    <Icono nombre="documento" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={descargarExpedientePdf}
+                    title="Descargar el expediente como PDF de texto plano"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
+                  >
+                    <Icono nombre="descargar" className="h-3.5 w-3.5" /> Expediente
+                  </button>
+                </>
+              )}
             {moduloActivo === "micro" && (
               <button
                 type="button"
