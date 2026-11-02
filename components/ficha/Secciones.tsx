@@ -155,7 +155,7 @@ function UnidadEditor({
   return (
     <li className="rounded-xl border border-black/[0.07] bg-arena/40 p-3">
       <div className="flex items-center gap-2">
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sow font-mono text-[10px] font-semibold text-seedling">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sow font-mono text-[10px] font-semibold text-papel">
           {unidad.numero}
         </span>
         <Campo
@@ -418,7 +418,7 @@ function SesionEditor({
   return (
     <li className="rounded-xl border border-black/[0.07] bg-white p-2.5">
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-sow px-1.5 font-mono text-[10px] font-semibold text-seedling">
+        <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-sow px-1.5 font-mono text-[10px] font-semibold text-papel">
           S{sesion.numero}
         </span>
         <Campo
@@ -630,7 +630,7 @@ export function SecuenciaSeccion({
                 >
                   <span
                     className={`flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1 font-mono text-[10px] font-semibold ${
-                      g.existe ? "bg-sow text-seedling" : "bg-mora/15 text-mora"
+                      g.existe ? "bg-sow text-papel" : "bg-mora/15 text-mora"
                     }`}
                   >
                     {g.numero === GRUPO_SIN_UNIDAD ? "—" : g.numero}

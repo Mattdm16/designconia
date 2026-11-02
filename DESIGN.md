@@ -17,11 +17,11 @@ colors:
   mora: "#6B4A6E"
 typography:
   display:
-    fontFamily: "'Palatino Linotype', 'Book Antiqua', Cambria, Georgia, serif"
+    fontFamily: "Georgia, 'Times New Roman', Times, serif"
     fontSize: "0.9375rem"
     fontWeight: 600
   display-lg:
-    fontFamily: "'Palatino Linotype', 'Book Antiqua', Cambria, Georgia, serif"
+    fontFamily: "Georgia, 'Times New Roman', Times, serif"
     fontSize: "1rem"
     fontWeight: 600
   body:
@@ -137,7 +137,7 @@ Paleta pineada por el usuario (brand guidelines Seedling/Sow): crema luminosa co
 
 ## Typography
 
-**Display Font:** `Palatino Linotype` (respaldo Book Antiqua → Cambria → Georgia → serif), semibold, tracking tight. Es un serif caligráfico de tradición editorial impresa, coherente con un documento académico, y está instalado de serie en Windows y macOS.
+**Display Font:** `Georgia` (respaldo Times New Roman → Times → serif), semibold, tracking tight. Es el serif formal de serie en Windows y macOS: sobrio y académico, sin trazo caligráfico. El contraste serif/sans es lo que separa "documento" de "panel".
 **Body Font:** System stack 0.875rem/1.6. El contraste serif/sans es lo que separa "documento" de "panel".
 **Label/Mono Font:** Mono solo para datos: folio (DCN-2026-…), códigos SC01, minutos y conteos. Labels en mayúsculas +0.08em a 0.75rem en negro/40.
 
@@ -260,3 +260,7 @@ Un solo momento intencionado: la ficha entra con `canvas-rise` (0.45s, cubic-bez
 - **Don't** modales: todo se edita y se corrige donde está.
 - **Don't** inventar precios, clientes, capacidades ni datos institucionales.
 - **Don't** usar Mora como acento decorativo ni como fondo de sección.
+
+## Theme (claro / oscuro)
+
+La app arranca en modo claro y ofrece el botón **Oscuro/Claro** en el encabezado. El tema se guarda en `localStorage` (`designconia.tema`) y, sin preferencia guardada, se respeta la del sistema operativo. Técnicamente es `darkMode: "class"` en Tailwind: los cuatro tokens estructurales (`seedling`, `crema`, `white`, `black`) leen variables CSS que cambian con `.dark`, así que el mismo marcado se adapta sin variantes `dark:` por componente. Los acentos (Sow, Terracotta, Mora…) quedan fijos; el texto sobre burbujas Sow usa el token fijo `papel` para no invertirse. Excepciones puntuales en `globals.css`: bandas Arena/Sprout oscurecidas y acentos Mora/Redwood aclarados solo en `.dark`.

@@ -300,7 +300,7 @@ export function AfirmacionEditor({
         Sugerencia de IA
       </span>
     ) : afirmacion.origen === "documento" ? (
-      <span className="shrink-0 rounded-full bg-sow px-2 py-0.5 text-[10px] font-semibold text-seedling">
+      <span className="shrink-0 rounded-full bg-sow px-2 py-0.5 text-[10px] font-semibold text-papel">
         Documento
       </span>
     ) : (

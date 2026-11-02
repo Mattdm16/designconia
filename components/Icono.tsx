@@ -29,7 +29,9 @@ const RUTAS = {
   chevron: "M9 6l6 6-6 6",
   flecha: "M5 12h14 M13 6l6 6-6 6",
   panel: "M4 5h16v14H4z M11 5v14",
-  deshacer: "M4 9h11a5 5 0 0 1 0 10H8 M4 9l4-4 M4 9l4 4"
+  deshacer: "M4 9h11a5 5 0 0 1 0 10H8 M4 9l4-4 M4 9l4 4",
+  sol: "M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0-8 0 M12 2v2 M12 20v2 M2 12h2 M20 12h2 M4.9 4.9l1.4 1.4 M17.7 17.7l1.4 1.4 M19.1 4.9l-1.4 1.4 M6.3 17.7l-1.4 1.4",
+  luna: "M20 13.5A8 8 0 1 1 10.5 4a6.5 6.5 0 0 0 9.5 9.5z"
 } as const;
 
 export type NombreIcono = keyof typeof RUTAS;

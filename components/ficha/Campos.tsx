@@ -170,7 +170,7 @@ export function BotonMini({
     tono === "acento"
       ? "bg-terracotta text-white hover:bg-redwood"
       : tono === "sow"
-        ? "bg-sow text-seedling hover:bg-black"
+        ? "bg-sow text-papel hover:bg-black"
         : "border border-black/10 bg-white text-black/70 hover:border-black/25 hover:text-black";
   return (
     <button

@@ -140,6 +140,23 @@ export default function Page() {
   const [scopeV3NoSoportado, setScopeV3NoSoportado] = useState(false);
   const [pildoraBorrador, setPildoraBorrador] = useState(false);
   const [chatVisible, setChatVisible] = useState(true);
+  /* Tema claro/oscuro: el script del layout ya puso la clase antes de pintar. */
+  const [temaOscuro, setTemaOscuro] = useState(false);
+  useEffect(() => {
+    setTemaOscuro(document.documentElement.classList.contains("dark"));
+  }, []);
+  function alternarTema() {
+    setTemaOscuro((anterior) => {
+      const siguiente = !anterior;
+      document.documentElement.classList.toggle("dark", siguiente);
+      try {
+        window.localStorage.setItem("designconia.tema", siguiente ? "oscuro" : "claro");
+      } catch {
+        /* sin almacenamiento: el tema vive solo en la sesión */
+      }
+      return siguiente;
+    });
+  }
 
   /* -------- módulo Macro: marco institucional y su conversación -------- */
   const [moduloActivo, setModuloActivo] = useState<ModuloActivo>("micro");
@@ -2643,7 +2660,7 @@ export default function Page() {
       <div className="relative flex h-screen flex-col overflow-hidden bg-seedling">
         <Ondas />
         <header className="relative z-10 flex shrink-0 items-center gap-2.5 px-4 py-3 sm:px-6">
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-sow text-seedling">
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-sow text-papel">
             <Icono nombre="chispa" className="h-4 w-4" />
           </span>
           <span className="font-display text-[15px] font-semibold tracking-tight">DesignConia</span>
@@ -2668,6 +2685,7 @@ export default function Page() {
             <Icono nombre="chispa" className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">{etiquetaContexto}</span>
           </span>
+          <BotonTema oscuro={temaOscuro} onCambiar={alternarTema} />
           <span className="ml-auto flex items-center gap-2 text-[11px] text-black/50">
             <span
               className={`h-2 w-2 rounded-full ${sinClave ? "bg-terracotta" : salud === null ? "bg-mist" : "bg-rainfall"}`}
@@ -2741,7 +2759,7 @@ export default function Page() {
           aria-label="Asistente"
         >
           <div className="flex shrink-0 items-center gap-2 px-1 pb-1.5">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sow text-seedling">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sow text-papel">
               <Icono nombre="chispa" className="h-3.5 w-3.5" />
             </span>
             <span className="font-display text-sm font-semibold tracking-tight">DesignConia</span>
@@ -2841,6 +2859,7 @@ export default function Page() {
           </span>
 
           <div className="ml-auto flex items-center gap-1.5">
+            <BotonTema oscuro={temaOscuro} onCambiar={alternarTema} />
             {proyectoEnVista &&
               (proyectoEnVista.marcos.length > 0 ||
                 proyectoEnVista.programas.length > 0 ||
@@ -2999,11 +3018,27 @@ export default function Page() {
 /* Piezas de la página                                                 */
 /* ------------------------------------------------------------------ */
 
+function BotonTema({ oscuro, onCambiar }: { oscuro: boolean; onCambiar: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onCambiar}
+      title={oscuro ? "Cambiar al modo claro" : "Cambiar al modo oscuro"}
+      aria-label={oscuro ? "Cambiar al modo claro" : "Cambiar al modo oscuro"}
+      aria-pressed={oscuro}
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-black/10 bg-crema/95 px-3 py-1.5 text-xs font-medium text-black/70 hover:border-black/25 hover:text-black"
+    >
+      <Icono nombre={oscuro ? "sol" : "luna"} className="h-3.5 w-3.5" />
+      <span className="hidden sm:inline">{oscuro ? "Claro" : "Oscuro"}</span>
+    </button>
+  );
+}
+
 function Ondas() {
   return (
     <svg
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 h-full w-full"
+      className="ondas pointer-events-none absolute inset-0 h-full w-full"
       preserveAspectRatio="none"
       viewBox="0 0 1440 900"
     >
@@ -3040,7 +3075,7 @@ function Aviso({ texto, onCerrar }: { texto: string; onCerrar: () => void }) {
   return (
     <div
       role="status"
-      className="fixed bottom-4 left-1/2 z-50 flex max-w-[90vw] -translate-x-1/2 items-center gap-2 rounded-full border border-white/60 bg-sow px-4 py-2 text-[12.5px] text-seedling shadow-burbuja"
+      className="fixed bottom-4 left-1/2 z-50 flex max-w-[90vw] -translate-x-1/2 items-center gap-2 rounded-full border border-white/60 bg-sow px-4 py-2 text-[12.5px] text-papel shadow-burbuja"
     >
       <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
       <span className="max-w-[70ch]">{texto}</span>

@@ -59,7 +59,7 @@ type Props = {
 function BurbujaIA({ mensaje, enCurso }: { mensaje: ChatMensaje; enCurso: boolean }) {
   return (
     <div className="max-w-[95%]">
-      <div className="rounded-2xl rounded-tl-sm bg-sow px-4 py-3 text-[13px] leading-relaxed text-seedling shadow-burbuja">
+      <div className="rounded-2xl rounded-tl-sm bg-sow px-4 py-3 text-[13px] leading-relaxed text-papel shadow-burbuja">
         <p className="whitespace-pre-wrap">{mensaje.texto}</p>
         {enCurso && (
           <span
@@ -132,7 +132,7 @@ export function Chat({
           {/* Apertura: el asistente saluda sin pedir datos todavía. */}
           {vacio && (
             <div className="space-y-3 pt-6 sm:pt-14">
-              <div className="max-w-[95%] rounded-2xl rounded-tl-sm bg-sow px-4 py-3 text-[13px] leading-relaxed text-seedling shadow-burbuja">
+              <div className="max-w-[95%] rounded-2xl rounded-tl-sm bg-sow px-4 py-3 text-[13px] leading-relaxed text-papel shadow-burbuja">
                 {saludo}
               </div>
               <Sugerencias
@@ -335,7 +335,7 @@ export function Chat({
               <button
                 type="button"
                 onClick={onDetener}
-                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-sow px-3.5 text-xs font-medium text-seedling hover:bg-black"
+                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-sow px-3.5 text-xs font-medium text-papel hover:bg-black"
               >
                 <Icono nombre="detener" className="h-3.5 w-3.5" /> Detener
               </button>
@@ -402,7 +402,7 @@ function AdjuntoChipView({
               type="button"
               onClick={() => anioValido && onConfirmarAnio(adjunto.id, Number(anioTexto.trim()))}
               disabled={!anioValido}
-              className="rounded-full bg-sow px-2 py-0.5 text-[11px] font-medium text-seedling disabled:opacity-40"
+              className="rounded-full bg-sow px-2 py-0.5 text-[11px] font-medium text-papel disabled:opacity-40"
             >
               Usar
             </button>

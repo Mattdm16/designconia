@@ -2,8 +2,27 @@
 @tailwind components;
 @tailwind utilities;
 
+/**
+ * Tema claro (por defecto) y oscuro. Los tokens estructurales de Tailwind
+ * (seedling, crema, white, black) leen estas variables, así que el mismo
+ * marcado se adapta sin variantes `dark:`.
+ */
 :root {
   color-scheme: light;
+  --fondo: 250 245 233; /* seedling #FAF5E9 */
+  --superficie: 255 253 248; /* crema #FFFDF8 */
+  --superficie-2: 255 255 255; /* white */
+  --tinta: 33 29 25; /* tinta #211D19 */
+  --linea-suave: 33 29 25;
+}
+
+.dark {
+  color-scheme: dark;
+  --fondo: 22 18 15; /* café casi negro */
+  --superficie: 34 28 23; /* panel café */
+  --superficie-2: 46 38 30; /* insumos y botones fantasma */
+  --tinta: 237 230 214; /* papel */
+  --linea-suave: 237 230 214;
 }
 
 html {
@@ -11,9 +30,9 @@ html {
 }
 
 body {
-  background: #FAF5E9;
-  color: #1b1917;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: rgb(var(--fondo));
+  color: rgb(var(--tinta));
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   text-rendering: optimizeLegibility;
 }
 
@@ -35,7 +54,7 @@ input {
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #B6B7A5 #FAF5E9;
+  scrollbar-color: #B6B7A5 rgb(var(--fondo));
 }
 *::-webkit-scrollbar {
   width: 10px;
@@ -44,10 +63,10 @@ input {
 *::-webkit-scrollbar-thumb {
   background: #B6B7A5;
   border-radius: 8px;
-  border: 2px solid #FAF5E9;
+  border: 2px solid rgb(var(--fondo));
 }
 *::-webkit-scrollbar-track {
-  background: #FAF5E9;
+  background: rgb(var(--fondo));
 }
 
 /* aurora for the CraftGPT-like vacio */
@@ -57,6 +76,36 @@ input {
   filter: blur(56px);
   opacity: 0.52;
   pointer-events: none;
+}
+.dark .aurora {
+  opacity: 0.22;
+}
+
+/* Las ondas decorativas se atenúan en oscuro para no competir con el texto. */
+.dark .ondas path[fill="#B6B7A5"] {
+  opacity: 0.22;
+}
+.dark .ondas path[fill="#7E7B62"] {
+  opacity: 0.2;
+}
+
+/*
+ * Superficies y acentos que quedan FIJOS en ambos temas necesitan un ajuste
+ * puntual en oscuro, porque el texto que llevan dentro sí se adapta:
+ * - Las bandas Arena/Sprout se oscurecen para recibir tinta clara.
+ * - Mora y Redwood se aclaran para seguir leyéndose sobre fondo oscuro.
+ */
+.dark .bg-arena\/40 {
+  background-color: rgb(58 48 38 / 0.55);
+}
+.dark .bg-sprout\/50 {
+  background-color: rgb(58 66 34 / 0.6);
+}
+.dark .text-mora {
+  color: #C9A8D2;
+}
+.dark .text-redwood {
+  color: #D08A6D;
 }
 
 @keyframes drawer-in {
