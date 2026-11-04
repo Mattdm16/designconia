@@ -68,6 +68,7 @@ export function Numero({
   label,
   min = 0,
   max = 200,
+  paso,
   className = ""
 }: {
   valor: number;
@@ -75,14 +76,16 @@ export function Numero({
   label: string;
   min?: number;
   max?: number;
+  paso?: number;
   className?: string;
 }) {
   return (
     <input
       type="number"
-      inputMode="numeric"
+      inputMode="decimal"
       min={min}
       max={max}
+      step={paso}
       value={Number.isFinite(valor) ? valor : 0}
       onChange={(e) => onChange(Math.max(min, Math.min(max, Number(e.target.value) || 0)))}
       aria-label={label}

@@ -14,7 +14,7 @@ import { SYSTEM_PROMPT_MESO, turnoDocenteMeso, type MarcoDisponible } from "@/li
 import { normalizarPrograma, programaVacio, seccionesMesoCompletas, validarPrograma } from "@/lib/meso";
 import { normalizarClave, textoLegible } from "@/lib/errores";
 import type { MarcoEducativoInstitucional, ProgramaAcademico } from "@/lib/proyecto";
-import { cargaHorariaCuadra, horasPorTipo, microcurriculoVacio, normalizarMicrocurriculo, primeraIncompleta, recursosSinUso, seccionesCompletas, validarMicrocurriculo, type Microcurriculo } from "@/lib/schema";
+import { microcurriculoVacio, normalizarMicrocurriculo, primeraIncompleta, recursosSinUso, resumenCargaHoraria, seccionesCompletas, validarMicrocurriculo, TOLERANCIA_CARGA_MINUTOS, type Microcurriculo } from "@/lib/schema";
 import { registrarTraza, type Traza } from "@/lib/traza";
 
 export const runtime = "nodejs";
@@ -212,18 +212,45 @@ function bloqueAvanceMicro(m: Microcurriculo | null): string {
   const completas = seccionesCompletas(m);
   const primera = primeraIncompleta(m);
   const problemas = validarMicrocurriculo(m).slice(0, 2);
-  const mapeadas = horasPorTipo(m.secuencia.sesiones);
-  const carga = m.secuencia.sesiones.length === 0
-    ? "sin sesiones planificadas todavía"
-    : cargaHorariaCuadra(m)
-      ? `cuadra (${mapeadas.teoricas} T · ${mapeadas.practicas} P · ${mapeadas.independientes} I frente a ${m.ident.horas.teoricas} T · ${m.ident.horas.practicas} P · ${m.ident.horas.independientes} I declaradas)`
-      : `NO cuadra (mapeadas ${mapeadas.teoricas} T · ${mapeadas.practicas} P · ${mapeadas.independientes} I frente a declaradas ${m.ident.horas.teoricas} T · ${m.ident.horas.practicas} P · ${m.ident.horas.independientes} I)`;
+  // Cifras exactas en minutos (las mismas que usa el aviso de la ficha),
+  // con el faltante por tipo para que el modelo no "cante" un cuadre falso.
+  const carga = resumenCargaHoraria(m);
+  const aHoras = (min: number) => Math.round((min / 60) * 10) / 10;
+  const mapeadasTxt =
+    `${aHoras(carga.mapeadosMin.teoricas)} T · ${aHoras(carga.mapeadosMin.practicas)} P · ${aHoras(carga.mapeadosMin.independientes)} I`;
+  const declaradasTxt =
+    `${m.ident.horas.teoricas} T · ${m.ident.horas.practicas} P · ${m.ident.horas.independientes} I`;
+  const faltantes: string[] = [];
+  if (carga.hayDeclarada) {
+    if (carga.declaradosMin.teoricas - carga.mapeadosMin.teoricas > TOLERANCIA_CARGA_MINUTOS) {
+      faltantes.push(`faltan ${aHoras(carga.declaradosMin.teoricas - carga.mapeadosMin.teoricas)} h teóricas`);
+    }
+    if (carga.declaradosMin.practicas - carga.mapeadosMin.practicas > TOLERANCIA_CARGA_MINUTOS) {
+      faltantes.push(`faltan ${aHoras(carga.declaradosMin.practicas - carga.mapeadosMin.practicas)} h prácticas`);
+    }
+    if (carga.declaradosMin.independientes - carga.mapeadosMin.independientes > TOLERANCIA_CARGA_MINUTOS) {
+      faltantes.push(`faltan ${aHoras(carga.declaradosMin.independientes - carga.mapeadosMin.independientes)} h independientes`);
+    }
+  }
+  const hayPlanificado =
+    m.secuencia.sesiones.length > 0 || m.secuencia.trabajosIndependientes.length > 0;
+  const cargaTxt = !hayPlanificado
+    ? "sin sesiones ni trabajos planificados todavía"
+    : !carga.hayDeclarada
+      ? `sin horas declaradas para comparar (mapeadas ${mapeadasTxt})`
+      : carga.cuadra
+        ? `cuadra (${mapeadasTxt} frente a ${declaradasTxt} declaradas)`
+        : `NO cuadra (mapeadas ${mapeadasTxt} frente a declaradas ${declaradasTxt}; ${faltantes.join(", ") || "revisa el reparto"})`;
   const sinUso = recursosSinUso(m);
   const recursos = sinUso.length === 0 ? "todos los recursos están usados" : `sin uso: ${sinUso.join(", ")}`;
-  const cierre = primera === null && problemas.length === 0
+  const terminado = primera === null && problemas.length === 0 && (carga.cuadra || !carga.hayDeclarada);
+  const cierre = terminado
     ? "El documento está TERMINADO. No digas que falta avanzar: confírmalo y ofrece revisar o exportar."
-    : `Primera sección incompleta: ${primera}. No presentes como pendientes las secciones ya completas.`;
-  return `\n\nESTADO REAL DE AVANCE (verificado por el sistema, no lo contradigas): ${completas}/8 secciones completas. Carga horaria ${carga}. Recursos: ${recursos}.${problemas.length ? ` Pendientes: ${problemas.join(" ")}` : ""} ${cierre}`;
+    : `Primera sección incompleta: ${primera}. No presentes como pendientes las secciones ya completas.` +
+      (hayPlanificado && carga.hayDeclarada && !carga.cuadra
+        ? " La carga horaria NO cuadra: no afirmes que quedó corregida hasta que las cifras anteriores coincidan."
+        : "");
+  return `\n\nESTADO REAL DE AVANCE (verificado por el sistema, no lo contradigas): ${completas}/8 secciones completas. Carga horaria ${cargaTxt}. Recursos: ${recursos}.${problemas.length ? ` Pendientes: ${problemas.join(" ")}` : ""} ${cierre}`;
 }
 
 function bloqueAvanceMacro(m: MarcoEducativoInstitucional | null): string {

@@ -143,12 +143,23 @@ export function microcurriculoAMarkdown(m: Microcurriculo): string {
   /* 5. Secuencia didáctica */
   l.push("## 5. Secuencia didáctica");
   l.push("");
-  if (m.secuencia.sesiones.length === 0) {
+  if (m.secuencia.sesiones.length === 0 && m.secuencia.trabajosIndependientes.length === 0) {
     l.push(POR_DEFINIR);
     l.push("");
   } else {
     for (const s of m.secuencia.sesiones) {
       l.push(...sesionMd(s));
+    }
+    if (m.secuencia.trabajosIndependientes.length > 0) {
+      l.push("### Trabajo independiente (esfuerzo estimado)");
+      l.push("");
+      for (const t of m.secuencia.trabajosIndependientes) {
+        l.push(
+          `- **${t.titulo || POR_DEFINIR}** — ${t.esfuerzoMin} min · Unidad ${t.unidad}` +
+            (t.descripcion ? ` — ${t.descripcion}` : "")
+        );
+      }
+      l.push("");
     }
   }
 

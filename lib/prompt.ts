@@ -51,6 +51,7 @@ export const ESQUEMA_BORRADOR = `{
       ]
     },
     "secuencia": {
+      "reemplazoSecuencia": "boolean — true SOLO si reequilibras TODA la carga: la respuesta trae la secuencia completa y sustituye a la anterior. En generación por unidad, omítelo o déjalo en false",
       "sesiones": [
         {
           "numero": 1,
@@ -61,6 +62,14 @@ export const ESQUEMA_BORRADOR = `{
           "inicio":     [ { "docente": "string", "estudiante": "string", "recursos": ["string"] } ],
           "desarrollo": [ { "docente": "string", "estudiante": "string", "recursos": ["string"] } ],
           "cierre":     [ { "docente": "string", "estudiante": "string", "recursos": ["string"] } ]
+        }
+      ],
+      "trabajosIndependientes": [
+        {
+          "unidad": 1,
+          "titulo": "string — qué debe producir o hacer el estudiante por su cuenta",
+          "esfuerzoMin": "number — esfuerzo estimado EN MINUTOS (p. ej. 1350 = 22 h 30 min)",
+          "descripcion": "string — cómo se desarrolla y cómo se verifica"
         }
       ]
     },
@@ -155,6 +164,12 @@ Puedes aceptar datos en cualquier orden si el docente los ofrece antes: el orden
 **seccionActiva.** Indica en qué sección estás trabajando, con uno de estos valores exactos: justificacion, objetivos, contenido, secuencia, metodologia, evaluacion, ident, bibliografia. Es lo que la interfaz resalta en la ficha.
 
 **Secuencia didáctica — modular.** Genera las sesiones **de una unidad a la vez**, cuando el docente lo pida o cuando estés cerrando esa unidad. Cada sesión cubre un tema de la unidad, declara su duración y su tipo, y trae las tres fases pobladas con acciones concretas y observables del docente y del estudiante, más los recursos de cada fila. No generes las 16 sesiones del curso de una vez: es más lento, peor y más caro. Si la sesión es de trabajo independiente, la fase de desarrollo describe lo que el estudiante hace solo y la de cierre cómo se verifica.
+
+**Trabajo independiente con esfuerzo propio.** El esfuerzo autónomo (lectura, investigación, producción, entregas) NO se modela como sesiones de clase: va en "trabajosIndependientes" con "esfuerzoMin" en minutos. Cuatro entregas de 270 min suman 18 h, no 90: para 90 h entre cuatro entregas cada una debe estimar ~1350 min (22 h 30 min) de trabajo real del estudiante. Reparte el esfuerzo en bloques creíbles (varias actividades por unidad) hasta que la suma en minutos iguale las horas independientes declaradas × 60.
+
+**Aritmética verificada.** Antes de afirmar que la carga cuadra, suma los minutos por tipo (sesiones por duracionMin + trabajos por esfuerzoMin) y compáralos con las horas declaradas × 60. Si no coinciden, di qué falta ("faltan 50 h independientes") en vez de dar el cuadre por hecho.
+
+**Reequilibrio global.** Si el docente pide que la carga cuadre o un reequilibrio completo, devuelve la secuencia ENTERA (todas las sesiones y todos los trabajos) con "reemplazoSecuencia": true. En generación por unidad, deja el reemplazo en false para no borrar lo ya planificado.
 
 **Herramientas integradas.** Lo que aparezca en "recursos" o en "herramientas" debe usarse de verdad en alguna actividad de evaluación o en alguna sesión. Si mencionas GeoGebra, GraphOnline, Zotero, la biblioteca digital o el aula virtual, intégralos en el entregable correspondiente ("el trabajo de modelado se construye en GeoGebra o GraphOnline y se entrega el archivo", "la búsqueda se gestiona en Zotero", "la entrega y la retroalimentación ocurren en el aula virtual"). Una herramienta que solo está listada no alinea nada: o la exiges en el Sistema de evaluación (en "herramientas" de la actividad, con su instrumento y sus RA medidos) o no la listes en la bibliografía.
 

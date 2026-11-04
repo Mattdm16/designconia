@@ -91,6 +91,26 @@ export type Sesion = {
   cierre: FilaSesion[];
 };
 
+/**
+ * Trabajo autónomo del estudiante con esfuerzo estimado propio, separado de
+ * las sesiones de clase. Una entrega de 22 h 30 min se registra como
+ * esfuerzoMin: 1350, no como una "sesión" de 45 h ni como cuatro sesiones
+ * de 270 min: el esfuerzo real no cabe en bloques de clase y no debe
+ * recortarse al tope de duración de una sesión.
+ */
+export type TrabajoIndependiente = {
+  /** Identificador estable (p. ej. ti_abc1234). */
+  id: string;
+  /** Unidad a la que pertenece; la interfaz lo agrupa con su unidad. */
+  unidad: number;
+  /** Qué debe producir o hacer el estudiante. */
+  titulo: string;
+  /** Esfuerzo estimado en minutos (p. ej. 1350 = 22 h 30 min). */
+  esfuerzoMin: number;
+  /** Cómo se desarrolla y cómo se verifica. */
+  descripcion: string;
+};
+
 export type ActividadEvaluacion = {
   /** Identificador estable (p. ej. act_abc1234); lo usa la trazabilidad. */
   id: string;
@@ -143,6 +163,14 @@ export type Microcurriculo = {
   };
   secuencia: {
     sesiones: Sesion[];
+    /** Trabajo autónomo con esfuerzo propio; suma a las horas independientes. */
+    trabajosIndependientes: TrabajoIndependiente[];
+    /**
+     * true = la respuesta trae la secuencia COMPLETA tras un reequilibrio
+     * global y debe reemplazar lo anterior, no fusionarse por unidad.
+     * Se consume al fusionar: el documento guardado siempre lo deja en false.
+     */
+    reemplazoSecuencia: boolean;
   };
   metodologia: {
     estrategias: Estrategia[];
@@ -212,6 +240,8 @@ export const LIMITES = {
   subtemasPorTema: 10,
   resultadosPorUnidad: 6,
   sesiones: 24,
+  /** Tope de trabajos autónomos: con 20 ya se cubren 90 h en bloques realistas. */
+  trabajosIndependientes: 20,
   filasPorFase: 8,
   cortes: 5,
   actividadesPorCorte: 8,
@@ -349,6 +379,22 @@ function idRaDesdeTexto(textoNormalizado: string): string {
 /** Id base de una actividad a partir de su nombre normalizado. */
 function idActividadDesdeNombre(nombreNormalizado: string): string {
   return `act_${hashCorto(`act:${nombreNormalizado}`)}`;
+}
+
+/** Id base de un trabajo independiente a partir de su título normalizado. */
+function idTrabajoDesdeTitulo(tituloNormalizado: string): string {
+  return `ti_${hashCorto(`ti:${tituloNormalizado}`)}`;
+}
+
+/** Crea un trabajo independiente vacío con id único (para altas desde el editor). */
+export function nuevoTrabajoIndependiente(unidad = 1): TrabajoIndependiente {
+  return {
+    id: `ti_nuevo_${hashCorto(`${Date.now()}:${Math.random()}`)}`,
+    unidad,
+    titulo: "",
+    esfuerzoMin: 180,
+    descripcion: ""
+  };
 }
 
 function esIdTrazable(v: unknown): v is string {
@@ -550,6 +596,38 @@ function normalizarReferencia(v: unknown): Referencia {
   };
 }
 
+/**
+ * Normaliza un trabajo independiente. El esfuerzo se expresa en minutos y
+ * admite cargas semestrales reales (hasta 6000 min = 100 h por trabajo):
+ * un tope de sesión de clase no debe recortar el esfuerzo autónomo.
+ */
+function normalizarTrabajoIndependiente(v: unknown): TrabajoIndependiente | null {
+  if (!esObjeto(v)) return null;
+  const titulo = textoOpcional(v.titulo ?? v.nombre ?? v.actividad ?? v.tarea).replace(/\s+/g, " ");
+  const descripcion = textoOpcional(v.descripcion ?? v.detalle ?? v.verificacion ?? v.evidencia);
+  // El esfuerzo vive en minutos. Si el modelo mandó `horas`, se convierten
+  // (nunca se interpretan como minutos: 22.5 no son 23 min).
+  let esfuerzoMin = numero(
+    v.esfuerzoMin ?? v.esfuerzo ?? v.duracionMin ?? v.duracion ?? v.minutos,
+    0,
+    0,
+    6000
+  );
+  if (esfuerzoMin === 0 && v.horas !== undefined) {
+    const crudo = typeof v.horas === "number" ? v.horas : Number(String(v.horas).replace(",", "."));
+    if (Number.isFinite(crudo) && crudo > 0) esfuerzoMin = Math.min(6000, Math.round(crudo * 60));
+  }
+  if (!titulo && !descripcion) return null;
+  const unidad = numero(v.unidad ?? v.unidadRef ?? v.modulo, 1, 1, LIMITES.unidades);
+  return {
+    id: esIdTrazable(v.id) ? (v.id as string).trim() : idTrabajoDesdeTitulo((titulo || "sin_titulo").toLowerCase()),
+    unidad,
+    titulo,
+    esfuerzoMin,
+    descripcion
+  };
+}
+
 function normalizarSecuencia(v: unknown): Microcurriculo["secuencia"] {
   const o = esObjeto(v) ? v : {};
   const crudas = Array.isArray(o.sesiones) ? o.sesiones : Array.isArray(o.sesion) ? o.sesion : [];
@@ -562,7 +640,25 @@ function normalizarSecuencia(v: unknown): Microcurriculo["secuencia"] {
     .sort((a, b) => a.unidad - b.unidad)
     .map((s, i) => ({ ...s, numero: i + 1 }));
 
-  return { sesiones };
+  const crudosTi = Array.isArray(o.trabajosIndependientes)
+    ? o.trabajosIndependientes
+    : Array.isArray(o.trabajoIndependiente)
+      ? o.trabajoIndependiente
+      : [];
+  const trabajosIndependientes = crudosTi
+    .slice(0, LIMITES.trabajosIndependientes)
+    .map(normalizarTrabajoIndependiente)
+    .filter((t): t is TrabajoIndependiente => t !== null)
+    .sort((a, b) => a.unidad - b.unidad);
+
+  // Reequilibrio global explícito: la respuesta trae la secuencia completa
+  // y debe reemplazar, no fusionarse por unidad. Acepta `modo: "completa"`.
+  const reemplazoSecuencia =
+    (typeof o.reemplazoSecuencia === "boolean" && o.reemplazoSecuencia) ||
+    (typeof o.reemplazo === "boolean" && o.reemplazo) ||
+    (typeof o.modo === "string" && o.modo.toLowerCase() === "completa");
+
+  return { sesiones, trabajosIndependientes, reemplazoSecuencia };
 }
 
 function normalizarObjetivos(v: unknown): Microcurriculo["objetivos"] {
@@ -860,21 +956,19 @@ export function rasSinMedir(m: Microcurriculo): number {
 }
 
 /**
- * Horas mapeadas en la secuencia, por tipo. Sirve para avisar —nunca para
- * bloquear— si lo planificado no cuadra con la carga horaria declarada.
+ * Horas mapeadas en la secuencia, por tipo. Suma minutos exactos (sesiones +
+ * trabajos independientes) y redondea UNA vez al final: así 24 sesiones de
+ * 45 min muestran 18 h reales, no 19.2 por redondeo acumulado.
+ * Sirve para avisar —nunca para bloquear— si lo planificado no cuadra con
+ * la carga horaria declarada.
  */
-export function horasPorTipo(sesiones: Sesion[]): Horas {
-  const acc: Horas = { teoricas: 0, practicas: 0, independientes: 0 };
-  for (const s of sesiones) {
-    const horas = Math.round((s.duracionMin / 60) * 10) / 10;
-    if (s.tipo === "practica") acc.practicas += horas;
-    else if (s.tipo === "independiente") acc.independientes += horas;
-    else acc.teoricas += horas;
-  }
+export function horasPorTipo(sesiones: Sesion[], trabajos: TrabajoIndependiente[] = []): Horas {
+  const mins = minutosPorTipo(sesiones, trabajos);
+  const redondear = (min: number) => Math.round((min / 60) * 10) / 10;
   return {
-    teoricas: Math.round(acc.teoricas * 10) / 10,
-    practicas: Math.round(acc.practicas * 10) / 10,
-    independientes: Math.round(acc.independientes * 10) / 10
+    teoricas: redondear(mins.teoricas),
+    practicas: redondear(mins.practicas),
+    independientes: redondear(mins.independientes)
   };
 }
 
@@ -1065,17 +1159,20 @@ export function herramientasNoDeclaradas(m: Microcurriculo): string[] {
 }
 
 /**
- * Minutos planificados por tipo, sin redondeo: suma directa de duracionMin.
- * (horasPorTipo redondea cada sesión a un decimal para mostrarla; aquí se
- * compara el tiempo real para no castigar bloques de 45 o 50 min.)
+ * Minutos planificados por tipo, sin redondeo: suma directa de duracionMin
+ * más el esfuerzo de los trabajos independientes (que suma a independientes).
+ * Es la cifra que usa el comparador: el tiempo real, no el redondeo de vista.
  */
-export function minutosPorTipo(sesiones: Sesion[]): Horas {
+export function minutosPorTipo(sesiones: Sesion[], trabajos: TrabajoIndependiente[] = []): Horas {
   const acc: Horas = { teoricas: 0, practicas: 0, independientes: 0 };
   for (const s of sesiones) {
     const min = Number.isFinite(s.duracionMin) ? s.duracionMin : 0;
     if (s.tipo === "practica") acc.practicas += min;
     else if (s.tipo === "independiente") acc.independientes += min;
     else acc.teoricas += min;
+  }
+  for (const t of trabajos) {
+    if (Number.isFinite(t.esfuerzoMin) && t.esfuerzoMin > 0) acc.independientes += t.esfuerzoMin;
   }
   return acc;
 }
@@ -1090,14 +1187,53 @@ export function minutosPorTipo(sesiones: Sesion[]): Horas {
 export const TOLERANCIA_CARGA_MINUTOS = 30;
 
 export function cargaHorariaCuadra(m: Microcurriculo, toleranciaMin = TOLERANCIA_CARGA_MINUTOS): boolean {
-  if (m.secuencia.sesiones.length === 0) return true;
-  if (totalHoras(m.ident.horas) <= 0) return true;
-  const mins = minutosPorTipo(m.secuencia.sesiones);
-  return (
-    Math.abs(mins.teoricas - m.ident.horas.teoricas * 60) <= toleranciaMin &&
-    Math.abs(mins.practicas - m.ident.horas.practicas * 60) <= toleranciaMin &&
-    Math.abs(mins.independientes - m.ident.horas.independientes * 60) <= toleranciaMin
-  );
+  return resumenCargaHoraria(m, toleranciaMin).cuadra;
+}
+
+/** Diferencia en minutos por tipo: positiva = planificado de más. */
+export type DiferenciaCarga = {
+  teoricas: number;
+  practicas: number;
+  independientes: number;
+};
+
+/**
+ * Resumen verificable de la carga: minutos mapeados y declarados por tipo,
+ * diferencia y veredicto. Es lo que muestran la ficha y el estado que se
+ * envía a la IA, para que el modelo calcule con las mismas cifras que el
+ * aviso (y no con el redondeo de vista).
+ */
+export function resumenCargaHoraria(
+  m: Microcurriculo,
+  toleranciaMin = TOLERANCIA_CARGA_MINUTOS
+): {
+  mapeadosMin: Horas;
+  declaradosMin: Horas;
+  deltaMin: DiferenciaCarga;
+  hayDeclarada: boolean;
+  cuadra: boolean;
+} {
+  const mapeadosMin = minutosPorTipo(m.secuencia.sesiones, m.secuencia.trabajosIndependientes);
+  const declaradosMin: Horas = {
+    teoricas: m.ident.horas.teoricas * 60,
+    practicas: m.ident.horas.practicas * 60,
+    independientes: m.ident.horas.independientes * 60
+  };
+  const deltaMin: DiferenciaCarga = {
+    teoricas: mapeadosMin.teoricas - declaradosMin.teoricas,
+    practicas: mapeadosMin.practicas - declaradosMin.practicas,
+    independientes: mapeadosMin.independientes - declaradosMin.independientes
+  };
+  const hayPlanificado =
+    m.secuencia.sesiones.length > 0 || m.secuencia.trabajosIndependientes.length > 0;
+  const hayDeclarada = totalHoras(m.ident.horas) > 0;
+  const cuadra =
+    !hayPlanificado ||
+    !hayDeclarada ||
+    (Math.abs(deltaMin.teoricas) <= toleranciaMin &&
+      Math.abs(deltaMin.practicas) <= toleranciaMin &&
+      Math.abs(deltaMin.independientes) <= toleranciaMin);
+  return { mapeadosMin, declaradosMin, deltaMin, hayDeclarada, cuadra };
 }
 
 export function seccionesCompletas(m: Microcurriculo): number {
@@ -1138,11 +1274,13 @@ export function resumenSeccion(m: Microcurriculo, s: SeccionId): string {
     }
     case "secuencia": {
       const n = m.secuencia.sesiones.length;
-      if (n === 0) return "Sin sesiones";
-      const horas = horasPorTipo(m.secuencia.sesiones);
+      const ti = m.secuencia.trabajosIndependientes.length;
+      if (n === 0 && ti === 0) return "Sin sesiones";
+      const horas = horasPorTipo(m.secuencia.sesiones, m.secuencia.trabajosIndependientes);
       const total = Math.round((horas.teoricas + horas.practicas + horas.independientes) * 10) / 10;
       const sinSesiones = unidadesSinSesiones(m);
-      const base = `${n} sesión${n === 1 ? "" : "es"} · ${total} h`;
+      let base = `${n} sesión${n === 1 ? "" : "es"} · ${total} h`;
+      if (ti > 0) base += ` · ${ti} trabajo${ti === 1 ? "" : "s"} autónomo${ti === 1 ? "" : "s"}`;
       return sinSesiones ? `${base} · ${sinSesiones} unidad sin sesiones` : base;
     }
     case "metodologia":
@@ -1320,6 +1458,33 @@ function fusionarSesiones(anteriores: Sesion[], nuevas: Sesion[]): Sesion[] {
     .map((s, i) => ({ ...s, numero: i + 1 }));
 }
 
+/**
+ * Los trabajos independientes se acumulan por unidad igual que las sesiones:
+ * los de una unidad que viene en la respuesta reemplazan a los anteriores
+ * de esa unidad; el resto se conserva.
+ */
+function fusionarTrabajos(
+  anteriores: TrabajoIndependiente[],
+  nuevos: TrabajoIndependiente[]
+): TrabajoIndependiente[] {
+  const unidadesNuevas = new Set(nuevos.map((t) => t.unidad));
+  const conservados = anteriores.filter((t) => !unidadesNuevas.has(t.unidad));
+  const usados = new Set<string>();
+  const salida = [...conservados, ...nuevos].sort((a, b) => a.unidad - b.unidad);
+  // Reordena colisiones de ids dentro del conjunto fusionado.
+  return salida.map((t) => {
+    const base = t.id;
+    let id = base;
+    let n = 2;
+    while (usados.has(id)) {
+      id = `${base}_${n}`;
+      n++;
+    }
+    usados.add(id);
+    return id === base ? t : { ...t, id };
+  });
+}
+
 function claveTexto(t: string): string {
   return t.trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -1431,13 +1596,32 @@ export function mergeMicrocurriculo(anterior: Microcurriculo | null, nueva: Micr
         : anterior.objetivos.especificas
     },
     contenido: { unidades },
-    secuencia: {
-      // La secuencia se acumula: pedir las sesiones de la unidad 2 no puede
-      // borrar las de la unidad 1.
-      sesiones: nueva.secuencia.sesiones.length
-        ? fusionarSesiones(anterior.secuencia.sesiones, nueva.secuencia.sesiones)
-        : anterior.secuencia.sesiones
-    },
+    secuencia: (() => {
+      // Reequilibrio global explícito (`reemplazoSecuencia: true`): la
+      // respuesta trae la secuencia completa y sustituye a la anterior.
+      // Sin la marca, la secuencia se acumula por unidad: pedir las
+      // sesiones de la unidad 2 no puede borrar las de la unidad 1, y una
+      // lista vacía significa "sin cambios", nunca un borrado.
+      if (nueva.secuencia.reemplazoSecuencia) {
+        return {
+          sesiones: [...nueva.secuencia.sesiones],
+          trabajosIndependientes: [...nueva.secuencia.trabajosIndependientes],
+          reemplazoSecuencia: false
+        };
+      }
+      return {
+        sesiones: nueva.secuencia.sesiones.length
+          ? fusionarSesiones(anterior.secuencia.sesiones, nueva.secuencia.sesiones)
+          : anterior.secuencia.sesiones,
+        trabajosIndependientes: nueva.secuencia.trabajosIndependientes.length
+          ? fusionarTrabajos(
+              anterior.secuencia.trabajosIndependientes,
+              nueva.secuencia.trabajosIndependientes
+            )
+          : anterior.secuencia.trabajosIndependientes,
+        reemplazoSecuencia: false
+      };
+    })(),
     metodologia: {
       estrategias: nueva.metodologia.estrategias.length
         ? nueva.metodologia.estrategias
@@ -1754,7 +1938,7 @@ export function microcurriculoVacioEstructura(): Microcurriculo {
     justificacion: "",
     objetivos: { generales: [], especificas: [] },
     contenido: { unidades: [] },
-    secuencia: { sesiones: [] },
+    secuencia: { sesiones: [], trabajosIndependientes: [], reemplazoSecuencia: false },
     metodologia: { estrategias: [] },
     evaluacion: { cortes: [] },
     bibliografia: { obligatorias: [], complementarias: [], recursos: [] }
@@ -1770,6 +1954,7 @@ export function microcurriculoVacio(m: Microcurriculo): boolean {
     m.objetivos.especificas.length === 0 &&
     m.contenido.unidades.length === 0 &&
     m.secuencia.sesiones.length === 0 &&
+    m.secuencia.trabajosIndependientes.length === 0 &&
     m.metodologia.estrategias.length === 0 &&
     m.evaluacion.cortes.length === 0 &&
     m.bibliografia.obligatorias.length === 0 &&

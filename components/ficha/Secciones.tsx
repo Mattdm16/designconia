@@ -10,13 +10,15 @@ import {
   LIMITES,
   SIN_PRERREQUISITOS,
   TIPOS_SESION,
-  cargaHorariaCuadra,
+  TOLERANCIA_CARGA_MINUTOS,
   crearResultado,
   herramientasNoDeclaradas,
   horasPorTipo,
   nuevaActividadEvaluacion,
+  nuevoTrabajoIndependiente,
   rasDelMicro,
   recursosSinUso,
+  resumenCargaHoraria,
   sesionesDeUnidad,
   totalPorcentaje,
   unidadesDeSecuencia,
@@ -30,6 +32,7 @@ import {
   type Referencia,
   type Sesion,
   type TipoSesion,
+  type TrabajoIndependiente,
   type Unidad
 } from "@/lib/schema";
 
@@ -516,6 +519,80 @@ function SesionEditor({
   );
 }
 
+function TrabajoEditor({
+  trabajo,
+  unidades,
+  onChange,
+  onQuitar
+}: {
+  trabajo: TrabajoIndependiente;
+  unidades: Unidad[];
+  onChange: (t: TrabajoIndependiente) => void;
+  onQuitar: () => void;
+}) {
+  const horas = Math.round((trabajo.esfuerzoMin / 60) * 10) / 10;
+  return (
+    <li className="rounded-xl border border-black/[0.07] bg-white p-2.5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-rainfall px-1.5 font-mono text-[10px] font-semibold text-white">
+          U{trabajo.unidad}
+        </span>
+        <Campo
+          valor={trabajo.titulo}
+          onChange={(titulo) => onChange({ ...trabajo, titulo })}
+          label="Qué debe producir o hacer el estudiante"
+          placeholder="Entrega, lectura, investigación…"
+          className="min-w-[8rem] flex-1 text-[12.5px] font-medium"
+        />
+        <label className="inline-flex items-center gap-1 rounded-full bg-black/[0.04] px-2 py-0.5">
+          <span className="sr-only">Unidad del trabajo</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-black/40">U</span>
+          <select
+            value={trabajo.unidad}
+            onChange={(e) => onChange({ ...trabajo, unidad: Number(e.target.value) })}
+            aria-label="Unidad del trabajo independiente"
+            className="bg-transparent font-mono text-[11px] focus:outline-none"
+          >
+            {(unidades.length ? unidades : [{ numero: 1, titulo: "", resultadosAprendizaje: [], temas: [] }]).map((u) => (
+              <option key={u.numero} value={u.numero}>
+                {u.numero}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="inline-flex items-center gap-1 rounded-full bg-black/[0.04] px-2 py-0.5">
+          <Numero
+            valor={horas}
+            onChange={(h) => onChange({ ...trabajo, esfuerzoMin: Math.max(0, Math.min(6000, Math.round(h * 60))) })}
+            label="Esfuerzo estimado en horas"
+            min={0}
+            max={100}
+            paso={0.5}
+            className="w-12"
+          />
+          <span className="text-[10px] text-black/45">h</span>
+        </label>
+        <button
+          type="button"
+          onClick={onQuitar}
+          aria-label="Quitar el trabajo independiente"
+          className="shrink-0 rounded-full p-1 text-black/25 hover:text-terracotta"
+        >
+          <Icono nombre="papelera" className="h-3 w-3" />
+        </button>
+      </div>
+      <Area
+        valor={trabajo.descripcion}
+        onChange={(descripcion) => onChange({ ...trabajo, descripcion })}
+        label="Cómo se desarrolla y cómo se verifica"
+        placeholder="Qué hace el estudiante por su cuenta y qué evidencia entrega."
+        rows={2}
+        className="mt-1.5 text-[12px]"
+      />
+    </li>
+  );
+}
+
 export function SecuenciaSeccion({
   micro,
   onChange
@@ -523,7 +600,7 @@ export function SecuenciaSeccion({
   micro: Microcurriculo;
   onChange: (v: Microcurriculo["secuencia"]) => void;
 }) {
-  const { sesiones } = micro.secuencia;
+  const { sesiones, trabajosIndependientes } = micro.secuencia;
   /**
    * Navegación de dos niveles: `null` = lista de unidades; un número = las
    * sesiones de esa unidad. El estado es local y muere al cerrar el acordeón,
@@ -534,13 +611,29 @@ export function SecuenciaSeccion({
   const grupos = unidadesDeSecuencia(micro);
   const grupoActual = unidadAbierta === null ? null : (grupos.find((g) => g.numero === unidadAbierta) ?? null);
 
-  const mapeadas = horasPorTipo(sesiones);
+  const mapeadas = horasPorTipo(sesiones, trabajosIndependientes);
   const declaradas = micro.ident.horas;
   const totalDeclarado = declaradas.teoricas + declaradas.practicas + declaradas.independientes;
-  // Con tolerancia de redondeo (sesiones de 45 min): si cuadra, se confirma
-  // en verde y el error desaparece; solo el desbalance real avisa.
-  const cuadra = sesiones.length === 0 || totalDeclarado <= 0 || cargaHorariaCuadra(micro);
-  const difiere = sesiones.length > 0 && totalDeclarado > 0 && !cuadra;
+  const hayPlanificado = sesiones.length > 0 || trabajosIndependientes.length > 0;
+  // La comparación usa minutos exactos con tolerancia de medio bloque (30 min).
+  // Si cuadra, se confirma en verde; el desbalance real muestra el faltante
+  // por tipo; sin horas declaradas no hay nada que comparar (neutral).
+  const resumenCarga = resumenCargaHoraria(micro);
+  const aHoras = (min: number) => Math.round((min / 60) * 10) / 10;
+  const faltantesCarga: string[] = [];
+  if (totalDeclarado > 0 && hayPlanificado && !resumenCarga.cuadra) {
+    if (resumenCarga.declaradosMin.teoricas - resumenCarga.mapeadosMin.teoricas > TOLERANCIA_CARGA_MINUTOS) {
+      faltantesCarga.push(`faltan ${aHoras(resumenCarga.declaradosMin.teoricas - resumenCarga.mapeadosMin.teoricas)} h T`);
+    }
+    if (resumenCarga.declaradosMin.practicas - resumenCarga.mapeadosMin.practicas > TOLERANCIA_CARGA_MINUTOS) {
+      faltantesCarga.push(`faltan ${aHoras(resumenCarga.declaradosMin.practicas - resumenCarga.mapeadosMin.practicas)} h P`);
+    }
+    if (resumenCarga.declaradosMin.independientes - resumenCarga.mapeadosMin.independientes > TOLERANCIA_CARGA_MINUTOS) {
+      faltantesCarga.push(`faltan ${aHoras(resumenCarga.declaradosMin.independientes - resumenCarga.mapeadosMin.independientes)} h I`);
+    }
+  }
+  const difiere = hayPlanificado && totalDeclarado > 0 && !resumenCarga.cuadra;
+  const sinDeclarada = hayPlanificado && totalDeclarado <= 0;
 
   /**
    * Renumera SIEMPRE sobre el conjunto completo, ordenando por unidad: con
@@ -566,15 +659,47 @@ export function SecuenciaSeccion({
     const lista = [...sesiones];
     const ultima = lista.map((s) => s.unidad).lastIndexOf(unidad);
     lista.splice(ultima === -1 ? lista.length : ultima + 1, 0, nueva(unidad));
-    onChange({ sesiones: numerar(lista) });
+    onChange({ ...micro.secuencia, sesiones: numerar(lista), reemplazoSecuencia: false });
   }
 
   function editarSesion(numero: number, cambiada: Sesion) {
-    onChange({ sesiones: numerar(sesiones.map((s) => (s.numero === numero ? cambiada : s))) });
+    onChange({
+      ...micro.secuencia,
+      sesiones: numerar(sesiones.map((s) => (s.numero === numero ? cambiada : s))),
+      reemplazoSecuencia: false
+    });
   }
 
   function quitarSesion(numero: number) {
-    onChange({ sesiones: numerar(sesiones.filter((s) => s.numero !== numero)) });
+    onChange({
+      ...micro.secuencia,
+      sesiones: numerar(sesiones.filter((s) => s.numero !== numero)),
+      reemplazoSecuencia: false
+    });
+  }
+
+  function agregarTrabajo(unidad: number) {
+    onChange({
+      ...micro.secuencia,
+      trabajosIndependientes: [...trabajosIndependientes, nuevoTrabajoIndependiente(unidad)],
+      reemplazoSecuencia: false
+    });
+  }
+
+  function editarTrabajo(id: string, cambiado: TrabajoIndependiente) {
+    onChange({
+      ...micro.secuencia,
+      trabajosIndependientes: trabajosIndependientes.map((t) => (t.id === id ? cambiado : t)),
+      reemplazoSecuencia: false
+    });
+  }
+
+  function quitarTrabajo(id: string) {
+    onChange({
+      ...micro.secuencia,
+      trabajosIndependientes: trabajosIndependientes.filter((t) => t.id !== id),
+      reemplazoSecuencia: false
+    });
   }
 
   /* ---------------- Vista A: lista de unidades ---------------- */
@@ -582,7 +707,7 @@ export function SecuenciaSeccion({
   if (!grupoActual) {
     return (
       <div>
-        {sesiones.length > 0 && (
+        {hayPlanificado && (
           <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl bg-black/[0.03] px-3 py-1.5 text-[11px] text-black/60">
             <span>
               Mapeadas: <strong className="font-mono tabular-nums">{mapeadas.teoricas}</strong> T ·{" "}
@@ -590,18 +715,27 @@ export function SecuenciaSeccion({
               <strong className="font-mono tabular-nums">{mapeadas.independientes}</strong> I
             </span>
             <span>
-              Declaradas: <strong className="font-mono tabular-nums">{declaradas.teoricas}</strong> ·{" "}
-              <strong className="font-mono tabular-nums">{declaradas.practicas}</strong> ·{" "}
-              <strong className="font-mono tabular-nums">{declaradas.independientes}</strong>
+              Declaradas: <strong className="font-mono tabular-nums">{declaradas.teoricas}</strong> T ·{" "}
+              <strong className="font-mono tabular-nums">{declaradas.practicas}</strong> P ·{" "}
+              <strong className="font-mono tabular-nums">{declaradas.independientes}</strong> I
             </span>
             {difiere && (
               <span className="inline-flex items-center gap-1 text-terracotta">
-                <Icono nombre="alerta" className="h-3 w-3" /> no cuadra con la carga horaria
+                <Icono nombre="alerta" className="h-3 w-3" />
+                no cuadra con la carga horaria
+                {faltantesCarga.length > 0 && (
+                  <span className="font-medium">({faltantesCarga.join(", ")})</span>
+                )}
               </span>
             )}
-            {!difiere && (
+            {!difiere && !sinDeclarada && (
               <span className="inline-flex items-center gap-1 text-rainfall">
                 <Icono nombre="check" className="h-3 w-3" /> cuadra con la carga horaria
+              </span>
+            )}
+            {sinDeclarada && (
+              <span className="inline-flex items-center gap-1 text-black/45">
+                sin horas declaradas para comparar
               </span>
             )}
           </div>
@@ -652,6 +786,48 @@ export function SecuenciaSeccion({
             ))}
           </ul>
         )}
+
+        {/* Trabajo independiente: esfuerzo estimado fuera de las sesiones */}
+        <div className="mt-3">
+          <div className="mb-1.5 flex flex-wrap items-center gap-2">
+            <Rotulo>Trabajo independiente</Rotulo>
+            <span className="font-mono text-[11px] tabular-nums text-black/50">
+              {trabajosIndependientes.length > 0
+                ? `${aHoras(trabajosIndependientes.reduce((a, t) => a + t.esfuerzoMin, 0))} h estimadas`
+                : "sin estimar"}
+            </span>
+          </div>
+          {trabajosIndependientes.length > 0 && (
+            <ul className="space-y-2">
+              {trabajosIndependientes.map((t) => (
+                <TrabajoEditor
+                  key={t.id}
+                  trabajo={t}
+                  unidades={micro.contenido.unidades}
+                  onChange={(cambiado) => editarTrabajo(t.id, cambiado)}
+                  onQuitar={() => quitarTrabajo(t.id)}
+                />
+              ))}
+            </ul>
+          )}
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            {trabajosIndependientes.length < LIMITES.trabajosIndependientes && (
+              <BotonMini
+                onClick={() =>
+                  agregarTrabajo(
+                    micro.contenido.unidades[0]?.numero ?? 1
+                  )
+                }
+              >
+                Añadir trabajo independiente
+              </BotonMini>
+            )}
+            <span className="text-[10.5px] text-black/40">
+              Esfuerzo del estudiante fuera de clase (lectura, investigación, entregas). Cada trabajo estima sus
+              horas; la suma cuenta en las horas independientes mapeadas.
+            </span>
+          </div>
+        </div>
       </div>
     );
   }
@@ -659,6 +835,7 @@ export function SecuenciaSeccion({
   /* ---------------- Vista B: sesiones de una unidad ---------------- */
 
   const sesionesUnidad = sesionesDeUnidad(micro, grupoActual.numero);
+  const trabajosUnidad = trabajosIndependientes.filter((t) => t.unidad === grupoActual.numero);
   const puedeAgregar =
     sesiones.length < LIMITES.sesiones && grupoActual.numero !== GRUPO_SIN_UNIDAD;
 
@@ -711,6 +888,39 @@ export function SecuenciaSeccion({
             : "Cambiar la unidad de una sesión la mueve a la lista de esa unidad."}
         </span>
       </div>
+
+      {grupoActual.numero !== GRUPO_SIN_UNIDAD && (
+        <div className="mt-3">
+          <div className="mb-1.5 flex flex-wrap items-center gap-2">
+            <Rotulo>Trabajo independiente de esta unidad</Rotulo>
+            <span className="font-mono text-[11px] tabular-nums text-black/50">
+              {trabajosUnidad.length > 0
+                ? `${aHoras(trabajosUnidad.reduce((a, t) => a + t.esfuerzoMin, 0))} h estimadas`
+                : "sin estimar"}
+            </span>
+          </div>
+          {trabajosUnidad.length > 0 && (
+            <ul className="space-y-2">
+              {trabajosUnidad.map((t) => (
+                <TrabajoEditor
+                  key={t.id}
+                  trabajo={t}
+                  unidades={micro.contenido.unidades}
+                  onChange={(cambiado) => editarTrabajo(t.id, cambiado)}
+                  onQuitar={() => quitarTrabajo(t.id)}
+                />
+              ))}
+            </ul>
+          )}
+          <div className="mt-1.5">
+            {trabajosIndependientes.length < LIMITES.trabajosIndependientes && (
+              <BotonMini onClick={() => agregarTrabajo(grupoActual.numero)}>
+                Añadir trabajo independiente
+              </BotonMini>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

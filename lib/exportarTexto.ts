@@ -128,11 +128,11 @@ export function microcurriculoATexto(m: Microcurriculo): string {
 
   /* 5. Secuencia didáctica */
   l.push("5. SECUENCIA DIDÁCTICA");
-  if (m.secuencia.sesiones.length === 0) {
+  if (m.secuencia.sesiones.length === 0 && m.secuencia.trabajosIndependientes.length === 0) {
     l.push(POR_DEFINIR);
     l.push("");
   } else {
-    const mapeadas = horasPorTipo(m.secuencia.sesiones);
+    const mapeadas = horasPorTipo(m.secuencia.sesiones, m.secuencia.trabajosIndependientes);
     l.push(
       `Horas planificadas: ${mapeadas.teoricas} teóricas, ${mapeadas.practicas} prácticas, ` +
         `${mapeadas.independientes} de trabajo independiente`
@@ -146,6 +146,16 @@ export function microcurriculoATexto(m: Microcurriculo): string {
       l.push(...fase(s, "inicio"));
       l.push(...fase(s, "desarrollo"));
       l.push(...fase(s, "cierre"));
+      l.push("");
+    }
+    if (m.secuencia.trabajosIndependientes.length > 0) {
+      l.push("Trabajo independiente (esfuerzo estimado, fuera de las sesiones de clase):");
+      for (const t of m.secuencia.trabajosIndependientes) {
+        l.push(
+          `- ${t.titulo || POR_DEFINIR} (${t.esfuerzoMin} min, Unidad ${t.unidad})` +
+            (t.descripcion ? `: ${t.descripcion}` : "")
+        );
+      }
       l.push("");
     }
   }

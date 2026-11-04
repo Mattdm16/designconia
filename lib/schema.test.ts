@@ -40,6 +40,10 @@ import {
   mismaHerramienta,
   herramientasNoDeclaradas,
   cargaHorariaCuadra,
+  resumenCargaHoraria,
+  TOLERANCIA_CARGA_MINUTOS,
+  nuevoTrabajoIndependiente,
+  minutosPorTipo,
   unidadesSinResultados,
   unidadesSinSesiones,
   actividadesSinInstrumento,
@@ -873,7 +877,7 @@ prueba("horasPorTipo suma por tipo de sesión", () => {
 prueba("la secuencia no cierra si una unidad con temas no tiene sesiones", () => {
   const m = normalizarMicrocurriculo(MICRO_COMPLETO.borrador);
   assert.equal(seccionCompleta(m, "secuencia"), true);
-  const sinSesiones = { ...m, secuencia: { sesiones: [] } };
+  const sinSesiones = { ...m, secuencia: { sesiones: [], trabajosIndependientes: [], reemplazoSecuencia: false } };
   assert.equal(seccionCompleta(sinSesiones, "secuencia"), false);
   assert.equal(unidadesSinSesiones(sinSesiones), 1);
 });
@@ -1123,8 +1127,176 @@ prueba("cargaHorariaCuadra tolera el redondeo de sesiones de 45 min", () => {
   assert.equal(cargaHorariaCuadra(desbalance), false);
 });
 
-prueba("la evaluación exige instrumento y RA vinculado; la bibliografía exige recursos usados", () => {
-  const sinRa = normalizarMicrocurriculo({
+/* ---------------------------------------------------------------- */
+/* Trabajo independiente y carga horaria exacta                     */
+/* ---------------------------------------------------------------- */
+
+grupo("trabajo independiente");
+
+prueba("el esfuerzo autónomo suma a las horas independientes sin tope de sesión", () => {
+  const m = normalizarMicrocurriculo({
+    ...MICRO_COMPLETO.borrador,
+    ident: {
+      ...MICRO_COMPLETO.borrador.ident,
+      horas: { teoricas: 45, practicas: 15, independientes: 90 }
+    },
+    secuencia: {
+      sesiones: [
+        ...Array.from({ length: 15 }, (_, i) => ({ unidad: 1, tema: `Clase ${i + 1}`, duracionMin: 180, tipo: "teorica" })),
+        ...Array.from({ length: 5 }, (_, i) => ({ unidad: 1, tema: `Práctica ${i + 1}`, duracionMin: 180, tipo: "practica" }))
+      ],
+      trabajosIndependientes: [
+        { unidad: 1, titulo: "Entrega 1", esfuerzoMin: 1350, descripcion: "d1" },
+        { unidad: 1, titulo: "Entrega 2", esfuerzoMin: 1350, descripcion: "d2" },
+        { unidad: 1, titulo: "Entrega 3", esfuerzoMin: 1350, descripcion: "d3" },
+        { unidad: 1, titulo: "Entrega 4", esfuerzoMin: 1350, descripcion: "d4" }
+      ]
+    }
+  });
+  const mins = minutosPorTipo(m.secuencia.sesiones, m.secuencia.trabajosIndependientes);
+  assert.equal(mins.teoricas, 2700);
+  assert.equal(mins.practicas, 900);
+  assert.equal(mins.independientes, 5400);
+  assert.equal(cargaHorariaCuadra(m), true);
+  const resumen = resumenCargaHoraria(m);
+  assert.equal(resumen.cuadra, true);
+  assert.deepEqual(resumen.deltaMin, { teoricas: 0, practicas: 0, independientes: 0 });
+});
+
+prueba("cuatro entregas de 270 min son 18 h, no 90: el faltante se reporta", () => {
+  const m = normalizarMicrocurriculo({
+    ...MICRO_COMPLETO.borrador,
+    ident: {
+      ...MICRO_COMPLETO.borrador.ident,
+      horas: { teoricas: 45, practicas: 15, independientes: 90 }
+    },
+    secuencia: {
+      sesiones: [
+        ...Array.from({ length: 15 }, (_, i) => ({ unidad: 1, tema: `Clase ${i + 1}`, duracionMin: 180, tipo: "teorica" })),
+        ...Array.from({ length: 5 }, (_, i) => ({ unidad: 1, tema: `Práctica ${i + 1}`, duracionMin: 180, tipo: "practica" }))
+      ],
+      trabajosIndependientes: [
+        { unidad: 1, titulo: "Entrega 1", esfuerzoMin: 270, descripcion: "d1" },
+        { unidad: 1, titulo: "Entrega 2", esfuerzoMin: 270, descripcion: "d2" },
+        { unidad: 1, titulo: "Entrega 3", esfuerzoMin: 270, descripcion: "d3" },
+        { unidad: 1, titulo: "Entrega 4", esfuerzoMin: 270, descripcion: "d4" }
+      ]
+    }
+  });
+  assert.equal(cargaHorariaCuadra(m), false);
+  const resumen = resumenCargaHoraria(m);
+  assert.equal(resumen.deltaMin.independientes, 1080 - 5400);
+  assert.equal(resumen.deltaMin.teoricas, 0);
+});
+
+prueba("horasPorTipo suma minutos exactos y redondea una sola vez", () => {
+  const sesiones = Array.from({ length: 24 }, (_, i) => ({
+    unidad: 1,
+    tema: `s${i + 1}`,
+    duracionMin: 45,
+    tipo: "teorica" as const
+  }));
+  const m = normalizarMicrocurriculo({ ...MICRO_COMPLETO.borrador, secuencia: { sesiones } });
+  // 24 × 45 min = 1080 min = 18 h reales (antes mostraba 19.2 por redondeo acumulado).
+  assert.equal(horasPorTipo(m.secuencia.sesiones).teoricas, 18);
+});
+
+prueba("el reemplazo global sustituye toda la secuencia; sin marca se acumula por unidad", () => {
+  const anterior = normalizarMicrocurriculo({
+    ...MICRO_COMPLETO.borrador,
+    contenido: { unidades: [{ titulo: "U1", temas: [{ nombre: "t" }] }, { titulo: "U2", temas: [{ nombre: "t" }] }] },
+    secuencia: {
+      sesiones: [
+        { unidad: 1, tema: "Vieja U1", duracionMin: 90 },
+        { unidad: 2, tema: "Vieja U2", duracionMin: 90 }
+      ],
+      trabajosIndependientes: [{ unidad: 2, titulo: "Viejo", esfuerzoMin: 120, descripcion: "d" }]
+    }
+  });
+  // Sin marca: solo la unidad entrante se reemplaza, la otra sobrevive.
+  const parcial = mergeMicrocurriculo(
+    anterior,
+    normalizarMicrocurriculo({
+      secuencia: {
+        sesiones: [{ unidad: 1, tema: "Nueva U1", duracionMin: 90 }],
+        trabajosIndependientes: []
+      }
+    })
+  );
+  assert.equal(parcial.secuencia.sesiones.length, 2);
+  assert.ok(parcial.secuencia.sesiones.some((s) => s.tema === "Vieja U2"));
+  assert.equal(parcial.secuencia.trabajosIndependientes.length, 1);
+  // Con marca: reemplazo total, sin restos de la anterior.
+  const total = mergeMicrocurriculo(
+    anterior,
+    normalizarMicrocurriculo({
+      secuencia: {
+        reemplazoSecuencia: true,
+        sesiones: [{ unidad: 1, tema: "Nueva U1", duracionMin: 90 }],
+        trabajosIndependientes: [{ unidad: 1, titulo: "Nuevo", esfuerzoMin: 1350, descripcion: "d" }]
+      }
+    })
+  );
+  assert.equal(total.secuencia.sesiones.length, 1);
+  assert.equal(total.secuencia.trabajosIndependientes.length, 1);
+  assert.equal(total.secuencia.trabajosIndependientes[0].titulo, "Nuevo");
+  assert.equal(total.secuencia.reemplazoSecuencia, false);
+});
+
+prueba("una respuesta sin secuencia no borra lo planificado", () => {
+  const anterior = normalizarMicrocurriculo({
+    ...MICRO_COMPLETO.borrador,
+    secuencia: {
+      sesiones: [{ unidad: 1, tema: "Clase", duracionMin: 90 }],
+      trabajosIndependientes: [{ unidad: 1, titulo: "T", esfuerzoMin: 120, descripcion: "d" }]
+    }
+  });
+  const fusionado = mergeMicrocurriculo(anterior, normalizarMicrocurriculo({ justificacion: "x".repeat(40) }));
+  assert.equal(fusionado.secuencia.sesiones.length, 1);
+  assert.equal(fusionado.secuencia.trabajosIndependientes.length, 1);
+});
+
+prueba("resumenCargaHoraria tolera ±30 min y reporta el delta por tipo", () => {
+  const base = {
+    ...MICRO_COMPLETO.borrador,
+    ident: { ...MICRO_COMPLETO.borrador.ident, horas: { teoricas: 2, practicas: 0, independientes: 0 } }
+  };
+  const dentro = normalizarMicrocurriculo({
+    ...base,
+    secuencia: { sesiones: [{ unidad: 1, tema: "A", duracionMin: 90 }] }
+  });
+  // 90 frente a 120: diferencia de 30 = tolerancia exacta, cuadra.
+  assert.equal(resumenCargaHoraria(dentro).cuadra, true);
+  const fuera = normalizarMicrocurriculo({
+    ...base,
+    secuencia: { sesiones: [{ unidad: 1, tema: "A", duracionMin: 89 }] }
+  });
+  // 89 frente a 120: diferencia de 31, no cuadra.
+  assert.equal(resumenCargaHoraria(fuera).cuadra, false);
+  assert.equal(resumenCargaHoraria(fuera).deltaMin.teoricas, 89 - 120);
+  // Sin horas declaradas no hay nada que comparar: neutral, no verde falso.
+  const sinDeclarada = normalizarMicrocurriculo({
+    ...MICRO_COMPLETO.borrador,
+    secuencia: { sesiones: [{ unidad: 1, tema: "A", duracionMin: 90 }] }
+  });
+  assert.equal(sinDeclarada.ident.horas.teoricas, 32);
+  assert.equal(resumenCargaHoraria(sinDeclarada).hayDeclarada, true);
+});
+
+prueba("nuevoTrabajoIndependiente crea un trabajo editable válido", () => {
+  const t = nuevoTrabajoIndependiente(2);
+  assert.equal(t.unidad, 2);
+  assert.equal(t.esfuerzoMin, 180);
+  const m = normalizarMicrocurriculo({
+    ...MICRO_COMPLETO.borrador,
+    secuencia: { sesiones: [], trabajosIndependientes: [{ ...t, titulo: "Lectura", descripcion: "d" }] }
+  });
+  assert.equal(m.secuencia.trabajosIndependientes.length, 1);
+  assert.equal(minutosPorTipo(m.secuencia.sesiones, m.secuencia.trabajosIndependientes).independientes, 180);
+  assert.ok(TOLERANCIA_CARGA_MINUTOS === 30);
+});
+
+prueba("la evaluación exige instrumento y RA vinculado; la bibliografía exige recursos usados", () => {  const sinRa = normalizarMicrocurriculo({
     ...MICRO_COMPLETO.borrador,
     evaluacion: {
       cortes: [
