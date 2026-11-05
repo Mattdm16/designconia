@@ -99,7 +99,8 @@ Un marco educativo institucional con cuatro partes:
 1. **No inventes datos institucionales.** Si el docente no dio el nombre del marco, el emisor, la versión o la vigencia, escribe exactamente "[por definir]". Inventar el nombre de la institución o un año de aprobación es un error grave.
 2. **Los principios y orientaciones que propongas son sugerencias.** Márcalos siempre con "origen": "sugerencia_IA" y no los presentes en el mensaje como si fueran política oficial aprobada. Di "te propongo" o "puedo dejar como borrador".
 3. **NUNCA inventes fuentes.** "fuentes" solo lleva documentos que el docente mencionó o aportó. Si no hay ninguna, deja la lista vacía. No inventes títulos, autores, URLs ni números de acuerdo. Una fuente falsa es peor que una fuente ausente.
-4. **No cites normas nacionales ni marcos de otros países** como si fueran de la institución.
+4. **Registrar una fuente que te piden agregar.** Si el docente pide explícitamente agregar o registrar una fuente y te dio sus datos (al menos el título; tipo, emisor o URL si los dijo), incluye el objeto completo en "fuentes" con "generar": true para que quede guardada. Tipo por defecto: "otro", salvo que el docente indique modelo_educativo, lineamiento o plan_institucional. Si te pasan un link, guárdalo tal cual en "url" como referencia de ubicación: NO afirmes que leíste ni verificaste su contenido (esta app no abre enlaces). Para respaldo documental, ofrece adjuntar el PDF del documento.
+5. **No cites normas nacionales ni marcos de otros países** como si fueran de la institución.
 
 **Cierre honesto.** El turno incluye el estado real de avance del marco. Úsalo: no presentes como pendiente una parte que ya está completa ni pidas "avanzar al siguiente módulo" cuando el marco ya está terminado. Si está terminado y sin pendientes, dilo y ofrece revisar o exportar.
 5. Español académico claro, voz activa, frases cortas. Sin relleno motivacional.
@@ -128,8 +129,15 @@ export const SUGERENCIAS_APERTURA_MACRO = [
 /**
  * Turno del docente para el Marco. `marco` es el documento SOLO si ya existe;
  * en la fase conversacional viaja null y el modelo no ve ningún documento.
+ * `fuentes` son las ya registradas en el proyecto (solo id y título): sirven
+ * para no volver a pedir lo que ya está guardado y para poder citarlas;
+ * nunca se inventan desde aquí.
  */
-export function turnoDocenteMacro(peticion: string, marco: unknown | null): string {
+export function turnoDocenteMacro(
+  peticion: string,
+  marco: unknown | null,
+  fuentes: { id: string; titulo: string }[] = []
+): string {
   const estado =
     marco === null || marco === undefined
       ? "Todavía NO existe ningún borrador del marco: el documento está vacío. No has generado nada aún."
@@ -137,9 +145,17 @@ export function turnoDocenteMacro(peticion: string, marco: unknown | null): stri
 
 ${JSON.stringify({ marco }, null, 2)}`;
 
+  const contextoFuentes =
+    fuentes.length === 0
+      ? "Fuentes ya registradas en el proyecto: ninguna todavía."
+      : `Fuentes ya registradas en el proyecto (no las dupliques, úsalas para citar):
+${JSON.stringify(fuentes, null, 2)}`;
+
   return `${estado}
+
+${contextoFuentes}
 
 Mensaje del docente: ${peticion}
 
-Responde siguiendo las reglas. Si el docente aporta un dato nuevo, pon "generar": true y devuelve el marco completo resultante.`;
+Responde siguiendo las reglas. Si el docente aporta un dato nuevo, pon "generar": true y devuelve el marco completo resultante. Si pide agregar una fuente y te dio sus datos, inclúyela completa en "fuentes" para que quede guardada.`;
 }

@@ -108,6 +108,20 @@ input {
   color: #D08A6D;
 }
 
+/*
+ * Los desplegables nativos (`select > option`) los dibuja el sistema, no la
+ * página: sin colores explícitos, el menú puede salir con fondo claro del
+ * sistema y texto claro heredado, ilegible. Se fijan ambos en oscuro.
+ */
+.dark select option {
+  background-color: rgb(var(--superficie-2));
+  color: rgb(var(--tinta));
+}
+.dark select option:checked {
+  background-color: #B25D3E;
+  color: #FFFDF8;
+}
+
 @keyframes drawer-in {
   from { opacity: 0; transform: translateX(-16px); }
   to { opacity: 1; transform: translateX(0); }

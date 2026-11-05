@@ -37,6 +37,8 @@ type Cuerpo = {
   programa?: unknown;
   /** Marcos del proyecto para citar por id, solo en el nivel Meso. */
   marcos?: unknown;
+  /** Fuentes ya registradas en el proyecto (id y título), solo nivel Macro. */
+  fuentes?: unknown;
   /** Documentos existentes (para que el inicio resuelva "sigue con el marco"). */
   documentos?: unknown;
   /** Extractos de PDFs adjuntos como evidencia (texto + páginas, nunca el binario). */
@@ -174,6 +176,19 @@ function bloqueFuentesPdf(fuentes: FuentePdfContexto[]): string {
     "Si afirmas algo que salga de ellas, cita «título, p. N». Si el PDF no contiene evidencia suficiente, dilo y pide precisión. " +
     "Nunca presentes una afirmación como oficial solo porque venga de un adjunto."
   );
+}
+
+/** Fuentes ya registradas que el cliente declara para no duplicar ni re-pedir. */
+function comoFuentesConocidas(v: unknown): { id: string; titulo: string }[] {
+  if (!Array.isArray(v)) return [];
+  const salida: { id: string; titulo: string }[] = [];
+  for (const crudo of v) {
+    if (typeof crudo !== "object" || crudo === null || Array.isArray(crudo)) continue;
+    const o = crudo as Record<string, unknown>;
+    if (typeof o.id !== "string" || !o.id.trim() || typeof o.titulo !== "string" || !o.titulo.trim()) continue;
+    salida.push({ id: o.id.trim(), titulo: o.titulo.trim().slice(0, 120) });
+  }
+  return salida.slice(0, 20);
 }
 
 /** Marcos que el cliente declara para poder citarlos por id en el nivel Meso. */
@@ -323,13 +338,14 @@ export async function POST(req: NextRequest) {
   const marcoBase = esMacro ? comoMarco(cuerpo.marco) : null;
   const programaBase = esMeso ? comoPrograma(cuerpo.programa) : null;
   const marcosDisponibles = esMeso ? comoMarcosDisponibles(cuerpo.marcos) : [];
+  const fuentesConocidas = esMacro ? comoFuentesConocidas(cuerpo.fuentes) : [];
   const documentosExistentes = esInicio ? comoDocumentosExistentes(cuerpo.documentos) : [];
   const fuentesPdf = comoFuentesPdf(cuerpo.fuentesPdf);
 
   const turnoBase = esInicio
     ? turnoInicio(mensajeUsuario, documentosExistentes)
     : esMacro
-      ? turnoDocenteMacro(mensajeUsuario, marcoBase)
+      ? turnoDocenteMacro(mensajeUsuario, marcoBase, fuentesConocidas)
       : esMeso
         ? turnoDocenteMeso(mensajeUsuario, programaBase, marcosDisponibles)
         : turnoDocente(mensajeUsuario, borrador);

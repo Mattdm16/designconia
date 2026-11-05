@@ -37,7 +37,7 @@ import {
   vistaMesoVacia,
   type VistaMesoPersistible
 } from "@/lib/estadoMeso";
-import { fusionarMarco, parsearRespuestaMacro, validarMarco, type SeccionMacro } from "@/lib/macro";
+import { agregarFuentesProyecto, fusionarMarco, parsearRespuestaMacro, pideRegistrarFuente, validarMarco, type SeccionMacro } from "@/lib/macro";
 import { fusionarPrograma, parsearRespuestaMeso, validarPrograma, type SeccionMeso } from "@/lib/meso";
 import { definirAlineacion, existeAlineacion, quitarAlineacion } from "@/lib/alineaciones";
 import { SUGERENCIAS_APERTURA_MACRO } from "@/lib/promptMacro";
@@ -225,6 +225,9 @@ export default function Page() {
   /** El marco vivo y el módulo visible, por la misma razón. */
   const marcoRef = useRef<MarcoEducativoInstitucional | null>(null);
   marcoRef.current = marco;
+  /** Las fuentes vivas, para leerlas dentro de callbacks sin stale state. */
+  const fuentesRef = useRef<FuenteCurricular[]>([]);
+  fuentesRef.current = fuentes;
   const moduloActivoRef = useRef<ModuloActivo>("micro");
   moduloActivoRef.current = moduloActivo;
   /** Último documento abierto en cada módulo, para volver a él al cambiar. */
@@ -1711,7 +1714,14 @@ export default function Page() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           signal: control.signal,
-          body: JSON.stringify({ mensaje: t, modulo: "macro", marco: marcoEnviar, historia, fuentesPdf: fuentesPdfParaEnvio(t) })
+          body: JSON.stringify({
+            mensaje: t,
+            modulo: "macro",
+            marco: marcoEnviar,
+            fuentes: fuentesRef.current.map((f) => ({ id: f.id, titulo: f.titulo })),
+            historia,
+            fuentesPdf: fuentesPdfParaEnvio(t)
+          })
         });
         respuestaLlego = true;
 
@@ -1814,8 +1824,20 @@ export default function Page() {
           const primero = marcoRef.current === null;
 
           setMarco(fusionado);
-          // Las fuentes que propone el modelo NO se agregan solas: solo el
-          // docente registra fuentes, en el editor.
+          // Las fuentes solo se dan de alta cuando el docente las pidió
+          // explícitamente: una mención casual no autoriza a crearlas. El
+          // formulario de la sección Fuentes sigue disponible para el alta
+          // manual.
+          if (pideRegistrarFuente(t) && resultado.fuentes.length > 0) {
+            const combinadas = agregarFuentesProyecto(fuentesRef.current, resultado.fuentes);
+            if (combinadas.length > fuentesRef.current.length) {
+              setFuentes(combinadas);
+            }
+          } else if (pideRegistrarFuente(t)) {
+            mostrarAviso(
+              "No pude registrar la fuente desde el chat porque no trajo datos suficientes. Usa «Añadir fuente» en la sección Fuentes."
+            );
+          }
           if (primero) {
             setPildoraBorrador(true);
             setChatVisible(true);

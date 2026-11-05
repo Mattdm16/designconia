@@ -272,6 +272,40 @@ export function normalizarFuentes(v: unknown): FuenteCurricular[] {
   return salida.slice(0, LIMITES_MACRO.fuentes);
 }
 
+/**
+ * ¿El mensaje del docente pide explícitamente registrar una fuente?
+ * Solo en ese caso la respuesta del asistente puede dar de alta fuentes en
+ * el proyecto; una mención casual ("según el plan…") no autoriza a crearlas.
+ */
+export function pideRegistrarFuente(mensaje: string): boolean {
+  const t = mensaje
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  if (!/fuente/.test(t)) return false;
+  return /agreg|añad|anad|registr|suma|incluy|incorpor|pon|crea|guarda|sube/.test(t);
+}
+
+/**
+ * Incorpora fuentes al proyecto sin duplicar: dos entradas con el mismo id
+ * (derivado del título) colapsan; las que ya existían se conservan intactas,
+ * incluidos los campos que el docente editó a mano (url, emisor…).
+ */
+export function agregarFuentesProyecto(
+  existentes: FuenteCurricular[],
+  nuevas: FuenteCurricular[]
+): FuenteCurricular[] {
+  const salida = [...existentes];
+  const vistos = new Set(existentes.map((f) => f.id));
+  for (const f of nuevas) {
+    if (!f || !f.id || vistos.has(f.id)) continue;
+    if (!f.titulo || !f.titulo.trim()) continue;
+    vistos.add(f.id);
+    salida.push(f);
+  }
+  return salida;
+}
+
 /** Marco vacío listo para editarse, sin datos inventados. */
 export function crearMarcoVacio(id: string): MarcoEducativoInstitucional {
   return {
@@ -340,7 +374,11 @@ export function marcoVacio(m: MarcoEducativoInstitucional): boolean {
 /* ------------------------------------------------------------------ */
 
 /** ¿Esta parte del marco ya tiene lo suficiente para considerarse cerrada? */
-export function seccionMacroCompleta(m: MarcoEducativoInstitucional, s: SeccionMacro): boolean {
+export function seccionMacroCompleta(
+  m: MarcoEducativoInstitucional,
+  s: SeccionMacro,
+  nFuentes = 0
+): boolean {
   switch (s) {
     case "identidad":
       return textoReal(m.nombre) && textoReal(m.version) && Boolean(m.emisor && m.emisor.trim());
@@ -349,7 +387,9 @@ export function seccionMacroCompleta(m: MarcoEducativoInstitucional, s: SeccionM
     case "orientaciones":
       return m.afirmaciones.length > 0;
     case "fuentes":
-      return false; // Las fuentes son opcionales: nunca cierran el documento.
+      // Las fuentes son opcionales: no bloquean el documento, pero el check
+      // se enciende cuando hay al menos una registrada.
+      return nFuentes > 0;
   }
 }
 
@@ -357,7 +397,11 @@ export function seccionesMacroCompletas(m: MarcoEducativoInstitucional): number 
   return SECCIONES_MACRO.filter((s) => seccionMacroCompleta(m, s)).length;
 }
 
-export function resumenSeccionMacro(m: MarcoEducativoInstitucional, s: SeccionMacro): string {
+export function resumenSeccionMacro(
+  m: MarcoEducativoInstitucional,
+  s: SeccionMacro,
+  nFuentes = 0
+): string {
   switch (s) {
     case "identidad": {
       const partes = [
@@ -380,7 +424,8 @@ export function resumenSeccionMacro(m: MarcoEducativoInstitucional, s: SeccionMa
       return `${n} orientación${n === 1 ? "" : "es"}${pend ? ` · ${pend} sin confirmar` : ""}`;
     }
     case "fuentes": {
-      return "Las fuentes se registran aparte";
+      if (nFuentes <= 0) return "Opcional · sin fuentes";
+      return `${nFuentes} fuente${nFuentes === 1 ? "" : "s"} registrada${nFuentes === 1 ? "" : "s"}`;
     }
   }
 }

@@ -136,7 +136,7 @@ lib/
 Último checkpoint: commit `1fc1a89` (context al día con chat-first, PDF y tope 3 años) en la rama local `feature/curricular-project-foundation`. Los commits de desarrollo **no se han subido a GitHub**.
 
 ```text
-npm test              → 282 pruebas (106 + 14 + 38 + 11 + 27 + 11 + 24 + 17 + 11 + 5 + 3 + 2 + 8 + 5)
+npm test              → 286 pruebas (106 + 14 + 38 + 11 + 31 + 11 + 24 + 17 + 11 + 5 + 3 + 2 + 8 + 5)
 impeccable detect     → [] sobre Citas, Marco, Meso, Secciones, Microcurriculo, Chat y page
 npx tsc --noEmit      → limpio
 npm run build         → correcto
@@ -194,6 +194,7 @@ npm run build
 11. Chat conversacional con enrutador por intención (sin selectores visibles), botón «+» con adjuntos PDF y documentos, PDFs como fuentes con tope de 3 años y citas por página.
 12. Alineación recursos↔evaluación (coincidencia flexible GeoGebra/Aula virtual, aviso doble con guía de corrección), carga horaria con tolerancia de 30 min y confirmación verde, y estado real de avance inyectado a la IA para no pedir avanzar sobre módulos terminados.
 13. Trabajo independiente con esfuerzo propio (`trabajosIndependientes`, hasta 6000 min c/u): suma a las horas I sin tope de sesión; `horasPorTipo` suma minutos exactos y redondea una vez (24×45 min = 18 h); `reemplazoSecuencia` para reequilibrios globales; aviso con delta por tipo («faltan 50 h I») y estado neutral sin horas declaradas; la IA recibe minutos exactos y no declara TERMINADO con carga descuadrada.
+14. Alta real de fuentes Macro pedidas por chat (deduplicadas; URL guardada como referencia sin verificar contenido) + check verde de Fuentes con conteo + colores explícitos de `option` en modo oscuro.
 
 > Si cualquier sección histórica de este archivo o [PRODUCT.md](PRODUCT.md) aún describe un producto solo Micro, esta sección y el código reciente describen el estado actual; actualiza las discrepancias cuando corresponda.
 

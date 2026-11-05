@@ -4,6 +4,7 @@
  */
 
 import {
+  agregarFuentesProyecto,
   afirmacionesSinConfirmar,
   crearMarcoVacio,
   fusionarMarco,
@@ -12,11 +13,13 @@ import {
   normalizarFuentes,
   normalizarMarco,
   parsearRespuestaMacro,
+  pideRegistrarFuente,
   resumenSeccionMacro,
   seccionMacroCompleta,
   validarMarco,
   type ResultadoParseoMacro
 } from "./macro.ts";
+import { turnoDocenteMacro } from "./promptMacro.ts";
 import type { MarcoEducativoInstitucional } from "./proyecto.ts";
 
 type Caso = { nombre: string; fn: () => void };
@@ -205,7 +208,11 @@ prueba("la identidad exige nombre, versión y emisor", () => {
   assert(seccionMacroCompleta(m, "identidad"), "identidad completa");
   assert(seccionMacroCompleta(m, "principios"), "hay principios");
   assert(seccionMacroCompleta(m, "orientaciones"), "hay orientaciones");
-  assert(!seccionMacroCompleta(m, "fuentes"), "las fuentes nunca cierran el documento");
+  assert(!seccionMacroCompleta(m, "fuentes"), "sin conteo, las fuentes no cierran");
+  assert(!seccionMacroCompleta(m, "fuentes", 0), "con cero fuentes, la sección sigue pendiente");
+  assert(seccionMacroCompleta(m, "fuentes", 1), "con una fuente registrada, el check se enciende");
+  assert(/1 fuente registrada/.test(resumenSeccionMacro(m, "fuentes", 1)), "el resumen cuenta la fuente");
+  assert(/sin fuentes/.test(resumenSeccionMacro(m, "fuentes", 0)), "vacía se declara opcional");
   const sinVersion = normalizarMarco({ ...borradorCompleto(), version: "" });
   assert(!seccionMacroCompleta(sinVersion, "identidad"), "sin versión no cierra");
 });
@@ -351,6 +358,43 @@ prueba("las listas vacías del docente no se confunden con ausencia", () => {
   const entrante = normalizarMarco({ nombre: "Marco", orientaciones: [{ texto: "Nueva.", origen: "docente" }] });
   const f = fusionarMarco(base, entrante);
   assert(f.afirmaciones.length === 1, "la orientación nueva entra");
+});
+
+/* ---------------------------------------------------------------- */
+/* Registro de fuentes pedidas por el docente                       */
+/* ---------------------------------------------------------------- */
+
+prueba("pideRegistrarFuente distingue el pedido explícito de la mención", () => {
+  assert(pideRegistrarFuente("Quiero agregar una fuente institucional"), "agregar + fuente");
+  assert(pideRegistrarFuente("agregame la fuente"), "imperativo con tilde");
+  assert(pideRegistrarFuente("Registrá el Plan de Desarrollo como fuente"), "registrar + fuente");
+  assert(!pideRegistrarFuente("Según el plan, los programas articulan…"), "mención sin verbo de alta");
+  assert(!pideRegistrarFuente("Hablemos de las fuentes del marco"), "hablar no es agregar");
+  assert(!pideRegistrarFuente("Agregá un principio nuevo"), "sin la palabra fuente no cuenta");
+});
+
+prueba("agregarFuentesProyecto incorpora sin duplicar ni pisar", () => {
+  const [base] = normalizarFuentes([{ titulo: "Plan 2020-2025", tipo: "plan_institucional", emisor: "Rectoría" }]);
+  const misma = { ...base, url: "https://ejemplo.edu/plan" };
+  const combinadas = agregarFuentesProyecto([base], [misma]);
+  assert(combinadas.length === 1, "el mismo título no se duplica");
+  assert(combinadas[0].emisor === "Rectoría", "la existente se conserva intacta");
+  const [otra] = normalizarFuentes([{ titulo: "Modelo educativo 2026", tipo: "modelo_educativo" }]);
+  const ampliadas = agregarFuentesProyecto([base], [otra]);
+  assert(ampliadas.length === 2, "la fuente nueva sí entra");
+  assert(agregarFuentesProyecto([base], [{ id: "", titulo: "" } as never]).length === 1, "basura no entra");
+});
+
+prueba("normalizarFuente conserva la url como referencia sin verificar", () => {
+  const [f] = normalizarFuentes([{ titulo: "Plan 2020-2025", url: "https://ejemplo.edu/plan.pdf" }]);
+  assert(f.url === "https://ejemplo.edu/plan.pdf", "la url viaja como ubicación");
+});
+
+prueba("el turno macro lleva las fuentes conocidas como contexto", () => {
+  const sinFuentes = turnoDocenteMacro("Agregá la fuente", null);
+  assert(/ninguna todavía/.test(sinFuentes), "sin fuentes lo dice");
+  const conFuentes = turnoDocenteMacro("Revisemos", null, [{ id: "fuente_x", titulo: "Plan 2020-2025" }]);
+  assert(/Plan 2020-2025/.test(conFuentes), "la fuente conocida viaja en el contexto");
 });
 
 /* ---------------------------------------------------------------- */

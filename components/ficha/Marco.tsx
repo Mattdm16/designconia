@@ -268,9 +268,9 @@ export function MarcoFicha({
 
   const conEstado = (id: SeccionMacro) => ({
     id,
-    completa: seccionMacroCompleta(marco, id),
+    completa: seccionMacroCompleta(marco, id, fuentes.length),
     activa: enFoco === id,
-    resumen: resumenSeccionMacro(marco, id)
+    resumen: resumenSeccionMacro(marco, id, fuentes.length)
   });
 
   const cambiarMarco = (parche: Partial<MarcoEducativoInstitucional>) =>
