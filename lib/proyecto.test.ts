@@ -351,7 +351,8 @@ prueba("valida fuentes, citas, vínculos y alineación Macro → resultado Meso"
         citas: [{ fuenteId, pagina: 12, seccion: "Principios pedagógicos" }]
       }
     ],
-    afirmaciones: []
+    afirmaciones: [],
+    finalizado: false
   });
   proyecto.vinculosProgramaMarco.push({
     id: "vinculo-programa-marco-1",
@@ -404,7 +405,8 @@ prueba("origen documento y estado contrastado requieren cita curricular", () => 
     vigencia: null,
     estado: "borrador",
     principios: [principio],
-    afirmaciones: []
+    afirmaciones: [],
+    finalizado: false
   });
   assert(!esEstadoGuardadoV3(migrated), "origen=documento no puede carecer de cita");
 
@@ -429,7 +431,8 @@ prueba("rechaza dos marcos principales activos para el mismo programa", () => {
       vigencia: null,
       estado: "vigente",
       principios: [],
-      afirmaciones: []
+      afirmaciones: [],
+      finalizado: false
     },
     {
       id: "marco-b",
@@ -438,7 +441,8 @@ prueba("rechaza dos marcos principales activos para el mismo programa", () => {
       vigencia: null,
       estado: "vigente",
       principios: [],
-      afirmaciones: []
+      afirmaciones: [],
+      finalizado: false
     }
   );
   migrated.proyecto.vinculosProgramaMarco.push(

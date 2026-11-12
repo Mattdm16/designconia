@@ -12,7 +12,8 @@ import { SYSTEM_PROMPT_MACRO, turnoDocenteMacro } from "@/lib/promptMacro";
 import { marcoVacio, normalizarMarco, seccionesMacroCompletas, validarMarco } from "@/lib/macro";
 import { SYSTEM_PROMPT_MESO, turnoDocenteMeso, type MarcoDisponible } from "@/lib/promptMeso";
 import { normalizarPrograma, programaVacio, seccionesMesoCompletas, validarPrograma } from "@/lib/meso";
-import { normalizarClave, textoLegible } from "@/lib/errores";
+import { textoLegible } from "@/lib/errores";
+import { resolverClaveIA } from "@/lib/clave";
 import type { MarcoEducativoInstitucional, ProgramaAcademico } from "@/lib/proyecto";
 import { microcurriculoVacio, normalizarMicrocurriculo, primeraIncompleta, recursosSinUso, resumenCargaHoraria, seccionesCompletas, validarMicrocurriculo, TOLERANCIA_CARGA_MINUTOS, type Microcurriculo } from "@/lib/schema";
 import { registrarTraza, type Traza } from "@/lib/traza";
@@ -58,13 +59,20 @@ function errorJson(status: number, code: string, mensaje: string) {
 }
 
 /** Traduce el estado HTTP de DeepSeek a algo accionable en español. */
-function mensajeDeEstado(status: number, detalle: string): { code: string; mensaje: string } {
+function mensajeDeEstado(
+  status: number,
+  detalle: string,
+  clavePropia: boolean
+): { code: string; mensaje: string } {
   const cola = detalle ? ` Detalle del proveedor: ${detalle.slice(0, 300)}` : "";
+  const dondeRevisar = clavePropia
+    ? "Revisa tu clave en «Clave IA»."
+    : "Revisa DEEPSEEK_API_KEY en .env.local.";
   switch (status) {
     case 401:
       return {
         code: "clave_invalida",
-        mensaje: `La API key de DeepSeek fue rechazada (401). Revisa DEEPSEEK_API_KEY en .env.local.${cola}`
+        mensaje: `La API key de DeepSeek fue rechazada (401). ${dondeRevisar}${cola}`
       };
     case 402:
       return {
@@ -302,12 +310,20 @@ async function detalleDeError(res: Response): Promise<string> {
  * /api/diagnostico para explicar una respuesta vacía sin la consola.
  */
 export async function POST(req: NextRequest) {
-  const clave = normalizarClave(process.env.DEEPSEEK_API_KEY);
+  /**
+   * Clave BYOK del docente (cabecera) o del servidor (.env). La clave nunca
+   * se registra en la traza ni se guarda en ningún lado: solo viaja hacia
+   * el proveedor dentro de esta llamada.
+   */
+  const { clave, esPropia } = resolverClaveIA(
+    req.headers.get("x-clave-ia"),
+    process.env.DEEPSEEK_API_KEY
+  );
   if (!clave) {
     return errorJson(
       503,
       "sin_clave",
-      "Falta la clave de DeepSeek. Añade DEEPSEEK_API_KEY a tu .env.local y reinicia el servidor de desarrollo."
+      "Falta la clave de DeepSeek. Añade tu clave en «Clave IA» o configura DEEPSEEK_API_KEY en .env.local y reinicia el servidor de desarrollo."
     );
   }
 
@@ -413,7 +429,7 @@ export async function POST(req: NextRequest) {
     const detalle = await detalleDeError(respuesta);
     clearTimeout(reloj);
     req.signal.removeEventListener("abort", abortar);
-    const { code, mensaje } = mensajeDeEstado(respuesta.status, detalle);
+    const { code, mensaje } = mensajeDeEstado(respuesta.status, detalle, esPropia);
     return errorJson(respuesta.status, code, mensaje);
   }
 

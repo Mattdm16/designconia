@@ -262,7 +262,8 @@ caso("aplicar rechaza base meso sin mutar", () => {
     estado: "borrador",
     perfilIngreso: [],
     perfilEgreso: [],
-    resultadosPrograma: []
+    resultadosPrograma: [],
+    finalizado: false
   });
   estado.seleccion = { modulo: "meso", documentoId: "prog-1" };
   assert(esEstadoGuardadoV3(estado), "base meso válida");

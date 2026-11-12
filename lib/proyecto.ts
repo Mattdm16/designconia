@@ -73,6 +73,13 @@ export type FuenteCurricular = {
   paginas?: number;
 };
 
+/** Origen de una copia: de qué documento se derivó, sin mover su contenido. */
+export type OrigenCopiaDocumento = {
+  nivel: "macro" | "meso" | "micro";
+  id: string;
+  nombre: string;
+};
+
 /** Macrocurrículo: marco educativo institucional/versionado. */
 export type MarcoEducativoInstitucional = {
   id: string;
@@ -83,6 +90,10 @@ export type MarcoEducativoInstitucional = {
   estado: EstadoMarco;
   principios: AfirmacionCurricular[];
   afirmaciones: AfirmacionCurricular[];
+  /** Marca del docente: terminado y listo para reutilizar. No es aprobación oficial. */
+  finalizado: boolean;
+  /** Si nació como copia de otro documento, de cuál. */
+  origenCopia?: OrigenCopiaDocumento | null;
 };
 
 /** Mesocurrículo: programa académico. */
@@ -94,6 +105,10 @@ export type ProgramaAcademico = {
   perfilIngreso: AfirmacionCurricular[];
   perfilEgreso: AfirmacionCurricular[];
   resultadosPrograma: AfirmacionCurricular[];
+  /** Marca del docente: terminado y listo para reutilizar. No es aprobación oficial. */
+  finalizado: boolean;
+  /** Si nació como copia de otro documento, de cuál. */
+  origenCopia?: OrigenCopiaDocumento | null;
 };
 
 /** Microcurrículo canónico asociado opcionalmente a un programa. */
@@ -101,6 +116,10 @@ export type Asignatura = {
   id: string;
   programaId: string | null;
   microcurriculo: Microcurriculo;
+  /** Marca del docente: terminado y listo para reutilizar. No es aprobación oficial. */
+  finalizado: boolean;
+  /** Si nació como copia de otro documento, de cuál. */
+  origenCopia?: OrigenCopiaDocumento | null;
 };
 
 /** Un programa puede conservar varios marcos/versiones, con uno principal activo. */
@@ -755,11 +774,13 @@ export function migrarEstadoV2(valor: unknown): EstadoGuardadoV3 | null {
         estado: "pendiente_legado",
         perfilIngreso: [],
         perfilEgreso: [],
-        resultadosPrograma: []
+        resultadosPrograma: [],
+        finalizado: false,
+        origenCopia: null
       });
     }
 
-    proyecto.asignaturas.push({ id: idAsignatura, programaId, microcurriculo: micro });
+    proyecto.asignaturas.push({ id: idAsignatura, programaId, microcurriculo: micro, finalizado: false, origenCopia: null });
     modulo = "micro";
     documentoId = idAsignatura;
     seleccion = { modulo, documentoId };

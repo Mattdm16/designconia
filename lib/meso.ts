@@ -16,6 +16,7 @@ import type {
   EstadoAfirmacion,
   EstadoPrograma,
   OrigenAfirmacion,
+  OrigenCopiaDocumento,
   ProgramaAcademico
 } from "./proyecto.ts";
 
@@ -179,16 +180,28 @@ export function crearProgramaVacio(id: string): ProgramaAcademico {
     estado: "borrador",
     perfilIngreso: [],
     perfilEgreso: [],
-    resultadosPrograma: []
+    resultadosPrograma: [],
+    finalizado: false,
+    origenCopia: null
   };
+}
+
+/**
+ * Valida de qué documento nació una copia (misma regla que en el Macro).
+ */
+function normalizarOrigenCopia(v: unknown): OrigenCopiaDocumento | null {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  if (o.nivel !== "macro" && o.nivel !== "meso" && o.nivel !== "micro") return null;
+  if (typeof o.id !== "string" || !o.id.trim()) return null;
+  if (typeof o.nombre !== "string" || !o.nombre.trim()) return null;
+  return { nivel: o.nivel, id: o.id.trim(), nombre: o.nombre.trim().slice(0, 160) };
 }
 
 /**
  * Construye un programa válido a partir de lo que devolvió el modelo,
  * conservando lo confirmado por el docente.
- */
-export function normalizarPrograma(v: unknown, anterior: ProgramaAcademico | null = null): ProgramaAcademico {
-  const o = esObjeto(v) ? v : {};
+ */export function normalizarPrograma(v: unknown, anterior: ProgramaAcademico | null = null): ProgramaAcademico {  const o = esObjeto(v) ? v : {};
 
   const ingresoCrudo = Array.isArray(o.perfilIngreso) ? o.perfilIngreso : [];
   const egresoCrudo = Array.isArray(o.perfilEgreso) ? o.perfilEgreso : [];
@@ -219,7 +232,9 @@ export function normalizarPrograma(v: unknown, anterior: ProgramaAcademico | nul
       anterior?.resultadosPrograma ?? [],
       "resultado",
       LIMITES_MESO.resultados
-    )
+    ),
+    finalizado: typeof o.finalizado === "boolean" ? o.finalizado : anterior?.finalizado ?? false,
+    origenCopia: normalizarOrigenCopia(o.origenCopia) ?? anterior?.origenCopia ?? null
   };
 }
 

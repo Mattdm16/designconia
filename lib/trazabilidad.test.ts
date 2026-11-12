@@ -426,7 +426,7 @@ caso("leer migra un micro heredado sin romper el guard", () => {
     },
     bibliografia: { obligatorias: [], complementarias: [], recursos: [] }
   };
-  estado.proyecto.asignaturas.push({ id: "asig-legada", programaId: null, microcurriculo: legado as never });
+  estado.proyecto.asignaturas.push({ id: "asig-legada", programaId: null, microcurriculo: legado as never, finalizado: false });
   estado.seleccion = { modulo: "micro", documentoId: "asig-legada" };
   assert(esEstadoGuardadoV3(estado), "el legado pasa el guard tolerante");
   const lectura = leerVistaMicroV3(estado);

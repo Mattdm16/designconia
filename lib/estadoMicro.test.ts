@@ -105,7 +105,8 @@ function agregarMarcoYPrograma(estado: EstadoGuardadoV3): { marcoId: string; pro
     vigencia: { desde: "2026-01-01", hasta: null },
     estado: "vigente",
     principios: [],
-    afirmaciones: []
+    afirmaciones: [],
+    finalizado: false
   });
   estado.proyecto.programas.push({
     id: programaId,
@@ -113,7 +114,8 @@ function agregarMarcoYPrograma(estado: EstadoGuardadoV3): { marcoId: string; pro
     estado: "vigente",
     perfilIngreso: [],
     perfilEgreso: [],
-    resultadosPrograma: []
+    resultadosPrograma: [],
+    finalizado: false
   });
   estado.proyecto.vinculosProgramaMarco.push({
     id: "vinculo-programa-marco-1",
@@ -369,7 +371,7 @@ caso("editar Micro conserva programaId, Macro/Meso, asignaturas y conversaciones
 
   const otraMicro = crearMicro("DCN-OTRA-ASIGNATURA", "Otra asignatura");
   const otraAsignaturaId = "asignatura-hermana";
-  estado.proyecto.asignaturas.push({ id: otraAsignaturaId, programaId: null, microcurriculo: otraMicro });
+  estado.proyecto.asignaturas.push({ id: otraAsignaturaId, programaId: null, microcurriculo: otraMicro, finalizado: false });
   estado.conversaciones[`micro:${otraAsignaturaId}`] = {
     scopeId: `micro:${otraAsignaturaId}`,
     modulo: "micro",

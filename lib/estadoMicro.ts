@@ -283,7 +283,7 @@ export function aplicarVistaMicroV3(
     asignaturaId = idAsignaturaLibre(estado.proyecto, microcurriculo.folio);
     estado.proyecto.asignaturas = [
       ...estado.proyecto.asignaturas,
-      { id: asignaturaId, programaId: null, microcurriculo }
+      { id: asignaturaId, programaId: null, microcurriculo, finalizado: false, origenCopia: null }
     ];
   }
 

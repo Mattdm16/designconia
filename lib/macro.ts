@@ -21,6 +21,7 @@ import type {
   FuenteCurricular,
   MarcoEducativoInstitucional,
   OrigenAfirmacion,
+  OrigenCopiaDocumento,
   TipoFuenteCurricular,
   Vigencia
 } from "./proyecto.ts";
@@ -315,8 +316,23 @@ export function crearMarcoVacio(id: string): MarcoEducativoInstitucional {
     vigencia: null,
     estado: "borrador",
     principios: [],
-    afirmaciones: []
+    afirmaciones: [],
+    finalizado: false,
+    origenCopia: null
   };
+}
+
+/**
+ * Valida de qué documento nació una copia. Cualquier otra forma se descarta:
+ * el origen de copia es trazabilidad, nunca un dato inventado.
+ */
+export function normalizarOrigenCopia(v: unknown): OrigenCopiaDocumento | null {
+  if (!esObjeto(v)) return null;
+  const nivel = v.nivel;
+  if (nivel !== "macro" && nivel !== "meso" && nivel !== "micro") return null;
+  if (typeof v.id !== "string" || !v.id.trim()) return null;
+  if (typeof v.nombre !== "string" || !v.nombre.trim()) return null;
+  return { nivel, id: v.id.trim(), nombre: v.nombre.trim().slice(0, 160) };
 }
 
 /**
@@ -356,7 +372,9 @@ export function normalizarMarco(v: unknown, anterior: MarcoEducativoInstituciona
       anterior?.afirmaciones ?? [],
       "orientacion",
       LIMITES_MACRO.orientaciones
-    )
+    ),
+    finalizado: typeof o.finalizado === "boolean" ? o.finalizado : anterior?.finalizado ?? false,
+    origenCopia: normalizarOrigenCopia(o.origenCopia) ?? anterior?.origenCopia ?? null
   };
 }
 

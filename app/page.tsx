@@ -3,11 +3,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Chat, type AdjuntoChip, type DocMenuItem } from "@/components/Chat";
+import { Catalogo } from "@/components/Catalogo";
+import { ClaveIAPanel } from "@/components/ClaveIA";
+import { NubePanel } from "@/components/Nube";
 import { Icono } from "@/components/Icono";
 import { MarcoFicha } from "@/components/ficha/Marco";
 import { MesoFicha } from "@/components/ficha/Meso";
 import { MicrocurriculoFicha } from "@/components/ficha/Microcurriculo";
 import { textoLegible } from "@/lib/errores";
+import { borrarClaveSesion, guardarClaveSesion, leerClaveSesion } from "@/lib/clave";
+import { duplicarDocumento, marcarFinalizado, type NivelCatalogo } from "@/lib/catalogo";
+import { nombreRespaldo, parsearRespaldo, serializarRespaldo } from "@/lib/respaldo";
+import {
+  bajarProyecto,
+  cerrarSesionNube,
+  iniciarSesionNube,
+  nubeDisponible,
+  obtenerClienteNube,
+  subirProyecto
+} from "@/lib/nube";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   aplicarVistaMacroV3,
   leerVistaMacroV3,
@@ -140,6 +155,29 @@ export default function Page() {
   const [scopeV3NoSoportado, setScopeV3NoSoportado] = useState(false);
   const [pildoraBorrador, setPildoraBorrador] = useState(false);
   const [chatVisible, setChatVisible] = useState(true);
+  /**
+   * Clave de IA aportada por el docente (BYOK). Vive en memoria y en
+   * sessionStorage: nunca en localStorage, copias ni exportaciones.
+   */
+  const [claveUsuario, setClaveUsuario] = useState<string | null>(() => leerClaveSesion());
+  const claveRef = useRef<string | null>(null);
+  claveRef.current = claveUsuario;
+  /** Cabeceras para /api/chat: la clave propia viaja solo si existe. */
+  function cabecerasIA(): Record<string, string> {
+    const base: Record<string, string> = { "Content-Type": "application/json" };
+    if (claveRef.current) base["x-clave-ia"] = claveRef.current;
+    return base;
+  }
+  /** Paneles del encabezado: catálogo de documentos y clave propia. */
+  const [catalogoAbierto, setCatalogoAbierto] = useState(false);
+  const [claveAbierta, setClaveAbierta] = useState(false);
+  const inputRespaldoRef = useRef<HTMLInputElement | null>(null);
+  /* Nube opcional (Supabase). Sin configuración, la app sigue 100% local. */
+  const [nubeAbierta, setNubeAbierta] = useState(false);
+  const [nubeEmail, setNubeEmail] = useState<string | null>(null);
+  const [nubeOcupado, setNubeOcupado] = useState(false);
+  const [nubeMensaje, setNubeMensaje] = useState<string | null>(null);
+  const clienteNubeRef = useRef<SupabaseClient | null>(null);
   /* Tema claro/oscuro: el script del layout ya puso la clase antes de pintar. */
   const [temaOscuro, setTemaOscuro] = useState(false);
   useEffect(() => {
@@ -817,7 +855,15 @@ export default function Page() {
   /* -------- configuración del asistente -------- */
   useEffect(() => {
     let vivo = true;
-    fetch("/api/salud")
+    const propia = claveUsuario;
+    const peticion = propia
+      ? fetch("/api/salud", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clave: propia })
+        })
+      : fetch("/api/salud");
+    peticion
       .then((r) => r.json() as Promise<Salud>)
       .then((d) => vivo && setSalud(d))
       .catch(
@@ -833,7 +879,99 @@ export default function Page() {
     return () => {
       vivo = false;
     };
+  }, [claveUsuario]);
+
+  /* -------- nube opcional: sesión y sincronización -------- */
+  useEffect(() => {
+    if (!nubeDisponible()) return;
+    let vivo = true;
+    let desuscribir: (() => void) | null = null;
+    void (async () => {
+      const cliente = await obtenerClienteNube();
+      if (!vivo || !cliente) return;
+      clienteNubeRef.current = cliente;
+      const { data } = await cliente.auth.getSession();
+      if (vivo) setNubeEmail(data.session?.user?.email ?? null);
+      const { data: sub } = cliente.auth.onAuthStateChange((_ev, sesion) => {
+        setNubeEmail(sesion?.user?.email ?? null);
+      });
+      desuscribir = () => sub.subscription.unsubscribe();
+    })();
+    return () => {
+      vivo = false;
+      desuscribir?.();
+    };
   }, []);
+
+  async function entrarNube(email: string) {
+    const cliente = clienteNubeRef.current ?? (await obtenerClienteNube());
+    if (!cliente) {
+      setNubeMensaje("La nube no está configurada. Ver docs/NUBE.md.");
+      return;
+    }
+    clienteNubeRef.current = cliente;
+    setNubeOcupado(true);
+    try {
+      const r = await iniciarSesionNube(cliente, email);
+      setNubeMensaje(
+        r.ok ? "Revisa tu correo: te envié un enlace para entrar." : r.motivo
+      );
+    } finally {
+      setNubeOcupado(false);
+    }
+  }
+
+  async function salirNube() {
+    const cliente = clienteNubeRef.current;
+    if (cliente) await cerrarSesionNube(cliente);
+    setNubeEmail(null);
+    setNubeMensaje("Sesión de nube cerrada. Tus datos locales siguen intactos.");
+  }
+
+  async function subirNube() {
+    const cliente = clienteNubeRef.current;
+    if (!cliente) return;
+    const base = guardarVistaActual() ?? estadoV3Ref.current;
+    if (!base) {
+      setNubeMensaje("Todavía no hay proyecto que subir.");
+      return;
+    }
+    setNubeOcupado(true);
+    try {
+      const r = await subirProyecto(cliente, base, "0.1.0");
+      setNubeMensaje(r.ok ? "Proyecto guardado en tu cuenta." : r.motivo);
+    } finally {
+      setNubeOcupado(false);
+    }
+  }
+
+  async function bajarNube() {
+    const cliente = clienteNubeRef.current;
+    if (!cliente) return;
+    if (
+      !window.confirm(
+        "Esto reemplazará el proyecto actual por la copia guardada en tu cuenta. ¿Continuar?"
+      )
+    ) {
+      return;
+    }
+    setNubeOcupado(true);
+    try {
+      const r = await bajarProyecto(cliente);
+      if (!r.ok) {
+        setNubeMensaje(r.motivo);
+        return;
+      }
+      const guardado = guardarEstadoV3(window.localStorage, r.estado);
+      if (!guardado.ok) {
+        setNubeMensaje("La copia es válida pero no se pudo guardar en este navegador.");
+        return;
+      }
+      window.location.reload();
+    } finally {
+      setNubeOcupado(false);
+    }
+  }
 
   /* -------- autoscroll -------- */
   useEffect(() => {
@@ -945,6 +1083,102 @@ export default function Page() {
       return;
     }
     persistirProyecto(siguiente, "Asignatura desvinculada. La ficha se conserva.");
+  }
+
+  /* -------- clave de IA aportada por el docente -------- */
+  function guardarClavePropia(clave: string) {
+    try {
+      guardarClaveSesion(clave);
+      setClaveUsuario(clave.trim());
+      mostrarAviso("Clave guardada para esta sesión.");
+    } catch {
+      mostrarAviso("Escribe tu clave antes de guardarla.");
+    }
+  }
+
+  function borrarClavePropia() {
+    borrarClaveSesion();
+    setClaveUsuario(null);
+    mostrarAviso("Clave olvidada.");
+  }
+
+  /* -------- respaldo JSON descargable y restaurable -------- */
+  function descargarRespaldo() {
+    const base = guardarVistaActual() ?? estadoV3Ref.current;
+    if (!base) {
+      mostrarAviso("Todavía no hay proyecto que respaldar.");
+      return;
+    }
+    try {
+      const blob = new Blob([serializarRespaldo(base)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = nombreRespaldo();
+      a.click();
+      URL.revokeObjectURL(url);
+      mostrarAviso("Copia de respaldo descargada. Guárdala en un lugar seguro.");
+    } catch {
+      mostrarAviso("No se pudo generar la copia de respaldo.");
+    }
+  }
+
+  function importarRespaldo(archivo: File) {
+    archivo
+      .text()
+      .then((texto) => {
+        const r = parsearRespaldo(texto);
+        if (!r.ok) {
+          mostrarAviso(`${r.motivo} No se cambió nada.`);
+          return;
+        }
+        if (
+          !window.confirm(
+            "Esto reemplazará el proyecto actual por la copia del archivo. ¿Continuar?"
+          )
+        ) {
+          return;
+        }
+        const guardado = guardarEstadoV3(window.localStorage, r.estado);
+        if (!guardado.ok) {
+          mostrarAviso("La copia es válida pero no se pudo guardar. No se cambió nada.");
+          return;
+        }
+        window.location.reload();
+      })
+      .catch(() => mostrarAviso("No se pudo leer el archivo."));
+  }
+
+  /* -------- catálogo: abrir, duplicar y finalizar -------- */
+  function abrirDesdeCatalogo(nivel: NivelCatalogo, id: string) {
+    setCatalogoAbierto(false);
+    abrirDocumento(nivel, id);
+  }
+
+  function duplicarDesdeCatalogo(nivel: NivelCatalogo, id: string) {
+    const base = guardarVistaActual() ?? estadoV3Ref.current;
+    if (!base) return;
+    const r = duplicarDocumento(base.proyecto, nivel, id);
+    if (!r.ok) {
+      mostrarAviso(r.motivo);
+      return;
+    }
+    persistirProyecto({ ...base, proyecto: r.proyecto }, "Documento duplicado como base.");
+    abrirDocumento(nivel, r.nuevoId);
+  }
+
+  function alternarFinalizado(nivel: NivelCatalogo, id: string, valor: boolean) {
+    const base = guardarVistaActual() ?? estadoV3Ref.current;
+    if (!base) return;
+    const r = marcarFinalizado(base.proyecto, nivel, id, valor);
+    if (!r.ok) {
+      mostrarAviso(r.motivo);
+      return;
+    }
+    persistirProyecto(
+      { ...base, proyecto: r.proyecto },
+      valor ? "Documento marcado como finalizado." : "Marca de finalizado quitada."
+    );
   }
 
   /**
@@ -1499,7 +1733,7 @@ export default function Page() {
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: cabecerasIA(),
           signal: control.signal,
           body: JSON.stringify({ mensaje: t, microcurriculo: enviarBorrador, historia, fuentesPdf: fuentesPdfParaEnvio(t) })
         });
@@ -1712,7 +1946,7 @@ export default function Page() {
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: cabecerasIA(),
           signal: control.signal,
           body: JSON.stringify({
             mensaje: t,
@@ -1911,7 +2145,7 @@ export default function Page() {
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: cabecerasIA(),
           signal: control.signal,
           body: JSON.stringify({ mensaje: t, modulo: "meso", programa: programaEnviar, marcos: marcosDisponibles, historia, fuentesPdf: fuentesPdfParaEnvio(t) })
         });
@@ -2188,7 +2422,7 @@ export default function Page() {
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: cabecerasIA(),
           signal: control.signal,
           body: JSON.stringify({
             mensaje: t,
@@ -2366,7 +2600,7 @@ export default function Page() {
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: cabecerasIA(),
           signal: control.signal,
           body: JSON.stringify({
             mensaje: t,
@@ -2708,6 +2942,48 @@ export default function Page() {
             <span className="truncate">{etiquetaContexto}</span>
           </span>
           <BotonTema oscuro={temaOscuro} onCambiar={alternarTema} />
+          <button
+            type="button"
+            onClick={() => {
+              setCatalogoAbierto((v) => !v);
+              setClaveAbierta(false);
+              setNubeAbierta(false);
+            }}
+            aria-expanded={catalogoAbierto}
+            title="Catálogo de documentos: buscar, abrir, duplicar y finalizar"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-black/10 bg-crema/95 px-3 py-1.5 text-xs font-medium text-black/70 hover:border-black/25 hover:text-black"
+          >
+            <Icono nombre="carpeta" className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Catálogo</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setClaveAbierta((v) => !v);
+              setCatalogoAbierto(false);
+              setNubeAbierta(false);
+            }}
+            aria-expanded={claveAbierta}
+            title="Usar tu propia clave de DeepSeek solo en esta sesión"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-black/10 bg-crema/95 px-3 py-1.5 text-xs font-medium text-black/70 hover:border-black/25 hover:text-black"
+          >
+            <Icono nombre="llave" className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Clave IA</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setNubeAbierta((v) => !v);
+              setCatalogoAbierto(false);
+              setClaveAbierta(false);
+            }}
+            aria-expanded={nubeAbierta}
+            title="Guardar el proyecto en tu cuenta o traerlo de vuelta"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-black/10 bg-crema/95 px-3 py-1.5 text-xs font-medium text-black/70 hover:border-black/25 hover:text-black"
+          >
+            <Icono nombre="nube" className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Nube</span>
+          </button>
           <span className="ml-auto flex items-center gap-2 text-[11px] text-black/50">
             <span
               className={`h-2 w-2 rounded-full ${sinClave ? "bg-terracotta" : salud === null ? "bg-mist" : "bg-rainfall"}`}
@@ -2730,6 +3006,46 @@ export default function Page() {
               </p>
             </div>
           )}
+          {catalogoAbierto && proyectoEnVista && (
+            <div className="mx-auto w-full max-w-[640px] shrink-0 pb-2">
+              <Catalogo
+                proyecto={proyectoEnVista}
+                onAbrir={abrirDesdeCatalogo}
+                onDuplicar={duplicarDesdeCatalogo}
+                onFinalizar={alternarFinalizado}
+              />
+            </div>
+          )}
+          {claveAbierta && (
+            <div className="mx-auto w-full max-w-[640px] shrink-0 pb-2">
+              <ClaveIAPanel
+                hayClave={claveUsuario !== null}
+                onGuardar={guardarClavePropia}
+                onBorrar={borrarClavePropia}
+              />
+            </div>
+          )}
+          {nubeAbierta &&
+            (nubeDisponible() ? (
+              <div className="mx-auto w-full max-w-[640px] shrink-0 pb-2">
+                <NubePanel
+                  sesionEmail={nubeEmail}
+                  ocupado={nubeOcupado}
+                  mensaje={nubeMensaje}
+                  onEntrar={entrarNube}
+                  onSalir={salirNube}
+                  onSubir={subirNube}
+                  onBajar={bajarNube}
+                />
+              </div>
+            ) : (
+              <div className="mx-auto w-full max-w-[640px] shrink-0 pb-2">
+                <p className="rounded-xl bg-black/[0.03] px-3 py-2 text-[11.5px] leading-relaxed text-black/60">
+                  La nube no está configurada en este despliegue. Ver{" "}
+                  <span className="font-mono">docs/NUBE.md</span>.
+                </p>
+              </div>
+            ))}
           <Chat
             mensajes={chatMensajes}
             enviando={enviando}
@@ -2882,6 +3198,79 @@ export default function Page() {
 
           <div className="ml-auto flex items-center gap-1.5">
             <BotonTema oscuro={temaOscuro} onCambiar={alternarTema} />
+            <button
+              type="button"
+              onClick={() => {
+                setCatalogoAbierto((v) => !v);
+                setClaveAbierta(false);
+                setNubeAbierta(false);
+              }}
+              aria-expanded={catalogoAbierto}
+              title="Catálogo de documentos: buscar, abrir, duplicar y finalizar"
+              className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
+            >
+              <Icono nombre="carpeta" className="h-3.5 w-3.5" /> Catálogo
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setClaveAbierta((v) => !v);
+                setCatalogoAbierto(false);
+                setNubeAbierta(false);
+              }}
+              aria-expanded={claveAbierta}
+              title="Usar tu propia clave de DeepSeek solo en esta sesión"
+              className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
+            >
+              <Icono nombre="llave" className="h-3.5 w-3.5" /> Clave IA
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setNubeAbierta((v) => !v);
+                setCatalogoAbierto(false);
+                setClaveAbierta(false);
+              }}
+              aria-expanded={nubeAbierta}
+              title="Guardar el proyecto en tu cuenta o traerlo de vuelta"
+              className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
+            >
+              <Icono nombre="nube" className="h-3.5 w-3.5" /> Nube
+            </button>
+            {proyectoEnVista && (
+              <>
+                <button
+                  type="button"
+                  onClick={descargarRespaldo}
+                  title="Descargar una copia JSON del proyecto para respaldarlo"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
+                >
+                  <Icono nombre="descargar" className="h-3.5 w-3.5" /> Respaldo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => inputRespaldoRef.current?.click()}
+                  title="Restaurar una copia JSON descargada antes"
+                  className="rounded-full border border-black/10 bg-white p-1.5 hover:border-black/25"
+                  aria-label="Restaurar una copia de respaldo JSON"
+                >
+                  <Icono nombre="documento" />
+                </button>
+                <input
+                  ref={inputRespaldoRef}
+                  type="file"
+                  accept="application/json,.json"
+                  className="hidden"
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  onChange={(e) => {
+                    const archivo = e.target.files?.[0];
+                    e.target.value = "";
+                    if (archivo) importarRespaldo(archivo);
+                  }}
+                />
+              </>
+            )}
             {proyectoEnVista &&
               (proyectoEnVista.marcos.length > 0 ||
                 proyectoEnVista.programas.length > 0 ||
@@ -2971,6 +3360,50 @@ export default function Page() {
             )}
           </div>
         </header>
+
+        {catalogoAbierto && proyectoEnVista && (
+          <div className="shrink-0">
+            <Catalogo
+              proyecto={proyectoEnVista}
+              onAbrir={abrirDesdeCatalogo}
+              onDuplicar={duplicarDesdeCatalogo}
+              onFinalizar={alternarFinalizado}
+            />
+          </div>
+        )}
+
+        {claveAbierta && (
+          <div className="shrink-0">
+            <ClaveIAPanel
+              hayClave={claveUsuario !== null}
+              onGuardar={guardarClavePropia}
+              onBorrar={borrarClavePropia}
+            />
+          </div>
+        )}
+
+        {nubeAbierta &&
+          (nubeDisponible() ? (
+            <div className="shrink-0">
+              <NubePanel
+                sesionEmail={nubeEmail}
+                ocupado={nubeOcupado}
+                mensaje={nubeMensaje}
+                onEntrar={entrarNube}
+                onSalir={salirNube}
+                onSubir={subirNube}
+                onBajar={bajarNube}
+              />
+            </div>
+          ) : (
+            <div className="shrink-0 rounded-[18px] border border-white/60 bg-crema/95 px-4 py-3 text-[12px] leading-relaxed text-black/70 shadow-tarjeta">
+              La nube no está configurada en este despliegue. Para activarla, crea un proyecto gratuito en
+              Supabase, ejecuta <span className="font-mono">supabase/migraciones/001_proyectos.sql</span> y
+              define <span className="font-mono">NEXT_PUBLIC_SUPABASE_URL</span> y{" "}
+              <span className="font-mono">NEXT_PUBLIC_SUPABASE_ANON_KEY</span>. Ver{" "}
+              <span className="font-mono">docs/NUBE.md</span>.
+            </div>
+          ))}
 
         {pildoraBorrador && (
           <div className="flex shrink-0 items-center gap-2.5 rounded-[18px] border border-white/60 bg-sprout/50 px-3 py-2 text-[12px] text-black/75">

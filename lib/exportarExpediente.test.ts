@@ -67,7 +67,7 @@ function crearProyecto(): ProyectoCurricular {
         ]
       }
     ],
-    asignaturas: [{ id: "asig-1", programaId: "prog-1", microcurriculo: micro }],
+    asignaturas: [{ id: "asig-1", programaId: "prog-1", microcurriculo: micro, finalizado: false }],
     fuentesCurriculares: [],
     vinculosProgramaMarco: [
       { id: "v1", programaId: "prog-1", marcoId: "marco-1", vigencia: null, estado: "activo", principal: true }

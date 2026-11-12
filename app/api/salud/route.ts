@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { resolverClaveIA } from "@/lib/clave";
 import { normalizarClave, textoLegible } from "@/lib/errores";
 import { BASE_URL_POR_DEFECTO, MODELO_POR_DEFECTO } from "@/lib/prompt";
 
@@ -93,7 +94,7 @@ export async function GET() {
       conexion: "sin_clave",
       ia: false,
       modelo,
-      mensaje: "Falta DEEPSEEK_API_KEY. Añádela a .env.local y reinicia el servidor para conversar con la IA."
+      mensaje: "Falta DEEPSEEK_API_KEY. Añade tu clave en «Clave IA» o a .env.local y reinicia el servidor para conversar con la IA."
     });
   }
 
@@ -103,4 +104,28 @@ export async function GET() {
   const cuerpo = await comprobar(clave, modelo);
   cache = { en: ahora, cuerpo };
   return NextResponse.json(cuerpo);
+}
+
+/**
+ * Prueba una clave aportada por el docente sin guardarla en ningún lado.
+ * No usa la caché: cada prueba verifica la clave recibida en el cuerpo.
+ */
+export async function POST(req: Request) {
+  const modelo = process.env.DEEPSEEK_MODEL?.trim() || MODELO_POR_DEFECTO;
+  let aportada: unknown = null;
+  try {
+    aportada = (await req.json() as Record<string, unknown>).clave ?? null;
+  } catch {
+    aportada = null;
+  }
+  const { clave } = resolverClaveIA(aportada, null);
+  if (!clave) {
+    return NextResponse.json<CuerpoSalud>({
+      conexion: "sin_clave",
+      ia: false,
+      modelo,
+      mensaje: "Escribe tu clave de DeepSeek para probarla."
+    });
+  }
+  return NextResponse.json<CuerpoSalud>(await comprobar(clave, modelo));
 }
