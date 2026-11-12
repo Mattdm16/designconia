@@ -136,7 +136,7 @@ lib/
 Último checkpoint: commit `1fc1a89` (context al día con chat-first, PDF y tope 3 años) en la rama local `feature/curricular-project-foundation`. Los commits de desarrollo **no se han subido a GitHub**.
 
 ```text
-npm test              → 301 pruebas (106 + 14 + 38 + 11 + 31 + 11 + 24 + 17 + 11 + 5 + 3 + 2 + 8 + 5 + 5 + 3 + 4 + 3)
+npm test              → 324 pruebas (106 + 14 + 38 + 11 + 31 + 11 + 24 + 17 + 11 + 5 + 3 + 2 + 8 + 5 + 5 + 3 + 4 + 3 + 13 + 10)
 impeccable detect     → [] sobre Citas, Marco, Meso, Secciones, Microcurriculo, Chat y page
 npx tsc --noEmit      → limpio
 npm run build         → correcto
@@ -196,6 +196,7 @@ npm run build
 13. Trabajo independiente con esfuerzo propio (`trabajosIndependientes`, hasta 6000 min c/u): suma a las horas I sin tope de sesión; `horasPorTipo` suma minutos exactos y redondea una vez (24×45 min = 18 h); `reemplazoSecuencia` para reequilibrios globales; aviso con delta por tipo («faltan 50 h I») y estado neutral sin horas declaradas; la IA recibe minutos exactos y no declara TERMINADO con carga descuadrada.
 14. Alta real de fuentes Macro pedidas por chat (deduplicadas; URL guardada como referencia sin verificar contenido) + check verde de Fuentes con conteo + colores explícitos de `option` en modo oscuro.
 15. Piloto unipersonal sin Vercel: clave IA propia por sesión (nunca en copias/logs), respaldo/restauración JSON validado, catálogo local con búsqueda insensible a tildes, duplicado con ids propios y marca de finalizado, y capa Supabase opcional (una fila por docente, RLS, enlace mágico) con guía en `docs/NUBE.md`. Sin variables Supabase, todo sigue local.
+16. Fase 2 de documento oficial: `lib/diseno.ts` (plantillas Carta/A4, kit de marca con validación y SVG sanitizado, bloques con ref al currículo, redacción local explícita, cuadrícula magnética por zona), estudio visual con vista previa paginada real, editor de propiedades e imágenes, y `lib/exportarDisenoPdf.ts` (PDF vectorial fiel: tamaños, negritas, colores, alineación, encabezado/pie con numeración, JPEG incrustado). Solo exportación PDF; expediente conjunto fuera del diseñador.
 
 > Si cualquier sección histórica de este archivo o [PRODUCT.md](PRODUCT.md) aún describe un producto solo Micro, esta sección y el código reciente describen el estado actual; actualiza las discrepancias cuando corresponda.
 

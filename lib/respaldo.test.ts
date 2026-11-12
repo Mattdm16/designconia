@@ -55,7 +55,9 @@ function estadoValido(): EstadoGuardadoV3 {
       ],
       fuentesCurriculares: [],
       vinculosProgramaMarco: [],
-      alineaciones: []
+      alineaciones: [],
+      brandKits: [],
+      disenos: []
     },
     seleccion: { modulo: "micro", documentoId: "asig-1" },
     conversaciones: {}

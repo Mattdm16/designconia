@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Chat, type AdjuntoChip, type DocMenuItem } from "@/components/Chat";
 import { Catalogo } from "@/components/Catalogo";
 import { ClaveIAPanel } from "@/components/ClaveIA";
+import { DisenoEstudio } from "@/components/Diseno";
 import { NubePanel } from "@/components/Nube";
 import { Icono } from "@/components/Icono";
 import { MarcoFicha } from "@/components/ficha/Marco";
@@ -23,6 +24,7 @@ import {
   subirProyecto
 } from "@/lib/nube";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { BrandKit, DisenoDocumento, NivelDiseno } from "@/lib/diseno";
 import {
   aplicarVistaMacroV3,
   leerVistaMacroV3,
@@ -171,6 +173,8 @@ export default function Page() {
   /** Paneles del encabezado: catálogo de documentos y clave propia. */
   const [catalogoAbierto, setCatalogoAbierto] = useState(false);
   const [claveAbierta, setClaveAbierta] = useState(false);
+  /* Fase 2: estudio de diseño del documento activo (el chat queda en pausa). */
+  const [modoDiseno, setModoDiseno] = useState(false);
   const inputRespaldoRef = useRef<HTMLInputElement | null>(null);
   /* Nube opcional (Supabase). Sin configuración, la app sigue 100% local. */
   const [nubeAbierta, setNubeAbierta] = useState(false);
@@ -1179,6 +1183,27 @@ export default function Page() {
       { ...base, proyecto: r.proyecto },
       valor ? "Documento marcado como finalizado." : "Marca de finalizado quitada."
     );
+  }
+
+  /* -------- Fase 2: guardar diseño y kit en el proyecto -------- */
+  function clonarProyecto<T>(valor: T): T {
+    return JSON.parse(JSON.stringify(valor)) as T;
+  }
+
+  function guardarDiseno(diseno: DisenoDocumento, kit: BrandKit) {
+    const base = estadoV3Ref.current;
+    if (!base) {
+      mostrarAviso("Todavía no hay proyecto donde guardar el diseño.");
+      return;
+    }
+    const proyecto = clonarProyecto(base.proyecto);
+    const ik = proyecto.brandKits.findIndex((k) => k.id === kit.id);
+    if (ik === -1) proyecto.brandKits.push({ ...kit });
+    else proyecto.brandKits[ik] = { ...kit };
+    const id = proyecto.disenos.findIndex((d) => d.id === diseno.id);
+    if (id === -1) proyecto.disenos.push({ ...diseno });
+    else proyecto.disenos[id] = { ...diseno };
+    persistirProyecto({ ...base, proyecto }, "Diseño guardado en el proyecto.");
   }
 
   /**
@@ -2816,6 +2841,13 @@ export default function Page() {
   void versionProyecto;
   const proyectoEnVista = estadoV3Ref.current?.proyecto ?? null;
   const seleccionEnVista = estadoV3Ref.current?.seleccion ?? null;
+  /** Documento activo diseñable (Fase 2): requiere selección concreta fuera de inicio. */
+  const disenoScope: { nivel: NivelDiseno; documentoId: string } | null =
+    seleccionEnVista &&
+    seleccionEnVista.modulo !== "inicio" &&
+    seleccionEnVista.documentoId
+      ? { nivel: seleccionEnVista.modulo, documentoId: seleccionEnVista.documentoId }
+      : null;
   const marcosDisponibles = (proyectoEnVista?.marcos ?? []).map((m) => ({
     id: m.id,
     nombre: m.nombre,
@@ -3083,6 +3115,30 @@ export default function Page() {
   }
 
   /* ------------------------------------------------------------------ */
+  /* Modo diseño: estudio del documento (Fase 2). Sin chat ni ficha.      */
+  /* ------------------------------------------------------------------ */
+
+  if (modoDiseno && disenoScope && proyectoEnVista) {
+    const scope = disenoScope;
+    return (
+      <div className="relative flex h-screen flex-col gap-3 overflow-hidden bg-seedling p-3 sm:p-4">
+        <Ondas />
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+          <DisenoEstudio
+            key={`${scope.nivel}:${scope.documentoId}`}
+            proyecto={proyectoEnVista}
+            nivel={scope.nivel}
+            documentoId={scope.documentoId}
+            onVolver={() => setModoDiseno(false)}
+            onGuardar={guardarDiseno}
+          />
+        </div>
+        {aviso && <Aviso texto={aviso} onCerrar={() => setAviso(null)} />}
+      </div>
+    );
+  }
+
+  /* ------------------------------------------------------------------ */
   /* Modo borrador: el chat conduce, la ficha crece al lado.             */
   /* ------------------------------------------------------------------ */
 
@@ -3237,6 +3293,16 @@ export default function Page() {
             >
               <Icono nombre="nube" className="h-3.5 w-3.5" /> Nube
             </button>
+            {disenoScope && (
+              <button
+                type="button"
+                onClick={() => setModoDiseno(true)}
+                title="Diseñar el documento oficial de este documento (Fase 2)"
+                className="inline-flex items-center gap-1.5 rounded-full bg-sow px-3 py-1.5 text-xs font-medium text-papel hover:bg-black"
+              >
+                <Icono nombre="libro" className="h-3.5 w-3.5" /> Diseñar documento
+              </button>
+            )}
             {proyectoEnVista && (
               <>
                 <button

@@ -96,7 +96,9 @@ export function crearEstadoGuardadoV3Vacio(idProyecto: string): EstadoGuardadoV3
     asignaturas: [],
     fuentesCurriculares: [],
     vinculosProgramaMarco: [],
-    alineaciones: []
+    alineaciones: [],
+    brandKits: [],
+    disenos: []
   };
   const inicio = conversacionVacia(scopeInicio(), "inicio", null);
   const estado: EstadoGuardadoV3 = {

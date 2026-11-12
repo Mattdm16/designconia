@@ -7,6 +7,8 @@
  * estructura de ocho secciones.
  */
 
+import type { BrandKit, DisenoDocumento } from "./diseno.ts";
+import { esBrandKit, esDisenoDocumento } from "./diseno.ts";
 import {
   POR_DEFINIR,
   esEstadoGuardado,
@@ -168,6 +170,10 @@ export type ProyectoCurricular = {
   fuentesCurriculares: FuenteCurricular[];
   vinculosProgramaMarco: VinculoProgramaMarco[];
   alineaciones: AlineacionCurricular[];
+  /** Kits de marca de la Fase 2 (diseño de documento). */
+  brandKits: BrandKit[];
+  /** Diseños de documento de la Fase 2, uno por documento curricular. */
+  disenos: DisenoDocumento[];
 };
 
 /* -------------------------------------------------------------------------- */
@@ -534,7 +540,9 @@ function idsDelProyecto(proyecto: ProyectoCurricular): string[] {
     ...proyecto.asignaturas.map((a) => a.id),
     ...proyecto.fuentesCurriculares.map((f) => f.id),
     ...proyecto.vinculosProgramaMarco.map((v) => v.id),
-    ...proyecto.alineaciones.map((a) => a.id)
+    ...proyecto.alineaciones.map((a) => a.id),
+    ...(proyecto.brandKits ?? []).flatMap((k) => [k.id, ...k.activos.map((a) => a.id)]),
+    ...(proyecto.disenos ?? []).flatMap((d) => [d.id, ...d.bloques.map((b) => b.id)])
   ];
 }
 
@@ -555,7 +563,13 @@ function esProyectoCurricular(valor: unknown): valor is ProyectoCurricular {
     !Array.isArray(valor.vinculosProgramaMarco) ||
     !valor.vinculosProgramaMarco.every(esVinculo) ||
     !Array.isArray(valor.alineaciones) ||
-    !valor.alineaciones.every(esAlineacion)
+    !valor.alineaciones.every(esAlineacion) ||
+    // Fase 2 (diseño): los estados heredados sin estos campos siguen valiendo;
+    // el código los trata como listas vacías.
+    (valor.brandKits !== undefined &&
+      (!Array.isArray(valor.brandKits) || !valor.brandKits.every(esBrandKit))) ||
+    (valor.disenos !== undefined &&
+      (!Array.isArray(valor.disenos) || !valor.disenos.every(esDisenoDocumento)))
   ) {
     return false;
   }
@@ -694,7 +708,9 @@ function proyectoVacio(id: string, nombre: string): ProyectoCurricular {
     asignaturas: [],
     fuentesCurriculares: [],
     vinculosProgramaMarco: [],
-    alineaciones: []
+    alineaciones: [],
+    brandKits: [],
+    disenos: []
   };
 }
 

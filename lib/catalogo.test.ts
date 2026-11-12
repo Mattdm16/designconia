@@ -84,7 +84,9 @@ function proyectoBase(): ProyectoCurricular {
     ],
     fuentesCurriculares: [],
     vinculosProgramaMarco: [],
-    alineaciones: []
+    alineaciones: [],
+    brandKits: [],
+    disenos: []
   };
 }
 
