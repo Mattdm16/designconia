@@ -1,8 +1,8 @@
 # DesignConia — contexto y traspaso actualizado
 
-**Actualizado:** 1 de noviembre de 2026. Este documento refleja el estado comprobado de la rama de desarrollo. Si contradice una implementación posterior, manda el código y actualiza este handoff.
+**Actualizado:** 18 de noviembre de 2026. Este documento refleja el estado comprobado de la rama de desarrollo. Si contradice una implementación posterior, manda el código y actualiza este handoff.
 
-> **Resumen ejecutivo:** ya existe una base local V3 con los tres niveles de datos, migración segura, navegación conversacional por intención (sin selectores visibles), varios documentos por nivel, trazabilidad de extremo a extremo, citas con localizador, PDFs como fuentes (tope 3 años) y exportaciones incluido el expediente conjunto. Lo único pendiente es la revisión visual en navegador y probar flujos completos con la IA real.
+> **Resumen ejecutivo:** la base V3 tiene los tres niveles con trazabilidad de extremo a extremo, chat-first sin selectores, citas, PDFs como fuentes (tope 3 años), carga horaria verificable y exportaciones incluido el expediente. Encima está el **piloto unipersonal**: clave IA propia por sesión, respaldo/restauración JSON, catálogo con duplicado y finalizado, nube Supabase opcional (una fila por docente) y la **Fase 2** de documento oficial con estudio de diseño (4 plantillas Carta/A4, kit de marca con imágenes, bloques arrastrables por zonas y PDF fiel). Todo está **subido a GitHub**. Pendiente: inspección visual en navegador (incluido Meso profundo y el estudio), desplegar a Vercel con acceso protegido y, si hace falta multi-navegador, activar el proyecto Supabase.
 
 ## 1. Producto y requisitos acordados
 
@@ -23,7 +23,8 @@
 - La IA puede proponer principios/orientaciones como `sugerencia_IA`, pero no presentarlos como política oficial. El docente confirma o edita.
 - Las fuentes curriculares son distintas de la bibliografía del Micro. No se inventan fuentes, emisores, vigencias ni datos oficiales.
 - Las fuentes pueden registrarse a mano o integrarse desde un PDF adjunto (texto extraído localmente, sin OCR); solo se integran PDFs de hasta 3 años, con año por metadatos o declarado por el docente.
-- Sin autenticación, roles, persistencia de servidor, colaboración ni sincronización entre dispositivos.
+- Sin roles, colaboración multiusuario ni multi-institución. La nube opcional (Supabase) autentica a **una cuenta por docente** con enlace mágico y guarda una fila con todo su proyecto; no hay login con contraseña.
+- **Fase 2 (documento oficial), confirmado por el usuario:** dos fases separadas — recopilar (el currículo sigue siendo la fuente de verdad) y diseñar. Carta **y** A4; **solo exportación PDF** (sin Word). Arrastre con **cuadrícula magnética por zonas** y reflujo automático: nada queda en coordenadas libres ni se superpone. La redacción en el diseñador sincroniza con la ficha por defecto; el «solo en este documento» es un override explícito y marcado. Kit institucional compartido con ajustes por documento; 4 plantillas neutrales iniciales (no hay formato oficial de referencia). El expediente conjunto queda fuera del diseñador en esta primera entrega.
 
 ## 2. Requisitos: estado real y faltantes
 
@@ -39,8 +40,14 @@
 | Adjuntar PDFs como fuentes (máx. 3 años) | **Implementado**: solo PDF con texto (sin OCR), validación de firma/tamaño/páginas, extracción local en navegador, año por metadatos o declarado, registro como fuente curricular con texto recortado. | Límite 10 MB por archivo, 3 por envío, 150 páginas; tope de texto para contexto y almacenamiento. Sin inspección visual en navegador. |
 | Trazabilidad pedagógica completa | **Implementada**: RA con ids estables y actividades con `mideIds` en el Micro; bordes principio→resultado→RA (RA→actividad vive en `mideIds`); matrices editables Macro→programa y programa→RA en la ficha Meso; insignias «Responde a» en el contenido Micro; poda de huérfanas al editar. | Falta matriz RA→actividad como alineación editable (hoy vive en `mideIds` de cada actividad). `mide` se conserva como nota libre heredada. Sin inspección visual en navegador. |
 | Citas de fuentes curriculares | **Implementada**: editor compartido de citas (fuente + localizador/página/sección) en cada afirmación Macro/Meso, con selectores de origen y estado; el cambio a documento/contrastada exige cita válida y la última cita respaldada no se puede quitar. | Sin inspección visual en navegador. |
-| Exportación | **Implementada para Micro, Macro y Meso**: PDF de texto plano y copia Markdown en los tres niveles; el programa incluye trazabilidad (principios y RA vinculados) y asignaturas. | Resuelta con el expediente conjunto (ver abajo). |
-| Revisión visual | El detector mecánico marcó 0 hallazgos en los objetivos examinados. | **No se hizo inspección visual en navegador ni capturas** de la interfaz. |
+| Exportación | **Implementada en dos vías**: (1) PDF de texto plano y Markdown por nivel + expediente conjunto; (2) **Fase 2**: estudio de diseño → PDF vectorial fiel con plantillas Carta/A4, marca, imágenes y numeración. | Solo PDF en el diseñador (sin Word). El expediente conjunto no pasa por el diseñador. |
+| Carga horaria verificable | **Implementada**: comparación por minutos exactos con tolerancia de 30 min por tipo; aviso con delta («faltan 50 h I»); confirmación verde al cuadrar y estado neutral sin horas declaradas; trabajos independientes con esfuerzo propio (hasta 6000 min c/u) y `reemplazoSecuencia` para reequilibrios globales; la IA recibe minutos exactos y no declara TERMINADO con carga descuadrada. | Sin inspección visual en navegador. |
+| Reutilización de currículos | **Implementado**: catálogo con búsqueda por código/nombre (insensible a tildes), abrir, **duplicar como base** (ids y trazabilidad propios, `origenCopia` registrado, sin vínculos heredados) y marca **Finalizado** (señal del docente, no aprobación oficial). | La búsqueda solo cubre documentos del proyecto local/nube actual. Sin inspección visual en navegador. |
+| Clave IA propia (BYOK) | **Implementada**: panel «Clave IA» con guardar/probar/olvidar; vive solo en sessionStorage, viaja por cabecera `x-clave-ia`, nunca en copias, exportaciones ni logs; el servidor la usa de forma transitoria y distingue su origen en los errores. | Sin «recordar entre sesiones» (decisión de seguridad deliberada). Sin inspección visual en navegador. |
+| Respaldo del proyecto | **Implementado**: botones Respaldo/Restaurar; JSON validado con el mismo guard V3 (archivo corrupto o ajeno se rechaza sin tocar nada); restaurar pide confirmación. | Sin inspección visual en navegador. |
+| Nube opcional (Supabase) | **Implementado el código completo**: sesión por enlace mágico, subir/bajar proyecto (una fila por docente, RLS por propietario), migración SQL y guía en [docs/NUBE.md](docs/NUBE.md). | **Sin proyecto Supabase creado todavía**: requiere cuenta del usuario, ejecutar la migración y 2 variables de entorno. Sin env, todo sigue local. |
+| Fase 2: documento oficial | **Implementada**: botón «Diseñar documento» abre el estudio (estructura arrastrable por zonas con flechas accesibles, vista previa paginada real, propiedades de bloque/documento, kit de marca con PNG/JPG/WebP/SVG sanitizado hasta 3 MB) y exporta PDF vectorial fiel (fuentes, tamaños, colores, alineación, encabezado/pie, JPEG incrustado, títulos sin huérfanos). Los bloques apuntan al currículo por `ref`; la redacción local es override explícito. | **Nunca abierto en navegador**: probar plantillas, arrastre, logo y comparar PDF vs vista previa. 4 plantillas base fijas; sin plantillas propias guardadas. |
+| Revisión visual | El detector mecánico marcó 0 hallazgos en los objetivos examinados. | **No se hizo inspección visual en navegador ni capturas** de la interfaz (Meso solo se probó rellenando campos). |
 
 ### Próximo orden recomendado
 
@@ -50,7 +57,11 @@
 4. ~~Citas curriculares y exportación Macro/Meso~~ Hecho: citas editables por afirmación con localizador, paridad de normalizadores y PDF/Markdown en los tres niveles.
 5. ~~Expediente curricular conjunto~~ Hecho: `exportarExpediente.ts` reúne marcos, programas, asignaturas y alineaciones en texto plano/Markdown/PDF, con botones Copiar/Expediente en el encabezado.
 6. ~~PDFs como fuentes con tope de 3 años~~ Hecho: `lib/pdf.ts` (validación, año, extractos) + `lib/inicio.ts` (enrutador), extracción local con worker en `/public`, citas con página y evidencia en los tres niveles.
-7. Probar flujos completos y revisar visualmente escritorio/móvil (detector mecánico limpio; sin inspección en navegador).
+7. ~~Piloto unipersonal~~ Hecho: BYOK por sesión, respaldo/restauración JSON, catálogo con duplicado/finalizado y nube Supabase opcional (código listo).
+8. ~~Fase 2: estudio de documento oficial~~ Hecho: `lib/diseno.ts` + `components/Diseno.tsx` + `lib/exportarDisenoPdf.ts`; solo PDF, sin Word.
+9. **Probar en navegador**: Meso en profundidad (vinculación Macro/Micro, trazabilidad, persistencia), estudio de diseño completo con exportación, clave IA, respaldo, catálogo y modo oscuro en escritorio/móvil.
+10. **Desplegar a Vercel** (plan Hobby) con `DEEPSEEK_API_KEY` como secreto y **protección de acceso** para que la URL no exponga la clave del proveedor.
+11. **Solo si el docente usa varios navegadores**: crear el proyecto Supabase gratuito, ejecutar `supabase/migraciones/001_proyectos.sql` y añadir las 2 variables de [docs/NUBE.md](docs/NUBE.md).
 
 ## 3. Datos y contratos
 
@@ -60,13 +71,19 @@ El modelo está en [proyecto.ts](lib/proyecto.ts). La forma general es:
 
 ```text
 ProyectoCurricular
-├── marcos: MarcoEducativoInstitucional[]
-├── programas: ProgramaAcademico[]
-├── asignaturas: Asignatura[]
+├── marcos: MarcoEducativoInstitucional[]      (finalizado, origenCopia)
+├── programas: ProgramaAcademico[]             (finalizado, origenCopia)
+├── asignaturas: Asignatura[]                   (finalizado, origenCopia)
 ├── fuentesCurriculares: FuenteCurricular[]
 ├── vinculosProgramaMarco: VinculoProgramaMarco[]
-└── alineaciones: AlineacionCurricular[]
+├── alineaciones: AlineacionCurricular[]
+├── brandKits: BrandKit[]                       ← Fase 2: identidad institucional
+└── disenos: DisenoDocumento[]                  ← Fase 2: diseño por documento
 ```
+
+- `brandKits` y `disenos` son opcionales para el guard: los estados V3 heredados sin ellos siguen valiendo y el código los trata como listas vacías.
+- `DisenoDocumento` (ver [diseno.ts](lib/diseno.ts)): nivel + documentoId + plantillaId + `pagina` (Carta/A4, orientación, márgenes mm) + `bloques` (cada uno con `refContenido` al currículo, texto local opcional, estilo y zona). El contenido nunca se duplica: se resuelve por referencia.
+- `BrandKit`: colores, tipografías y `activos` (logo/membrete/sello/marca de agua) como dataURL validados (PNG/JPG/WebP/SVG sanitizado; 1 MB por archivo, 3 MB por kit).
 
 - `MarcoEducativoInstitucional`: id, nombre, emisor opcional, versión/vigencia/estado, principios y otras afirmaciones.
 - `ProgramaAcademico`: id, nombre/código, perfiles y resultados del programa.
@@ -85,7 +102,7 @@ El Micro canónico sigue en [schema.ts](lib/schema.ts). Conserva las ocho seccio
 - [prompt.ts](lib/prompt.ts): contrato y prompt Micro existentes.
 - [promptMacro.ts](lib/promptMacro.ts): prompt Macro. La respuesta usa JSON con `mensaje` primero, `generar` y `borrador` opcional; las fuentes no aportadas quedan fuera.
 - [promptMeso.ts](lib/promptMeso.ts): prompt Meso. Recibe solo marcos disponibles por id para no inventar ni adjuntar un marco inexistente.
-- [route.ts](app/api/chat/route.ts): `modulo: "inicio"` enruta por intención (con documentos existentes); `"macro"` usa el prompt Macro y solo recibe el marco activo; `"meso"` recibe el programa y marcos disponibles; sin módulo explícito, permanece el flujo Micro. Todos aceptan `fuentesPdf` (título, páginas y extractos) como evidencia citada por página.
+- [route.ts](app/api/chat/route.ts): `modulo: "inicio"` enruta por intención (con documentos existentes); `"macro"` usa el prompt Macro y recibe el marco activo **más las fuentes registradas** (para no re-pedir lo que ya está); `"meso"` recibe el programa y marcos disponibles; sin módulo explícito, permanece el flujo Micro. Todos aceptan `fuentesPdf` (título, páginas y extractos) como evidencia citada por página. La clave de DeepSeek se resuelve por llamada: cabecera `x-clave-ia` del docente primero, `DEEPSEEK_API_KEY` del servidor después; nunca se guarda ni se registra.
 - El proxy SSE y extracción incremental de `mensaje` siguen comunes a los niveles.
 
 ### Persistencia y puentes de estado
@@ -99,11 +116,17 @@ El Micro canónico sigue en [schema.ts](lib/schema.ts). Conserva las ocho seccio
 
 ```text
 app/
-  page.tsx                       chat conversacional, enrutador, adjuntos PDF y guardado V3
-  api/chat/route.ts              proxy SSE y ramas inicio/Micro/Macro/Meso + evidencia PDF
-  api/salud/route.ts             valida conexión y clave
+  page.tsx                       chat-first, enrutador, adjuntos PDF, guardado V3,
+                                 paneles Catálogo/Clave IA/Nube, respaldo JSON y modo diseño
+  api/chat/route.ts              proxy SSE, ramas inicio/Micro/Macro/Meso, evidencia PDF,
+                                 estado de avance inyectado y clave BYOK por llamada
+  api/salud/route.ts             GET valida la clave del servidor; POST prueba la del docente
 components/
   Chat.tsx                       hilo y compositor con botón «+», menú y chips de PDF
+  Catalogo.tsx                   catálogo: buscar/abrir/duplicar/finalizar
+  ClaveIA.tsx                    panel BYOK (guardar/probar/olvidar)
+  Nube.tsx                       panel Supabase (enlace mágico, subir/bajar)
+  Diseno.tsx                     Fase 2: estudio (estructura, vista previa, propiedades, marca)
   ficha/Microcurriculo.tsx       editor de la asignatura existente
   ficha/Marco.tsx                editor del marco institucional
   ficha/Meso.tsx                 editor del programa y vínculos
@@ -111,29 +134,28 @@ components/
   ficha/Campos.tsx               controles editables reutilizables
   ficha/Citas.tsx                editor compartido de citas y afirmaciones Macro/Meso
 lib/
+  schema.ts                      contrato Micro + carga horaria/trabajos independientes (106 pruebas)
+  proyecto.ts                    agregado V3 (con brandKits/disenos), guardas y migración
+  diseno.ts                      Fase 2: plantillas, kit de marca, bloques, refs (13 pruebas)
+  exportarDisenoPdf.ts           PDF vectorial fiel al diseño (10 pruebas)
+  catalogo.ts                    reutilización: buscar/duplicar/finalizar (5 pruebas)
+  clave.ts                       BYOK: sesión + resolución de clave (3 pruebas)
+  respaldo.ts                    respaldo JSON validado (4 pruebas)
+  nube.ts                        Supabase: fila por docente, subir/bajar (3 pruebas)
   pdf.ts                         validación, año/antigüedad, extractos y worker local (8 pruebas)
   inicio.ts / promptInicio.ts    enrutador por intención + heurística de cambio (5 pruebas)
-  exportarMacroTexto.ts          marco a texto plano (para PDF)
-  exportarMesoTexto.ts           programa a texto plano con trazabilidad (para PDF)
-  exportarExpediente.ts          expediente conjunto texto/Markdown de todo el proyecto
-  exportarExpediente.test.ts     3 pruebas del expediente
-  flujos.test.ts                 2 pruebas de flujos completos Macro→Meso→Micro→expediente
-  exportarCurricular.test.ts     5 pruebas de exportación Macro/Meso
-  schema.ts                      contrato Micro, normalización y 95 pruebas
-  proyecto.ts                    agregado V3, guardas y migración Micro
-  alineaciones.ts                definir/quitar/matriz de alineaciones + 11 pruebas (en trazabilidad.test.ts)
-  trazabilidad.test.ts           11 pruebas de RA estables, bordes y poda
+  macro.ts / meso.ts              lógica pura por nivel (31/24 pruebas) + fuentes por pedido
+  exportar*.ts                   texto plano y Markdown por nivel + expediente conjunto
+  estadoMicro/Macro/Meso.ts      puentes puros vista ↔ agregado V3
   persistencia.ts                migración/guardado local transaccional
-  estadoMicro.ts                 puente vista Micro ↔ V3 (migra al leer, poda al editar)
-  macro.ts / promptMacro.ts       lógica pura y prompt Macro
-  estadoMacro.ts                 puente vista Marco ↔ V3 (poda al editar)
-  meso.ts / promptMeso.ts         lógica pura y prompt Meso
-  estadoMeso.ts                  puente vista Programa ↔ V3 y vínculos Micro (poda al editar)
+  alineaciones.ts                definir/quitar/matriz de alineaciones
+supabase/migraciones/001_proyectos.sql   tabla proyectos + RLS por propietario
+docs/NUBE.md                     guía para activar la nube con cuenta propia
 ```
 
 ## 5. Verificación comprobada
 
-Último checkpoint: commit `1fc1a89` (context al día con chat-first, PDF y tope 3 años) en la rama local `feature/curricular-project-foundation`. Los commits de desarrollo **no se han subido a GitHub**.
+Último checkpoint: commit `53312f5` (Fase 2: estudio de documento oficial) en la rama `feature/curricular-project-foundation`, **publicada en GitHub** (`Mattdm16/designconia`); el push llegó hasta ese commit y el árbol quedó limpio.
 
 ```text
 npm test              → 324 pruebas (106 + 14 + 38 + 11 + 31 + 11 + 24 + 17 + 11 + 5 + 3 + 2 + 8 + 5 + 5 + 3 + 4 + 3 + 13 + 10)
@@ -154,14 +176,19 @@ La adición Macro/Meso **hereda** el mundo visual confirmado en [DESIGN.md](DESI
 - Estado inicial: solo el chat con saludo neutro; la IA decide el nivel conversando y muestra una etiqueta pasiva de contexto. No aparece ficha hasta que hay contenido.
 - Al existir un documento: chat a la izquierda y ficha a la derecha, sin selectores visibles; el botón «+» del compositor concentra adjuntar PDF, nuevo documento y la lista de documentos, sin tercer riel.
 - Macro/Meso/Micro permiten varios documentos por proyecto: el menú «+» cambia el documento activo y «Nuevo documento» vuelve al inicio por chat, preservando lo anterior y sus hilos. Los PDF adjuntos viajan como evidencia citada por página; solo se integran PDFs de hasta 3 años.
-- **La interfaz no se ha inspeccionado visualmente en navegador.** Revisar al menos 375/768/1024/1280/1920 px, teclado/foco, estados vacíos, módulo activo, guardado y scopes no compatibles.
+- **Modo oscuro** con toggle Oscuro/Claro en ambos modos: `darkMode: "class"` con tokens estructurales por variables CSS (el mismo marcado se adapta sin variantes `dark:`), preferencia en `designconia.tema` y respeto inicial a `prefers-color-scheme`; anti-parpadeo en el layout. El display usa **Georgia/Times** (serif formal; antes Palatino).
+- El encabezado concentra: tema, Catálogo, Clave IA, Nube, Respaldo/Restaurar JSON, exportaciones por nivel, expediente y plegar chat. Con un documento abierto aparece **«Diseñar documento»** (Fase 2).
+- **La interfaz no se ha inspeccionado visualmente en navegador**, incluidos el estudio de diseño y los paneles nuevos. Revisar al menos 375/768/1024/1280/1920 px, teclado/foco, arrastre alternativo con flechas, estados vacíos, guardado y scopes no compatibles.
 
 ## 7. Alcance que sigue fuera
 
+- **Despliegue a Vercel**: código y build listos; falta crear el proyecto en el plan Hobby, poner `DEEPSEEK_API_KEY` como secreto y activar protección de acceso. **Proyecto Supabase sin crear** (opcional; ver [docs/NUBE.md](docs/NUBE.md)).
 - OCR de PDFs escaneados (solo se integran PDFs con texto seleccionable).
-- Login, roles, trabajo colaborativo, persistencia de servidor o multi-institución.
+- Roles, colaboración multiusuario, multi-institución y login con contraseña (la nube actual es una cuenta por docente con enlace mágico).
 - Cursos compartidos entre varios programas (relación N:M asignatura–programa).
-- Exportación formal/estilizada o Word.
+- Exportación Word (.docx); el expediente conjunto dentro del diseñador de la Fase 2.
+- Plantillas propias guardadas/reutilizables en el estudio (hoy hay 4 base fijas).
+- Matriz RA→actividad como alineación editable (hoy vive en `mideIds` de cada actividad).
 
 ## 8. Cómo trabajar sin reintroducir fallos conocidos
 
@@ -178,6 +205,7 @@ npm run build
 - En esta máquina el entorno aislado puede bloquear `spawn` de workers de Next con `EPERM`; si ocurre, la compilación debe repetirse fuera del aislamiento (sin otro servidor activo).
 - `.env.local` no se debe versionar; usa [.env.example](.env.example) como plantilla.
 - No añadas secretos, fuentes institucionales inventadas ni nombres/códigos de programa inferidos.
+- Recuerda al docente que mensajes y extractos de PDF se procesan con su clave vía DeepSeek: sin datos personales de estudiantes durante las pruebas.
 
 ## 9. Historial resumido
 
