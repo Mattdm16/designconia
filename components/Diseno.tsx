@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 
 import { BotonMini } from "@/components/ficha/Campos";
 import { Icono } from "@/components/Icono";
+import { aplicarPropuesta, type CambioDiseno } from "@/lib/propuestaDiseno";
 import {
   agregarBloque,
   alternarVisibilidadBloque,
@@ -29,6 +30,8 @@ import {
   type DisenoDocumento,
   type FuenteDiseno,
   type NivelDiseno,
+  type OrientacionPagina,
+  type TamanoPagina,
   type TipoActivo,
   type TipoBloque,
   type ZonaBloque
@@ -114,7 +117,8 @@ export function DisenoEstudio({
   nivel,
   documentoId,
   onVolver,
-  onGuardar
+  onGuardar,
+  cabecerasIA
 }: {
   proyecto: ProyectoCurricular;
   nivel: NivelDiseno;
@@ -122,6 +126,8 @@ export function DisenoEstudio({
   onVolver: () => void;
   /** Persiste diseño + kit en el proyecto (la página guarda y refresca). */
   onGuardar: (diseno: DisenoDocumento, kit: BrandKit) => void;
+  /** Cabeceras para la IA (la clave propia viaja solo si existe). */
+  cabecerasIA?: () => Record<string, string>;
 }) {
   const existente =
     proyecto.disenos?.find((d) => d.nivel === nivel && d.documentoId === documentoId) ?? null;
@@ -136,6 +142,18 @@ export function DisenoEstudio({
   const [aviso, setAviso] = useState<string | null>(null);
   const inputActivoRef = useRef<HTMLInputElement | null>(null);
   const [tipoActivoNuevo, setTipoActivoNuevo] = useState<TipoActivo>("logo");
+  /* Entrada al estudio: con diseño guardado se entra directo; si es nuevo,
+     el docente elige entre proponer con IA o editar a mano. */
+  const [entrada, setEntrada] = useState<"elegir" | "estudio">(() => (existente ? "estudio" : "elegir"));
+  /* Propuesta con IA: instrucción, generación y revisión antes de confirmar. */
+  const [panelIA, setPanelIA] = useState(false);
+  const [plantillaElegida, setPlantillaElegida] = useState(diseno.plantillaId);
+  const [instruccion, setInstruccion] = useState("");
+  const [generando, setGenerando] = useState(false);
+  /** Diseño previo a la propuesta en revisión: Descartar lo restaura. */
+  const [anterior, setAnterior] = useState<{ diseno: DisenoDocumento; kit: BrandKit } | null>(null);
+  const [mensajePropuesta, setMensajePropuesta] = useState<string | null>(null);
+  const [resumenPropuesta, setResumenPropuesta] = useState<string[] | null>(null);
 
   const datos = useMemo(
     () => datosParaDiseno(proyecto, nivel, documentoId),
@@ -182,6 +200,69 @@ export function DisenoEstudio({
       plantillaId: nueva.id,
       pagina: { ...nueva.pagina, margenesMm: { ...nueva.pagina.margenesMm } }
     });
+  }
+
+  /* -------- propuesta con IA: genera, revisa, confirma o descarta -------- */
+  async function generarPropuestaCon(baseDiseno: DisenoDocumento, baseKit: BrandKit) {
+    const texto = instruccion.trim();
+    if (!texto || generando) return;
+    setGenerando(true);
+    setAviso(null);
+    try {
+      const cabeceras = { "Content-Type": "application/json", ...(cabecerasIA?.() ?? {}) };
+      const res = await fetch("/api/diseno", {
+        method: "POST",
+        headers: cabeceras,
+        body: JSON.stringify({ instruccion: texto, diseno: baseDiseno, kit: baseKit })
+      });
+      if (!res.ok) {
+        let motivo = `El asistente respondió ${res.status}.`;
+        try {
+          const j = (await res.json()) as { error?: { mensaje?: string } };
+          if (j?.error?.mensaje) motivo = j.error.mensaje;
+        } catch {
+          /* respuesta sin JSON: nos quedamos con el estado */
+        }
+        throw new Error(motivo);
+      }
+      const j = (await res.json()) as { mensaje?: string; cambios?: unknown };
+      const cambios = Array.isArray(j.cambios) ? j.cambios : [];
+      const r = aplicarPropuesta(baseDiseno, baseKit, cambios as CambioDiseno[]);
+      if (r.aplicados.length === 0) {
+        setAviso(r.rechazados.join(" ") || "La propuesta no trajo cambios aplicables. Reformula la instrucción.");
+        return;
+      }
+      if (!anterior) setAnterior({ diseno: baseDiseno, kit: baseKit });
+      setDiseno(r.diseno);
+      setKit(r.kit);
+      setMensajePropuesta(typeof j.mensaje === "string" && j.mensaje.trim() ? j.mensaje.trim() : null);
+      setResumenPropuesta([...r.aplicados, ...r.rechazados.map((x) => `No aplicado: ${x}`)]);
+    } catch (error) {
+      setAviso(error instanceof Error ? error.message : "No se pudo generar la propuesta.");
+    } finally {
+      setGenerando(false);
+    }
+  }
+
+  function generarPropuesta() {
+    // Regenerar parte del diseño previo a la propuesta en revisión.
+    void generarPropuestaCon(anterior?.diseno ?? diseno, anterior?.kit ?? kit);
+  }
+
+  function confirmarPropuesta() {
+    setAnterior(null);
+    setMensajePropuesta(null);
+    setResumenPropuesta(null);
+  }
+
+  function descartarPropuesta() {
+    if (anterior) {
+      setDiseno(anterior.diseno);
+      setKit(anterior.kit);
+    }
+    setAnterior(null);
+    setMensajePropuesta(null);
+    setResumenPropuesta(null);
   }
 
   async function agregarActivo(archivo: File) {
@@ -266,6 +347,17 @@ export function DisenoEstudio({
         <span className="min-w-0 flex-1 truncate font-display text-[14px] font-semibold tracking-tight">
           Diseñar documento — {nombreDoc}
         </span>
+        <button
+          type="button"
+          onClick={() => setPanelIA((v) => !v)}
+          aria-expanded={panelIA}
+          title="Pedir cambios de diseño a la IA con una instrucción"
+          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium hover:border-black/25 ${
+            panelIA ? "border-pebble/60 bg-white" : "border-black/10 bg-white"
+          }`}
+        >
+          <Icono nombre="chispa" className="h-3.5 w-3.5" /> Proponer con IA
+        </button>
         <label className="inline-flex items-center gap-1.5 text-[11px] text-black/60">
           Plantilla
           <select
@@ -311,6 +403,51 @@ export function DisenoEstudio({
         </p>
       )}
 
+      {panelIA && (
+        <PanelDisenoIA
+          plantillaElegida={plantillaElegida}
+          onPlantilla={setPlantillaElegida}
+          instruccion={instruccion}
+          onInstruccion={setInstruccion}
+          generando={generando}
+          onGenerar={generarPropuesta}
+          mensaje={mensajePropuesta}
+          resumen={resumenPropuesta}
+          enRevision={anterior !== null}
+          onConfirmar={confirmarPropuesta}
+          onDescartar={descartarPropuesta}
+        />
+      )}
+
+      {entrada === "elegir" ? (
+        <EntradaEstudio
+          nombreDoc={nombreDoc}
+          plantillaElegida={plantillaElegida}
+          onPlantilla={setPlantillaElegida}
+          instruccion={instruccion}
+          onInstruccion={setInstruccion}
+          generando={generando}
+          onGenerar={() => {
+            const nueva = PLANTILLAS_BASE.find((p) => p.id === plantillaElegida);
+            let base = diseno;
+            if (nueva && nueva.id !== base.plantillaId) {
+              base = {
+                ...base,
+                plantillaId: nueva.id,
+                pagina: { ...nueva.pagina, margenesMm: { ...nueva.pagina.margenesMm } },
+                actualizadoEn: new Date().toISOString()
+              };
+              setDiseno(base);
+              setPlantillaElegida(nueva.id);
+            }
+            setEntrada("estudio");
+            setPanelIA(true);
+            void generarPropuestaCon(base, kit);
+          }}
+          onManual={() => setEntrada("estudio")}
+          onVolver={onVolver}
+        />
+      ) : (
       <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[280px_1fr_300px]">
         {/* Estructura */}
         <section aria-label="Estructura del documento" className="min-h-0 overflow-y-auto rounded-[18px] border border-white/60 bg-crema/95 p-3 shadow-tarjeta">
@@ -415,43 +552,62 @@ export function DisenoEstudio({
 
         {/* Propiedades */}
         <div className="min-h-0 overflow-y-auto">
-          <PropiedadesBloque
-            bloque={bloqueSel}
+          <AjustesRapidos
+            diseno={diseno}
             kit={kit}
-            onChange={(parche) => {
-              if (!bloqueSel) return;
-              // Cambiar de zona reubica al final de ella para no partir contenido.
-              if (parche.zona && parche.zona !== bloqueSel.zona) {
+            onDiseno={actualizar}
+            onKit={(parche) => setKit((k) => ({ ...k, ...parche }))}
+          />
+          <div className="mt-3">
+            <PropiedadesBloque
+              bloque={bloqueSel}
+              kit={kit}
+              onChange={(parche) => {
+                if (!bloqueSel) return;
+                // Cambiar de zona reubica al final de ella para no partir contenido.
+                if (parche.zona && parche.zona !== bloqueSel.zona) {
+                  actualizarBloques(
+                    moverBloqueAZona(diseno.bloques, bloqueSel.id, parche.zona) ?? diseno.bloques
+                  );
+                  return;
+                }
                 actualizarBloques(
-                  moverBloqueAZona(diseno.bloques, bloqueSel.id, parche.zona) ?? diseno.bloques
+                  diseno.bloques.map((b) => (b.id === bloqueSel.id ? { ...b, ...parche } : b))
                 );
-                return;
-              }
-              actualizarBloques(
-                diseno.bloques.map((b) => (b.id === bloqueSel.id ? { ...b, ...parche } : b))
-              );
-            }}
-            onEstilo={(parche) => {
-              if (!bloqueSel) return;
-              actualizarBloques(aplicarEstiloBloque(diseno.bloques, bloqueSel.id, parche) ?? diseno.bloques);
-            }}
-            onQuitar={() => {
-              if (!bloqueSel) return;
-              actualizarBloques(quitarBloque(diseno.bloques, bloqueSel.id) ?? diseno.bloques);
-              setSeleccionado(null);
-            }}
-          />
-          <PropiedadesDocumento diseno={diseno} onChange={actualizar} />
-          <MarcaKit
-            kit={kit}
-            onChange={setKit}
-            inputRef={inputActivoRef}
-            tipoNuevo={tipoActivoNuevo}
-            onTipoNuevo={setTipoActivoNuevo}
-            onArchivo={agregarActivo}
-          />
+              }}
+              onEstilo={(parche) => {
+                if (!bloqueSel) return;
+                actualizarBloques(aplicarEstiloBloque(diseno.bloques, bloqueSel.id, parche) ?? diseno.bloques);
+              }}
+              onQuitar={() => {
+                if (!bloqueSel) return;
+                actualizarBloques(quitarBloque(diseno.bloques, bloqueSel.id) ?? diseno.bloques);
+                setSeleccionado(null);
+              }}
+            />
+          </div>
+          <details className="mt-3 rounded-[18px] border border-white/60 bg-crema/95 p-3 shadow-tarjeta">
+            <summary className="cursor-pointer font-display text-[13px] font-semibold tracking-tight">
+              Avanzado
+              <span className="ml-2 font-sans text-[11px] font-normal text-black/50">
+                márgenes, encabezado, pie e identidad completa
+              </span>
+            </summary>
+            <div className="mt-1">
+              <PropiedadesDocumento diseno={diseno} onChange={actualizar} />
+              <MarcaKit
+                kit={kit}
+                onChange={setKit}
+                inputRef={inputActivoRef}
+                tipoNuevo={tipoActivoNuevo}
+                onTipoNuevo={setTipoActivoNuevo}
+                onArchivo={agregarActivo}
+              />
+            </div>
+          </details>
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -1077,6 +1233,347 @@ function MarcaKit({
       <p className="mt-1 text-[10.5px] leading-relaxed text-black/45">
         PNG, JPG, WebP o SVG hasta 1 MB. Los SVG con contenido activo se rechazan.
       </p>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Entrada al estudio: proponer con IA o editar a mano                 */
+/* ------------------------------------------------------------------ */
+
+function EntradaEstudio({
+  nombreDoc,
+  plantillaElegida,
+  onPlantilla,
+  instruccion,
+  onInstruccion,
+  generando,
+  onGenerar,
+  onManual,
+  onVolver
+}: {
+  nombreDoc: string;
+  plantillaElegida: string;
+  onPlantilla: (id: string) => void;
+  instruccion: string;
+  onInstruccion: (t: string) => void;
+  generando: boolean;
+  onGenerar: () => void;
+  onManual: () => void;
+  onVolver: () => void;
+}) {
+  return (
+    <div className="mx-auto grid w-full max-w-[880px] flex-1 content-center gap-3 md:grid-cols-2">
+      <section
+        aria-label="Proponer diseño con IA"
+        className="rounded-[18px] border border-white/60 bg-crema/95 p-4 shadow-tarjeta"
+      >
+        <h2 className="font-display text-[15px] font-semibold tracking-tight">Proponer con IA</h2>
+        <p className="mt-1 text-[12px] leading-relaxed text-black/60">
+          Elige una base y descríbelo en una frase. La IA propone cambios de apariencia y
+          organización; nada se aplica sin tu visto bueno.
+        </p>
+        <label className="mt-2 block text-[11px] font-medium text-black/60">
+          Plantilla base
+          <select
+            value={plantillaElegida}
+            onChange={(e) => onPlantilla(e.target.value)}
+            className="mt-0.5 w-full rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[12px] focus:outline-none"
+          >
+            {PLANTILLAS_BASE.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nombre} — {p.descripcion}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="mt-2 block text-[11px] font-medium text-black/60">
+          Cómo quieres el documento
+          <textarea
+            value={instruccion}
+            onChange={(e) => onInstruccion(e.target.value)}
+            rows={3}
+            placeholder="Formal y sobrio, títulos en verde, portada sencilla…"
+            className="mt-0.5 w-full rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[12px] focus:outline-none"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={onGenerar}
+          disabled={!instruccion.trim() || generando}
+          className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-terracotta px-3 py-1.5 text-xs font-medium text-white hover:bg-redwood disabled:opacity-40"
+        >
+          <Icono nombre="chispa" className="h-3.5 w-3.5" />
+          {generando ? "Generando…" : "Generar propuesta"}
+        </button>
+      </section>
+
+      <section
+        aria-label="Editar a mano"
+        className="rounded-[18px] border border-white/60 bg-crema/95 p-4 shadow-tarjeta"
+      >
+        <h2 className="font-display text-[15px] font-semibold tracking-tight">Editar a mano</h2>
+        <p className="mt-1 text-[12px] leading-relaxed text-black/60">
+          Ajusta lo esencial con controles sencillos: página, estilo, marca y orden. El
+          documento base de «{nombreDoc}» ya trae sus bloques listos.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={onManual}
+            className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
+          >
+            Abrir el editor
+          </button>
+          <button
+            type="button"
+            onClick={onVolver}
+            className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
+          >
+            <Icono nombre="flecha" className="h-3.5 w-3.5 rotate-180" /> Volver a la ficha
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Panel de propuesta con IA (formulario + revisión)                   */
+/* ------------------------------------------------------------------ */
+
+function PanelDisenoIA({
+  plantillaElegida,
+  onPlantilla,
+  instruccion,
+  onInstruccion,
+  generando,
+  onGenerar,
+  mensaje,
+  resumen,
+  enRevision,
+  onConfirmar,
+  onDescartar
+}: {
+  plantillaElegida: string;
+  onPlantilla: (id: string) => void;
+  instruccion: string;
+  onInstruccion: (t: string) => void;
+  generando: boolean;
+  onGenerar: () => void;
+  mensaje: string | null;
+  resumen: string[] | null;
+  enRevision: boolean;
+  onConfirmar: () => void;
+  onDescartar: () => void;
+}) {
+  return (
+    <section
+      aria-label="Propuesta de diseño con IA"
+      className="shrink-0 rounded-[18px] border border-pebble/40 bg-crema/95 p-3 shadow-tarjeta"
+    >
+      {!enRevision ? (
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="min-w-44 flex-1 basis-56 text-[11px] font-medium text-black/60">
+            Describe el ajuste
+            <textarea
+              value={instruccion}
+              onChange={(e) => onInstruccion(e.target.value)}
+              rows={2}
+              placeholder="Títulos en verde, portada con el logo arriba, A4 horizontal…"
+              className="mt-0.5 w-full rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[12px] focus:outline-none"
+            />
+          </label>
+          <label className="text-[11px] font-medium text-black/60">
+            Base
+            <select
+              value={plantillaElegida}
+              onChange={(e) => onPlantilla(e.target.value)}
+              aria-label="Plantilla base de la propuesta"
+              className="mt-0.5 block rounded-full border border-black/10 bg-white px-2 py-1.5 text-[11px] focus:outline-none"
+            >
+              {PLANTILLAS_BASE.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={onGenerar}
+            disabled={!instruccion.trim() || generando}
+            className="inline-flex items-center gap-1.5 rounded-full bg-terracotta px-3 py-1.5 text-xs font-medium text-white hover:bg-redwood disabled:opacity-40"
+          >
+            <Icono nombre="chispa" className="h-3.5 w-3.5" />
+            {generando ? "Generando…" : "Generar propuesta"}
+          </button>
+        </div>
+      ) : (
+        <div>
+          {mensaje && <p className="text-[12.5px] leading-relaxed text-black/75">{mensaje}</p>}
+          {resumen && resumen.length > 0 && (
+            <ul className="mt-1.5 space-y-1">
+              {resumen.map((r, i) => (
+                <li key={i} className="flex items-start gap-1.5 text-[12px] text-black/70">
+                  <Icono
+                    nombre="check"
+                    className={`mt-0.5 h-3 w-3 shrink-0 ${r.startsWith("No aplicado:") ? "text-terracotta" : "text-rainfall"}`}
+                  />
+                  <span>{r}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={onConfirmar}
+              className="inline-flex items-center gap-1.5 rounded-full bg-terracotta px-3 py-1.5 text-xs font-medium text-white hover:bg-redwood"
+            >
+              <Icono nombre="check" className="h-3.5 w-3.5" /> Aplicar
+            </button>
+            <button
+              type="button"
+              onClick={onGenerar}
+              disabled={!instruccion.trim() || generando}
+              title="Genera otra propuesta desde el diseño previo"
+              className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25 disabled:opacity-40"
+            >
+              <Icono nombre="deshacer" className="h-3.5 w-3.5" /> Regenerar
+            </button>
+            <button
+              type="button"
+              onClick={onDescartar}
+              className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
+            >
+              Descartar
+            </button>
+          </div>
+          <p className="mt-1 text-[10.5px] text-black/45">
+            La vista previa ya muestra la propuesta. Aplicar la conserva; Descartar vuelve al diseño previo.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Ajustes rápidos: lo esencial sin el editor técnico                  */
+/* ------------------------------------------------------------------ */
+
+const FUENTES_RAPIDAS: { valor: FuenteDiseno; etiqueta: string }[] = [
+  { valor: "serif", etiqueta: "Serif formal" },
+  { valor: "sans", etiqueta: "Sans neutra" },
+  { valor: "mono", etiqueta: "Mono datos" }
+];
+
+function AjustesRapidos({
+  diseno,
+  kit,
+  onDiseno,
+  onKit
+}: {
+  diseno: DisenoDocumento;
+  kit: BrandKit;
+  onDiseno: (parche: Partial<DisenoDocumento>) => void;
+  onKit: (parche: Partial<Pick<BrandKit, "colores" | "fuenteTitulos" | "fuenteCuerpo">>) => void;
+}) {
+  return (
+    <section aria-label="Ajustes rápidos" className="rounded-[18px] border border-white/60 bg-crema/95 p-3 shadow-tarjeta">
+      <h2 className="font-display text-[13px] font-semibold tracking-tight">Ajustes</h2>
+      <div className="mt-2 grid grid-cols-2 gap-1.5">
+        <label className="text-[11px] text-black/60">
+          Página
+          <select
+            value={diseno.pagina.tamano}
+            onChange={(e) =>
+              onDiseno({ pagina: { ...diseno.pagina, tamano: e.target.value as TamanoPagina } })
+            }
+            className="mt-0.5 w-full rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[12px] focus:outline-none"
+          >
+            <option value="carta">Carta</option>
+            <option value="a4">A4</option>
+          </select>
+        </label>
+        <label className="text-[11px] text-black/60">
+          Orientación
+          <select
+            value={diseno.pagina.orientacion}
+            onChange={(e) =>
+              onDiseno({ pagina: { ...diseno.pagina, orientacion: e.target.value as OrientacionPagina } })
+            }
+            className="mt-0.5 w-full rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[12px] focus:outline-none"
+          >
+            <option value="vertical">Vertical</option>
+            <option value="horizontal">Horizontal</option>
+          </select>
+        </label>
+        <label className="text-[11px] text-black/60">
+          Títulos
+          <select
+            value={kit.fuenteTitulos}
+            onChange={(e) => onKit({ fuenteTitulos: e.target.value as FuenteDiseno })}
+            className="mt-0.5 w-full rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[12px] focus:outline-none"
+          >
+            {FUENTES_RAPIDAS.map((f) => (
+              <option key={f.valor} value={f.valor}>
+                {f.etiqueta}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-[11px] text-black/60">
+          Cuerpo
+          <select
+            value={kit.fuenteCuerpo}
+            onChange={(e) => onKit({ fuenteCuerpo: e.target.value as FuenteDiseno })}
+            className="mt-0.5 w-full rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[12px] focus:outline-none"
+          >
+            {FUENTES_RAPIDAS.map((f) => (
+              <option key={f.valor} value={f.valor}>
+                {f.etiqueta}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-[11px] text-black/60">
+          Color principal
+          <input
+            type="color"
+            value={kit.colores.primario}
+            onChange={(e) => onKit({ colores: { ...kit.colores, primario: e.target.value } })}
+            className="mt-0.5 h-8 w-full rounded-lg border border-black/10 bg-white px-1 focus:outline-none"
+          />
+        </label>
+        <label className="mt-5 inline-flex items-center gap-1.5 text-[11.5px] text-black/70">
+          <input
+            type="checkbox"
+            checked={diseno.mostrarNumeroPagina}
+            onChange={(e) => onDiseno({ mostrarNumeroPagina: e.target.checked })}
+          />
+          Numerar páginas
+        </label>
+      </div>
+      <label className="mt-1.5 block text-[11px] text-black/60">
+        Encabezado
+        <input
+          value={diseno.encabezadoTexto}
+          onChange={(e) => onDiseno({ encabezadoTexto: e.target.value })}
+          placeholder="Universidad · Modelo educativo"
+          className="mt-0.5 w-full rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[12px] focus:outline-none"
+        />
+      </label>
+      <label className="mt-1.5 block text-[11px] text-black/60">
+        Pie de página
+        <input
+          value={diseno.pieTexto}
+          onChange={(e) => onDiseno({ pieTexto: e.target.value })}
+          placeholder="Documento oficial · 2026"
+          className="mt-0.5 w-full rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[12px] focus:outline-none"
+        />
+      </label>
     </section>
   );
 }

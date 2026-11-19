@@ -243,6 +243,9 @@ Franja de identificación con la asignatura en serif, folio mono y la línea pro
 ### Niveles Macro y Meso
 Misma sala, mismo documento-acordeón: franja de identificación en serif, marcas de progreso y secciones plegables con resumen de una línea. Cada afirmación (principio, orientación, perfil, resultado) lleva su insignia de estado, sus selectores de origen/estado y su bloque de respaldo en fuentes con citas (fuente + localizador/página/sección). Sin fuentes registradas no se puede citar: la UI lo dice en vez de inventar.
 
+### Estudio de documento (Fase 2)
+Sin diseño guardado, el estudio abre con dos caminos: **Proponer con IA** (plantilla base + instrucción en una frase) o **Editar a mano**. Con diseño existente se entra directo y el botón **Proponer con IA** del encabezado abre el panel. La IA solo propone apariencia y organización contra el diseño actual; la vista previa muestra la propuesta y el docente la revisa como lista de cambios antes de **Aplicar**, **Regenerar** o **Descartar** (que restaura el diseño previo). La edición manual agrupa lo esencial en **Ajustes** (página, orientación, fuentes, color principal, numeración, encabezado y pie); la **Estructura** conserva el arrastre magnético por zonas; márgenes, encabezado/pie detallados e identidad completa viven en **Avanzado**. El contenido curricular nunca se toca desde aquí: no hay operación que cambie textos, referencias ni bloques.
+
 ### Trazabilidad y expediente
 La ficha Meso cierra con la sección **Trazabilidad**: matrices principio→resultado y resultado→RA con chips que se prenden y apagan, más el conteo de resultados sin sostén. En el Micro, cada RA muestra a qué resultado responde («↳ Responde a: …») y cada actividad, los RA que mide. El espacio Proyecto exporta por nivel y el **expediente conjunto** (todo el proyecto con su trazabilidad) en Markdown para pegar y PDF de texto plano.
 

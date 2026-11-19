@@ -3075,6 +3075,7 @@ export default function Page() {
             documentoId={scope.documentoId}
             onVolver={() => setModoDiseno(false)}
             onGuardar={guardarDiseno}
+            cabecerasIA={cabecerasIA}
           />
         </div>
         {aviso && <Aviso texto={aviso} onCerrar={() => setAviso(null)} />}
