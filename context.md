@@ -161,7 +161,7 @@ docs/NUBE.md                     guía para activar la nube con cuenta propia
 
 ## 5. Verificación comprobada
 
-Último checkpoint: commit `53312f5` (Fase 2: estudio de documento oficial) en la rama `feature/curricular-project-foundation`, **publicada en GitHub** (`Mattdm16/designconia`); el push llegó hasta ese commit y el árbol quedó limpio.
+Último checkpoint: commit `5571e07` (espacios trabajo/proyecto + ficha compacta con índice) en la rama `feature/curricular-project-foundation`, **publicada en GitHub** (`Mattdm16/designconia`); el push llegó hasta ese commit y el árbol quedó limpio.
 
 ```text
 npm test              → 324 pruebas (106 + 14 + 38 + 11 + 31 + 11 + 24 + 17 + 11 + 5 + 3 + 2 + 8 + 5 + 5 + 3 + 4 + 3 + 13 + 10)
