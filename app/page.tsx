@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Chat, type AdjuntoChip, type DocMenuItem } from "@/components/Chat";
-import { Catalogo } from "@/components/Catalogo";
-import { ClaveIAPanel } from "@/components/ClaveIA";
+import { BotonTema } from "@/components/BotonTema";
 import { DisenoEstudio } from "@/components/Diseno";
-import { NubePanel } from "@/components/Nube";
+import { ProyectoHub, type AccionDocumento } from "@/components/Proyecto";
 import { Icono } from "@/components/Icono";
 import { MarcoFicha } from "@/components/ficha/Marco";
 import { MesoFicha } from "@/components/ficha/Meso";
@@ -170,14 +169,11 @@ export default function Page() {
     if (claveRef.current) base["x-clave-ia"] = claveRef.current;
     return base;
   }
-  /** Paneles del encabezado: catálogo de documentos y clave propia. */
-  const [catalogoAbierto, setCatalogoAbierto] = useState(false);
-  const [claveAbierta, setClaveAbierta] = useState(false);
+  /* Espacio visible: el trabajo (chat + ficha) o la gestión del proyecto. */
+  const [espacio, setEspacio] = useState<"trabajo" | "proyecto">("trabajo");
   /* Fase 2: estudio de diseño del documento activo (el chat queda en pausa). */
   const [modoDiseno, setModoDiseno] = useState(false);
-  const inputRespaldoRef = useRef<HTMLInputElement | null>(null);
   /* Nube opcional (Supabase). Sin configuración, la app sigue 100% local. */
-  const [nubeAbierta, setNubeAbierta] = useState(false);
   const [nubeEmail, setNubeEmail] = useState<string | null>(null);
   const [nubeOcupado, setNubeOcupado] = useState(false);
   const [nubeMensaje, setNubeMensaje] = useState<string | null>(null);
@@ -1153,10 +1149,10 @@ export default function Page() {
       .catch(() => mostrarAviso("No se pudo leer el archivo."));
   }
 
-  /* -------- catálogo: abrir, duplicar y finalizar -------- */
+  /* -------- catálogo: abrir, duplicar y finalizar (vive en Proyecto) -------- */
   function abrirDesdeCatalogo(nivel: NivelCatalogo, id: string) {
-    setCatalogoAbierto(false);
     abrirDocumento(nivel, id);
+    setEspacio("trabajo");
   }
 
   function duplicarDesdeCatalogo(nivel: NivelCatalogo, id: string) {
@@ -1169,6 +1165,7 @@ export default function Page() {
     }
     persistirProyecto({ ...base, proyecto: r.proyecto }, "Documento duplicado como base.");
     abrirDocumento(nivel, r.nuevoId);
+    setEspacio("trabajo");
   }
 
   function alternarFinalizado(nivel: NivelCatalogo, id: string, valor: boolean) {
@@ -2797,6 +2794,9 @@ export default function Page() {
         return "Asistente conectado";
     }
   })();
+  /* El punto de salud es botón solo cuando hay algo que arreglar: lleva al
+     espacio Proyecto, sección Asistente. */
+  const asistenteFalla = sinClave || problemaClave;
 
   /* -------- vista por módulo: el chat y la ficha siguen al nivel activo -------- */
   const esMacro = moduloActivo === "macro";
@@ -2939,6 +2939,28 @@ export default function Page() {
     }
   }
 
+  /* -------- derivados del espacio Proyecto -------- */
+  /** Acciones de copiar + PDF sobre el documento en trabajo (null si no hay). */
+  const accionNivel: AccionDocumento | null = !hayBorrador
+    ? null
+    : esMacro
+      ? marco
+        ? { etiqueta: "marco", onCopiar: copiarMarco, onDescargarPdf: descargarMarcoPdf }
+        : null
+      : esMeso
+        ? programa
+          ? { etiqueta: "programa", onCopiar: copiarPrograma, onDescargarPdf: descargarProgramaPdf }
+          : null
+        : micro
+          ? { etiqueta: "microcurrículo", onCopiar: copiar, onDescargarPdf: descargarPdf }
+          : null;
+  /** El expediente necesita al menos un documento de cualquier nivel. */
+  const hayExpediente =
+    !!proyectoEnVista &&
+    (proyectoEnVista.marcos.length > 0 ||
+      proyectoEnVista.programas.length > 0 ||
+      proyectoEnVista.asignaturas.length > 0);
+
   /* ------------------------------------------------------------------ */
   /* Modo conversación: solo el chat. Sin ficha, sin rieles, sin tabs.   */
   /* ------------------------------------------------------------------ */
@@ -2952,77 +2974,39 @@ export default function Page() {
             <Icono nombre="chispa" className="h-4 w-4" />
           </span>
           <span className="font-display text-[15px] font-semibold tracking-tight">DesignConia</span>
-          <button
-            type="button"
-            onClick={nuevo}
-            disabled={!hayAlgoQueBorrar || scopeV3NoSoportado}
-            title={
-              scopeV3NoSoportado
-                ? "El proyecto contiene un módulo que esta página no puede descartar"
-                : hayAlgoQueBorrar
-                  ? "Descartar esta conversación y empezar de cero"
-                  : "Todavía no hay nada que borrar"
-            }
-            className="ml-1 inline-flex shrink-0 items-center gap-1.5 rounded-full border border-black/10 bg-crema/95 px-3 py-1.5 text-xs font-medium text-black/70 hover:border-black/25 hover:text-black disabled:opacity-40 disabled:hover:border-black/10"
-          >
-            <Icono nombre="deshacer" className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Conversación nueva</span>
-            <span className="sr-only sm:hidden">Conversación nueva</span>
-          </button>
-          <span className="inline-flex max-w-[12rem] items-center gap-1.5 truncate rounded-full border border-black/10 bg-crema/95 px-3 py-1.5 text-xs font-medium text-black/70">
+          <span className="ml-1 inline-flex max-w-[12rem] items-center gap-1.5 truncate rounded-full border border-black/10 bg-crema/95 px-3 py-1.5 text-xs font-medium text-black/70">
             <Icono nombre="chispa" className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">{etiquetaContexto}</span>
           </span>
           <BotonTema oscuro={temaOscuro} onCambiar={alternarTema} />
           <button
             type="button"
-            onClick={() => {
-              setCatalogoAbierto((v) => !v);
-              setClaveAbierta(false);
-              setNubeAbierta(false);
-            }}
-            aria-expanded={catalogoAbierto}
-            title="Catálogo de documentos: buscar, abrir, duplicar y finalizar"
+            onClick={() => setEspacio("proyecto")}
+            title="Proyecto: documentos, copias, respaldo, nube y ajustes"
             className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-black/10 bg-crema/95 px-3 py-1.5 text-xs font-medium text-black/70 hover:border-black/25 hover:text-black"
           >
             <Icono nombre="carpeta" className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Catálogo</span>
+            <span className="hidden sm:inline">Proyecto</span>
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setClaveAbierta((v) => !v);
-              setCatalogoAbierto(false);
-              setNubeAbierta(false);
-            }}
-            aria-expanded={claveAbierta}
-            title="Usar tu propia clave de DeepSeek solo en esta sesión"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-black/10 bg-crema/95 px-3 py-1.5 text-xs font-medium text-black/70 hover:border-black/25 hover:text-black"
-          >
-            <Icono nombre="llave" className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Clave IA</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setNubeAbierta((v) => !v);
-              setCatalogoAbierto(false);
-              setClaveAbierta(false);
-            }}
-            aria-expanded={nubeAbierta}
-            title="Guardar el proyecto en tu cuenta o traerlo de vuelta"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-black/10 bg-crema/95 px-3 py-1.5 text-xs font-medium text-black/70 hover:border-black/25 hover:text-black"
-          >
-            <Icono nombre="nube" className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Nube</span>
-          </button>
-          <span className="ml-auto flex items-center gap-2 text-[11px] text-black/50">
-            <span
-              className={`h-2 w-2 rounded-full ${sinClave ? "bg-terracotta" : salud === null ? "bg-mist" : "bg-rainfall"}`}
-              aria-hidden="true"
-            />
-            <span className="hidden truncate sm:inline">{etiquetaSalud}</span>
-          </span>
+          {asistenteFalla ? (
+            <button
+              type="button"
+              onClick={() => setEspacio("proyecto")}
+              title="El asistente no puede generar: revisa la clave en Proyecto › Asistente"
+              className="ml-auto flex items-center gap-2 rounded-full border border-terracotta/30 bg-terracotta/10 px-3 py-1 text-[11px] text-black/70 hover:border-terracotta/50"
+            >
+              <span className="h-2 w-2 rounded-full bg-terracotta" aria-hidden="true" />
+              <span className="hidden truncate sm:inline">{etiquetaSalud}</span>
+            </button>
+          ) : (
+            <span className="ml-auto flex items-center gap-2 text-[11px] text-black/50">
+              <span
+                className={`h-2 w-2 rounded-full ${salud === null ? "bg-mist" : "bg-rainfall"}`}
+                aria-hidden="true"
+              />
+              <span className="hidden truncate sm:inline">{etiquetaSalud}</span>
+            </span>
+          )}
         </header>
 
         <main className="relative z-10 flex min-h-0 flex-1 flex-col px-3 pb-4 sm:px-6">
@@ -3038,46 +3022,6 @@ export default function Page() {
               </p>
             </div>
           )}
-          {catalogoAbierto && proyectoEnVista && (
-            <div className="mx-auto w-full max-w-[640px] shrink-0 pb-2">
-              <Catalogo
-                proyecto={proyectoEnVista}
-                onAbrir={abrirDesdeCatalogo}
-                onDuplicar={duplicarDesdeCatalogo}
-                onFinalizar={alternarFinalizado}
-              />
-            </div>
-          )}
-          {claveAbierta && (
-            <div className="mx-auto w-full max-w-[640px] shrink-0 pb-2">
-              <ClaveIAPanel
-                hayClave={claveUsuario !== null}
-                onGuardar={guardarClavePropia}
-                onBorrar={borrarClavePropia}
-              />
-            </div>
-          )}
-          {nubeAbierta &&
-            (nubeDisponible() ? (
-              <div className="mx-auto w-full max-w-[640px] shrink-0 pb-2">
-                <NubePanel
-                  sesionEmail={nubeEmail}
-                  ocupado={nubeOcupado}
-                  mensaje={nubeMensaje}
-                  onEntrar={entrarNube}
-                  onSalir={salirNube}
-                  onSubir={subirNube}
-                  onBajar={bajarNube}
-                />
-              </div>
-            ) : (
-              <div className="mx-auto w-full max-w-[640px] shrink-0 pb-2">
-                <p className="rounded-xl bg-black/[0.03] px-3 py-2 text-[11.5px] leading-relaxed text-black/60">
-                  La nube no está configurada en este despliegue. Ver{" "}
-                  <span className="font-mono">docs/NUBE.md</span>.
-                </p>
-              </div>
-            ))}
           <Chat
             mensajes={chatMensajes}
             enviando={enviando}
@@ -3139,6 +3083,55 @@ export default function Page() {
   }
 
   /* ------------------------------------------------------------------ */
+  /* Espacio Proyecto: gestión sin chat ni ficha. Volver no pierde nada.  */
+  /* ------------------------------------------------------------------ */
+
+  if (espacio === "proyecto") {
+    return (
+      <div className="relative flex h-screen flex-col overflow-hidden bg-seedling">
+        <Ondas />
+        {avisoPersistencia && (
+          <div className="relative z-10 shrink-0 px-3 pt-3 sm:px-6">
+            <AvisoPersistencia texto={avisoPersistencia} />
+          </div>
+        )}
+        <ProyectoHub
+          proyecto={proyectoEnVista}
+          accionDocumento={accionNivel}
+          hayExpediente={hayExpediente}
+          onCopiarExpediente={copiarExpediente}
+          onDescargarExpedientePdf={descargarExpedientePdf}
+          onAbrir={abrirDesdeCatalogo}
+          onDuplicar={duplicarDesdeCatalogo}
+          onFinalizar={alternarFinalizado}
+          onDescargarRespaldo={descargarRespaldo}
+          onRestaurarRespaldo={importarRespaldo}
+          nubeLista={nubeDisponible()}
+          nubeEmail={nubeEmail}
+          nubeOcupado={nubeOcupado}
+          nubeMensaje={nubeMensaje}
+          onEntrarNube={entrarNube}
+          onSalirNube={salirNube}
+          onSubirNube={subirNube}
+          onBajarNube={bajarNube}
+          estadoAsistente={etiquetaSalud}
+          asistenteFalla={asistenteFalla}
+          hayClave={claveUsuario !== null}
+          onGuardarClave={guardarClavePropia}
+          onBorrarClave={borrarClavePropia}
+          temaOscuro={temaOscuro}
+          onCambiarTema={alternarTema}
+          hayAlgoQueBorrar={hayAlgoQueBorrar}
+          alcanceBloqueado={scopeV3NoSoportado}
+          onEmpezarDeCero={nuevo}
+          onVolver={() => setEspacio("trabajo")}
+        />
+        {aviso && <Aviso texto={aviso} onCerrar={() => setAviso(null)} />}
+      </div>
+    );
+  }
+
+  /* ------------------------------------------------------------------ */
   /* Modo borrador: el chat conduce, la ficha crece al lado.             */
   /* ------------------------------------------------------------------ */
 
@@ -3159,24 +3152,9 @@ export default function Page() {
             <span className="font-display text-sm font-semibold tracking-tight">DesignConia</span>
             <button
               type="button"
-              onClick={nuevo}
-              disabled={!hayAlgoQueBorrar || scopeV3NoSoportado}
-              title={
-                scopeV3NoSoportado
-                  ? "El proyecto contiene un módulo que esta página no puede descartar"
-                  : "Descartar este proyecto y empezar de cero"
-              }
-              className="ml-auto inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2 py-1 text-[11px] font-medium text-black/60 hover:border-black/25 hover:text-black disabled:opacity-40"
-            >
-              <Icono nombre="deshacer" className="h-3 w-3" />
-              <span className="hidden sm:inline">Nueva</span>
-              <span className="sr-only sm:hidden">Conversación nueva</span>
-            </button>
-            <button
-              type="button"
               onClick={() => setChatVisible(false)}
               aria-label="Ocultar el chat y dejar la ficha a pantalla completa"
-              className="rounded-full border border-black/10 bg-white p-1 text-black/55 hover:border-black/25 hover:text-black"
+              className="ml-auto rounded-full border border-black/10 bg-white p-1 text-black/55 hover:border-black/25 hover:text-black"
             >
               <Icono nombre="chevron" className="h-3.5 w-3.5 rotate-180" />
             </button>
@@ -3227,25 +3205,26 @@ export default function Page() {
               <Icono nombre="panel" className="h-3.5 w-3.5" /> Mostrar chat
             </button>
           )}
-          {!chatVisible && (
+
+          {asistenteFalla ? (
             <button
               type="button"
-              onClick={nuevo}
-              disabled={!hayAlgoQueBorrar || scopeV3NoSoportado}
-              title={scopeV3NoSoportado ? "El proyecto contiene un módulo que esta página no puede descartar" : undefined}
-              className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium text-black/70 hover:border-black/25 disabled:opacity-40"
+              onClick={() => setEspacio("proyecto")}
+              title="El asistente no puede generar: revisa la clave en Proyecto › Asistente"
+              className="flex items-center gap-2 rounded-full border border-terracotta/30 bg-terracotta/10 px-3 py-1 text-[11px] text-black/70 hover:border-terracotta/50"
             >
-              <Icono nombre="deshacer" className="h-3.5 w-3.5" /> Nueva
+              <span className="h-2 w-2 rounded-full bg-terracotta" aria-hidden="true" />
+              <span className="hidden truncate sm:inline">{etiquetaSalud}</span>
             </button>
+          ) : (
+            <span className="flex items-center gap-2 text-[11px] text-black/50">
+              <span
+                className={`h-2 w-2 rounded-full ${salud === null ? "bg-mist" : "bg-rainfall"}`}
+                aria-hidden="true"
+              />
+              <span className="hidden truncate sm:inline">{etiquetaSalud}</span>
+            </span>
           )}
-
-          <span className="flex items-center gap-2 text-[11px] text-black/50">
-            <span
-              className={`h-2 w-2 rounded-full ${sinClave ? "bg-terracotta" : problemaClave ? "bg-terracotta" : "bg-rainfall"}`}
-              aria-hidden="true"
-            />
-            <span className="hidden truncate sm:inline">{etiquetaSalud}</span>
-          </span>
 
           <span className="inline-flex max-w-[12rem] items-center gap-1.5 truncate rounded-full border border-black/10 bg-white px-3 py-1 text-[11px] font-medium text-black/70">
             <Icono nombre="chispa" className="h-3 w-3 shrink-0" />
@@ -3256,42 +3235,11 @@ export default function Page() {
             <BotonTema oscuro={temaOscuro} onCambiar={alternarTema} />
             <button
               type="button"
-              onClick={() => {
-                setCatalogoAbierto((v) => !v);
-                setClaveAbierta(false);
-                setNubeAbierta(false);
-              }}
-              aria-expanded={catalogoAbierto}
-              title="Catálogo de documentos: buscar, abrir, duplicar y finalizar"
+              onClick={() => setEspacio("proyecto")}
+              title="Proyecto: documentos, copias, respaldo, nube y ajustes"
               className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
             >
-              <Icono nombre="carpeta" className="h-3.5 w-3.5" /> Catálogo
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setClaveAbierta((v) => !v);
-                setCatalogoAbierto(false);
-                setNubeAbierta(false);
-              }}
-              aria-expanded={claveAbierta}
-              title="Usar tu propia clave de DeepSeek solo en esta sesión"
-              className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
-            >
-              <Icono nombre="llave" className="h-3.5 w-3.5" /> Clave IA
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setNubeAbierta((v) => !v);
-                setCatalogoAbierto(false);
-                setClaveAbierta(false);
-              }}
-              aria-expanded={nubeAbierta}
-              title="Guardar el proyecto en tu cuenta o traerlo de vuelta"
-              className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
-            >
-              <Icono nombre="nube" className="h-3.5 w-3.5" /> Nube
+              <Icono nombre="carpeta" className="h-3.5 w-3.5" /> Proyecto
             </button>
             {disenoScope && (
               <button
@@ -3303,173 +3251,8 @@ export default function Page() {
                 <Icono nombre="libro" className="h-3.5 w-3.5" /> Diseñar documento
               </button>
             )}
-            {proyectoEnVista && (
-              <>
-                <button
-                  type="button"
-                  onClick={descargarRespaldo}
-                  title="Descargar una copia JSON del proyecto para respaldarlo"
-                  className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
-                >
-                  <Icono nombre="descargar" className="h-3.5 w-3.5" /> Respaldo
-                </button>
-                <button
-                  type="button"
-                  onClick={() => inputRespaldoRef.current?.click()}
-                  title="Restaurar una copia JSON descargada antes"
-                  className="rounded-full border border-black/10 bg-white p-1.5 hover:border-black/25"
-                  aria-label="Restaurar una copia de respaldo JSON"
-                >
-                  <Icono nombre="documento" />
-                </button>
-                <input
-                  ref={inputRespaldoRef}
-                  type="file"
-                  accept="application/json,.json"
-                  className="hidden"
-                  aria-hidden="true"
-                  tabIndex={-1}
-                  onChange={(e) => {
-                    const archivo = e.target.files?.[0];
-                    e.target.value = "";
-                    if (archivo) importarRespaldo(archivo);
-                  }}
-                />
-              </>
-            )}
-            {proyectoEnVista &&
-              (proyectoEnVista.marcos.length > 0 ||
-                proyectoEnVista.programas.length > 0 ||
-                proyectoEnVista.asignaturas.length > 0) && (
-                <>
-                  <button
-                    type="button"
-                    onClick={copiarExpediente}
-                    aria-label="Copiar el expediente curricular como Markdown, para pegar"
-                    title="Copiar expediente como Markdown para pegar"
-                    className="rounded-full border border-black/10 bg-white p-1.5 hover:border-black/25"
-                  >
-                    <Icono nombre="documento" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={descargarExpedientePdf}
-                    title="Descargar el expediente como PDF de texto plano"
-                    className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
-                  >
-                    <Icono nombre="descargar" className="h-3.5 w-3.5" /> Expediente
-                  </button>
-                </>
-              )}
-            {moduloActivo === "micro" && (
-              <button
-                type="button"
-                onClick={copiar}
-                aria-label="Copiar el microcurrículo como Markdown, para pegar"
-                title="Copiar como Markdown para pegar"
-                className="rounded-full border border-black/10 bg-white p-1.5 hover:border-black/25"
-              >
-                <Icono nombre="copiar" />
-              </button>
-            )}
-            {moduloActivo === "micro" && (
-              <button
-                type="button"
-                onClick={descargarPdf}
-                title="Descargar como PDF de texto plano"
-                className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
-              >
-                <Icono nombre="descargar" className="h-3.5 w-3.5" /> Exportar PDF
-              </button>
-            )}
-            {moduloActivo === "macro" && marco && (
-              <button
-                type="button"
-                onClick={copiarMarco}
-                aria-label="Copiar el marco como Markdown, para pegar"
-                title="Copiar como Markdown para pegar"
-                className="rounded-full border border-black/10 bg-white p-1.5 hover:border-black/25"
-              >
-                <Icono nombre="copiar" />
-              </button>
-            )}
-            {moduloActivo === "macro" && marco && (
-              <button
-                type="button"
-                onClick={descargarMarcoPdf}
-                title="Descargar como PDF de texto plano"
-                className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
-              >
-                <Icono nombre="descargar" className="h-3.5 w-3.5" /> Exportar PDF
-              </button>
-            )}
-            {moduloActivo === "meso" && programa && (
-              <button
-                type="button"
-                onClick={copiarPrograma}
-                aria-label="Copiar el programa como Markdown, para pegar"
-                title="Copiar como Markdown para pegar"
-                className="rounded-full border border-black/10 bg-white p-1.5 hover:border-black/25"
-              >
-                <Icono nombre="copiar" />
-              </button>
-            )}
-            {moduloActivo === "meso" && programa && (
-              <button
-                type="button"
-                onClick={descargarProgramaPdf}
-                title="Descargar como PDF de texto plano"
-                className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
-              >
-                <Icono nombre="descargar" className="h-3.5 w-3.5" /> Exportar PDF
-              </button>
-            )}
           </div>
         </header>
-
-        {catalogoAbierto && proyectoEnVista && (
-          <div className="shrink-0">
-            <Catalogo
-              proyecto={proyectoEnVista}
-              onAbrir={abrirDesdeCatalogo}
-              onDuplicar={duplicarDesdeCatalogo}
-              onFinalizar={alternarFinalizado}
-            />
-          </div>
-        )}
-
-        {claveAbierta && (
-          <div className="shrink-0">
-            <ClaveIAPanel
-              hayClave={claveUsuario !== null}
-              onGuardar={guardarClavePropia}
-              onBorrar={borrarClavePropia}
-            />
-          </div>
-        )}
-
-        {nubeAbierta &&
-          (nubeDisponible() ? (
-            <div className="shrink-0">
-              <NubePanel
-                sesionEmail={nubeEmail}
-                ocupado={nubeOcupado}
-                mensaje={nubeMensaje}
-                onEntrar={entrarNube}
-                onSalir={salirNube}
-                onSubir={subirNube}
-                onBajar={bajarNube}
-              />
-            </div>
-          ) : (
-            <div className="shrink-0 rounded-[18px] border border-white/60 bg-crema/95 px-4 py-3 text-[12px] leading-relaxed text-black/70 shadow-tarjeta">
-              La nube no está configurada en este despliegue. Para activarla, crea un proyecto gratuito en
-              Supabase, ejecuta <span className="font-mono">supabase/migraciones/001_proyectos.sql</span> y
-              define <span className="font-mono">NEXT_PUBLIC_SUPABASE_URL</span> y{" "}
-              <span className="font-mono">NEXT_PUBLIC_SUPABASE_ANON_KEY</span>. Ver{" "}
-              <span className="font-mono">docs/NUBE.md</span>.
-            </div>
-          ))}
 
         {pildoraBorrador && (
           <div className="flex shrink-0 items-center gap-2.5 rounded-[18px] border border-white/60 bg-sprout/50 px-3 py-2 text-[12px] text-black/75">
@@ -3538,22 +3321,6 @@ export default function Page() {
 /* ------------------------------------------------------------------ */
 /* Piezas de la página                                                 */
 /* ------------------------------------------------------------------ */
-
-function BotonTema({ oscuro, onCambiar }: { oscuro: boolean; onCambiar: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onCambiar}
-      title={oscuro ? "Cambiar al modo claro" : "Cambiar al modo oscuro"}
-      aria-label={oscuro ? "Cambiar al modo claro" : "Cambiar al modo oscuro"}
-      aria-pressed={oscuro}
-      className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-black/10 bg-crema/95 px-3 py-1.5 text-xs font-medium text-black/70 hover:border-black/25 hover:text-black"
-    >
-      <Icono nombre={oscuro ? "sol" : "luna"} className="h-3.5 w-3.5" />
-      <span className="hidden sm:inline">{oscuro ? "Claro" : "Oscuro"}</span>
-    </button>
-  );
-}
 
 function Ondas() {
   return (

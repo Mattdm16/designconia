@@ -163,11 +163,11 @@ Paleta pineada por el usuario (brand guidelines Seedling/Sow): crema luminosa co
 
 ## Layout
 
-**Dos modos, no uno.** La app arranca en modo conversación y solo pasa a modo borrador cuando la IA genera algo. El cambio de modo es la decisión de layout más importante del producto: obliga a que la ficha no ocupe espacio antes de existir.
+**Dos modos, dos espacios.** La app arranca en modo conversación y solo pasa a modo borrador cuando la IA genera algo. El cambio de modo es la decisión de layout más importante del producto: obliga a que la ficha no ocupe espacio antes de existir. Encima de los modos hay dos espacios conmutables: **trabajo** (chat + ficha, donde se recolecta) y **proyecto** (gestión: documentos, copias, respaldo, nube y ajustes). La gestión nunca empuja la ficha hacia abajo: vive en su propio espacio.
 
 ### Modo conversación (estado inicial, y al que se puede volver)
 
-Una sola cosa en pantalla: el chat. Sin rieles, sin lienzo de ficha, sin tabs de sesión, sin encabezado de documento. Cabecera mínima con la marca a la izquierda y el indicador de estado del asistente a la derecha. El hilo se centra a **640px** —medida de lectura, no de panel— con el mensaje de apertura y las sugerencias semilla debajo. El compositor vive anclado al fondo, con el mismo ancho que el hilo.
+Una sola cosa en pantalla: el chat. Sin rieles, sin lienzo de ficha, sin tabs de sesión, sin encabezado de documento. Cabecera mínima con la marca, la etiqueta pasiva de contexto, el botón **Proyecto**, el tema y el indicador de estado del asistente. El hilo se centra a **640px** —medida de lectura, no de panel— con el mensaje de apertura y las sugerencias semilla debajo. El compositor vive anclado al fondo, con el mismo ancho que el hilo.
 
 Un chat que arranca con un lienzo de documento al lado no es un chat. Este modo no es una versión reducida del otro: es el estado por defecto del producto.
 
@@ -176,6 +176,10 @@ Un chat que arranca con un lienzo de documento al lado no es un chat. Este modo 
 Dos columnas full-height con gap 12px y padding 12–16px: **chat a la izquierda, 480px**, y la ficha fluida a la derecha. Sin tercer riel: el espacio es del documento. Bajo 1280px el chat se apila arriba con `max-height: 38vh` y la ficha manda.
 
 El chat es plegable: ocultarlo devuelve el ancho completo a la ficha y deja «Mostrar chat» en el encabezado. Las sugerencias del turno se dibujan como chips encima del compositor, en ambos modos.
+
+### Espacio Proyecto
+
+Una columna de lectura de **720px** con secciones rotuladas que reutilizan los componentes existentes: Documento en trabajo (copiar Markdown + Exportar PDF), Expediente conjunto, Catálogo (buscar, abrir, duplicar, finalizar), Respaldo (descargar + restaurar), Nube, Asistente (estado + clave propia) y **Empezar de cero** (la destructiva «Conversación nueva», con su confirmación). Abrir o duplicar un documento devuelve al espacio trabajo. El punto de salud del encabezado es botón solo cuando hay algo que arreglar: lleva a Proyecto › Asistente.
 
 ### La ficha del microcurrículo
 
@@ -226,20 +230,21 @@ Radio grande y amable: paneles 18px, bloques y filas 12–16px, pills y botones 
 - **Secuencia didáctica (dos niveles):** abre en una **lista de unidades** —tarjetas con el número en círculo Sow, título, temas y `N sesiones · X h`, o la píldora «sin sesiones»—; al tocar una, la sección se transforma en las **sesiones de esa unidad** con un botón «Volver a unidades» en la cabecera. Cada sesión es una tarjeta con insignia `S1`, tema, unidad, tipo y minutos; sus tres fases van en bandas Arena, cada una con filas de docente / estudiante y sus recursos en píldoras Mora. La cabecera del acordeón muestra `unidades con sesiones / total` en mono tabular.
 
 ### Navigation
-- **Modo conversación:** sin navegación visible. La marca, «Conversación nueva», una etiqueta pasiva de contexto («Conversación inicial», «Marco · …») y el estado del asistente bastan. El nivel lo decide la IA conversando, no un selector.
-- **Modo borrador:** sin rieles laterales. El chat (480px) es la navegación de la conversación y la ficha se recorre con su propio scroll; el encabezado concentra la etiqueta de contexto, copiar (Markdown, para pegar) y exportar (PDF de texto plano) por nivel más el expediente conjunto, además de plegar el chat.
+- **Modo conversación:** sin navegación visible. La marca, una etiqueta pasiva de contexto («Conversación inicial», «Marco · …»), el botón **Proyecto**, el tema y el estado del asistente bastan. El nivel lo decide la IA conversando, no un selector. «Conversación nueva» vive en Proyecto como «Empezar de cero».
+- **Modo borrador:** sin rieles laterales. El chat (480px) es la navegación de la conversación y la ficha se recorre con su propio scroll; el encabezado concentra cinco controles: etiqueta de contexto, estado del asistente, **Diseñar documento** (Fase 2), **Proyecto** y tema. Copiar, exportar, respaldo y clave viven en Proyecto.
+- **Espacio Proyecto:** se entra con el botón Proyecto y se vuelve con «Volver al trabajo», sin perder nada. Abrir o duplicar desde el catálogo también devuelve al trabajo.
 
 ### Chat (signature)
 Burbujas Sow de la IA y tarjetas crema del docente, con avatar de inicial Redwood. La IA escribe su mensaje en streaming mientras el resto del JSON todavía llega, así que el texto se lee como conversación y nunca se ve crudo. Debajo de la última respuesta, los chips de sugerencia. Bajo el hilo, el compositor: botón «+» a la izquierda (menú: adjuntar PDF, nuevo documento por chat, documentos del proyecto), textarea que crece hasta 8rem y botón Terracotta de envío, que se convierte en «Detener» mientras hay una respuesta en curso. Los PDF adjuntos aparecen como chips encima del textarea con su estado (leyendo, listo con páginas y año, error legible o año por declarar); quitar el chip no borra la fuente ya registrada.
 
 ### Microcurrículo (signature)
-Franja de identificación con la asignatura en serif, folio mono y la línea programa · semestre · créditos · horas. Debajo, ocho marcas de progreso y el contador `n/8`. Luego ocho acordeones —Identificación, Justificación, Objetivos, Contenido temático, Secuencia didáctica, Metodología, Sistema de evaluación, Bibliografía y recursos— con check de cerrada y resumen de una línea. La sección en foco lleva anillo Pebble. Los avisos globales (RAs faltantes, unidades sin sesiones, actividades sin instrumento, porcentajes que no suman 100, referencias sin confirmar) se muestran como píldoras arriba, y también dentro de su sección.
+Franja de identificación con la asignatura en serif, folio mono y la línea programa · semestre · créditos · horas. Debajo, ocho marcas de progreso y el contador `n/8`. Luego ocho acordeones —Identificación, Justificación, Objetivos, Contenido temático, Secuencia didáctica, Metodología, Sistema de evaluación, Bibliografía y recursos— con check de cerrada y resumen de una línea. La sección en foco lleva anillo Pebble. **Índice de secciones:** fila de chips bajo la identificación (nombre + estado ✓/•); un toque abre esa sección y la lleva a la vista. **Acordeón exclusivo:** una sola sección abierta a la vez; la que trabaja la IA se abre sola y la elección del docente se respeta hasta que la IA cambia de foco. Los avisos globales (RAs faltantes, unidades sin sesiones, actividades sin instrumento, porcentajes que no suman 100, referencias sin confirmar) se muestran como píldoras arriba, y también dentro de su sección.
 
 ### Niveles Macro y Meso
 Misma sala, mismo documento-acordeón: franja de identificación en serif, marcas de progreso y secciones plegables con resumen de una línea. Cada afirmación (principio, orientación, perfil, resultado) lleva su insignia de estado, sus selectores de origen/estado y su bloque de respaldo en fuentes con citas (fuente + localizador/página/sección). Sin fuentes registradas no se puede citar: la UI lo dice en vez de inventar.
 
 ### Trazabilidad y expediente
-La ficha Meso cierra con la sección **Trazabilidad**: matrices principio→resultado y resultado→RA con chips que se prenden y apagan, más el conteo de resultados sin sostén. En el Micro, cada RA muestra a qué resultado responde («↳ Responde a: …») y cada actividad, los RA que mide. El encabezado exporta por nivel y el **expediente conjunto** (todo el proyecto con su trazabilidad) en Markdown para pegar y PDF de texto plano.
+La ficha Meso cierra con la sección **Trazabilidad**: matrices principio→resultado y resultado→RA con chips que se prenden y apagan, más el conteo de resultados sin sostén. En el Micro, cada RA muestra a qué resultado responde («↳ Responde a: …») y cada actividad, los RA que mide. El espacio Proyecto exporta por nivel y el **expediente conjunto** (todo el proyecto con su trazabilidad) en Markdown para pegar y PDF de texto plano.
 
 ## Motion
 

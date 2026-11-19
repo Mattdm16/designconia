@@ -1,8 +1,8 @@
 # DesignConia — contexto y traspaso actualizado
 
-**Actualizado:** 18 de noviembre de 2026. Este documento refleja el estado comprobado de la rama de desarrollo. Si contradice una implementación posterior, manda el código y actualiza este handoff.
+**Actualizado:** 19 de noviembre de 2026. Este documento refleja el estado comprobado de la rama de desarrollo. Si contradice una implementación posterior, manda el código y actualiza este handoff.
 
-> **Resumen ejecutivo:** la base V3 tiene los tres niveles con trazabilidad de extremo a extremo, chat-first sin selectores, citas, PDFs como fuentes (tope 3 años), carga horaria verificable y exportaciones incluido el expediente. Encima está el **piloto unipersonal**: clave IA propia por sesión, respaldo/restauración JSON, catálogo con duplicado y finalizado, nube Supabase opcional (una fila por docente) y la **Fase 2** de documento oficial con estudio de diseño (4 plantillas Carta/A4, kit de marca con imágenes, bloques arrastrables por zonas y PDF fiel). Todo está **subido a GitHub**. Pendiente: inspección visual en navegador (incluido Meso profundo y el estudio), desplegar a Vercel con acceso protegido y, si hace falta multi-navegador, activar el proyecto Supabase.
+> **Resumen ejecutivo:** la base V3 tiene los tres niveles con trazabilidad de extremo a extremo, chat-first sin selectores, citas, PDFs como fuentes (tope 3 años), carga horaria verificable y exportaciones incluido el expediente. Encima está el **piloto unipersonal**: clave IA propia por sesión, respaldo/restauración JSON, catálogo con duplicado y finalizado, nube Supabase opcional (una fila por docente) y la **Fase 2** de documento oficial con estudio de diseño (4 plantillas Carta/A4, kit de marca con imágenes, bloques arrastrables por zonas y PDF fiel). La recolección se reordenó en **dos espacios** (trabajo: chat + ficha; proyecto: gestión) con **ficha compacta** (índice de secciones + acordeón exclusivo). Todo está **subido a GitHub**. Pendiente: inspección visual en navegador (incluido Meso profundo y el estudio), desplegar a Vercel con acceso protegido y, si hace falta multi-navegador, activar el proyecto Supabase.
 
 ## 1. Producto y requisitos acordados
 
@@ -46,6 +46,7 @@
 | Clave IA propia (BYOK) | **Implementada**: panel «Clave IA» con guardar/probar/olvidar; vive solo en sessionStorage, viaja por cabecera `x-clave-ia`, nunca en copias, exportaciones ni logs; el servidor la usa de forma transitoria y distingue su origen en los errores. | Sin «recordar entre sesiones» (decisión de seguridad deliberada). Sin inspección visual en navegador. |
 | Respaldo del proyecto | **Implementado**: botones Respaldo/Restaurar; JSON validado con el mismo guard V3 (archivo corrupto o ajeno se rechaza sin tocar nada); restaurar pide confirmación. | Sin inspección visual en navegador. |
 | Nube opcional (Supabase) | **Implementado el código completo**: sesión por enlace mágico, subir/bajar proyecto (una fila por docente, RLS por propietario), migración SQL y guía en [docs/NUBE.md](docs/NUBE.md). | **Sin proyecto Supabase creado todavía**: requiere cuenta del usuario, ejecutar la migración y 2 variables de entorno. Sin env, todo sigue local. |
+| Espacios trabajo/proyecto + ficha compacta | **Implementado**: estado `trabajo ↔ proyecto` en `page.tsx`; el encabezado queda en 5 controles y la gestión (documento en trabajo, expediente, catálogo, respaldo, nube, clave, apariencia, empezar de cero) vive en `components/Proyecto.tsx`. Índice de secciones con estado + acordeón exclusivo en las 3 fichas (acordeones controlados). Abrir/duplicar devuelve al trabajo; el punto de salud es botón solo si la clave falla. | Sin inspección visual en navegador. |
 | Fase 2: documento oficial | **Implementada**: botón «Diseñar documento» abre el estudio (estructura arrastrable por zonas con flechas accesibles, vista previa paginada real, propiedades de bloque/documento, kit de marca con PNG/JPG/WebP/SVG sanitizado hasta 3 MB) y exporta PDF vectorial fiel (fuentes, tamaños, colores, alineación, encabezado/pie, JPEG incrustado, títulos sin huérfanos). Los bloques apuntan al currículo por `ref`; la redacción local es override explícito. | **Nunca abierto en navegador**: probar plantillas, arrastre, logo y comparar PDF vs vista previa. 4 plantillas base fijas; sin plantillas propias guardadas. |
 | Revisión visual | El detector mecánico marcó 0 hallazgos en los objetivos examinados. | **No se hizo inspección visual en navegador ni capturas** de la interfaz (Meso solo se probó rellenando campos). |
 
@@ -59,9 +60,10 @@
 6. ~~PDFs como fuentes con tope de 3 años~~ Hecho: `lib/pdf.ts` (validación, año, extractos) + `lib/inicio.ts` (enrutador), extracción local con worker en `/public`, citas con página y evidencia en los tres niveles.
 7. ~~Piloto unipersonal~~ Hecho: BYOK por sesión, respaldo/restauración JSON, catálogo con duplicado/finalizado y nube Supabase opcional (código listo).
 8. ~~Fase 2: estudio de documento oficial~~ Hecho: `lib/diseno.ts` + `components/Diseno.tsx` + `lib/exportarDisenoPdf.ts`; solo PDF, sin Word.
-9. **Probar en navegador**: Meso en profundidad (vinculación Macro/Micro, trazabilidad, persistencia), estudio de diseño completo con exportación, clave IA, respaldo, catálogo y modo oscuro en escritorio/móvil.
-10. **Desplegar a Vercel** (plan Hobby) con `DEEPSEEK_API_KEY` como secreto y **protección de acceso** para que la URL no exponga la clave del proveedor.
-11. **Solo si el docente usa varios navegadores**: crear el proyecto Supabase gratuito, ejecutar `supabase/migraciones/001_proyectos.sql` y añadir las 2 variables de [docs/NUBE.md](docs/NUBE.md).
+9. ~~Espacios trabajo/proyecto + ficha compacta~~ Hecho: `components/Proyecto.tsx` + `components/BotonTema.tsx` + `ficha/Indice.tsx`; acordeones controlados (`Seccion`, `Marco`, `Meso`) con índice y apertura exclusiva; headers en 5 controles; «Conversación nueva» vive en el hub como «Empezar de cero».
+10. **Probar en navegador**: Meso en profundidad (vinculación Macro/Micro, trazabilidad, persistencia), estudio de diseño completo con exportación, clave IA, respaldo, catálogo y modo oscuro en escritorio/móvil.
+11. **Desplegar a Vercel** (plan Hobby) con `DEEPSEEK_API_KEY` como secreto y **protección de acceso** para que la URL no exponga la clave del proveedor.
+12. **Solo si el docente usa varios navegadores**: crear el proyecto Supabase gratuito, ejecutar `supabase/migraciones/001_proyectos.sql` y añadir las 2 variables de [docs/NUBE.md](docs/NUBE.md).
 
 ## 3. Datos y contratos
 
@@ -117,20 +119,24 @@ El Micro canónico sigue en [schema.ts](lib/schema.ts). Conserva las ocho seccio
 ```text
 app/
   page.tsx                       chat-first, enrutador, adjuntos PDF, guardado V3,
-                                 paneles Catálogo/Clave IA/Nube, respaldo JSON y modo diseño
+                                 espacios trabajo/proyecto (hub de gestión) y modo diseño
   api/chat/route.ts              proxy SSE, ramas inicio/Micro/Macro/Meso, evidencia PDF,
                                  estado de avance inyectado y clave BYOK por llamada
   api/salud/route.ts             GET valida la clave del servidor; POST prueba la del docente
 components/
   Chat.tsx                       hilo y compositor con botón «+», menú y chips de PDF
+  Proyecto.tsx                   espacio Proyecto: documento en trabajo, expediente,
+                                 catálogo, respaldo, nube, asistente y empezar de cero
+  BotonTema.tsx                  toggle claro/oscuro (compartido por trabajo y proyecto)
   Catalogo.tsx                   catálogo: buscar/abrir/duplicar/finalizar
   ClaveIA.tsx                    panel BYOK (guardar/probar/olvidar)
   Nube.tsx                       panel Supabase (enlace mágico, subir/bajar)
   Diseno.tsx                     Fase 2: estudio (estructura, vista previa, propiedades, marca)
-  ficha/Microcurriculo.tsx       editor de la asignatura existente
-  ficha/Marco.tsx                editor del marco institucional
-  ficha/Meso.tsx                 editor del programa y vínculos
-  ficha/Seccion.tsx              acordeón del Micro
+  ficha/Indice.tsx               índice de secciones con estado (compartido, genérico)
+  ficha/Microcurriculo.tsx       editor de la asignatura existente (índice + exclusiva)
+  ficha/Marco.tsx                editor del marco institucional (índice + exclusiva)
+  ficha/Meso.tsx                 editor del programa y vínculos (índice + exclusiva)
+  ficha/Seccion.tsx              acordeón controlado del Micro (abierta/onAlternar)
   ficha/Campos.tsx               controles editables reutilizables
   ficha/Citas.tsx                editor compartido de citas y afirmaciones Macro/Meso
 lib/
@@ -159,9 +165,10 @@ docs/NUBE.md                     guía para activar la nube con cuenta propia
 
 ```text
 npm test              → 324 pruebas (106 + 14 + 38 + 11 + 31 + 11 + 24 + 17 + 11 + 5 + 3 + 2 + 8 + 5 + 5 + 3 + 4 + 3 + 13 + 10)
-impeccable detect     → [] sobre Citas, Marco, Meso, Secciones, Microcurriculo, Chat y page
+impeccable detect     → 1 advisory (text-[17px] fuera de rampa en Proyecto.tsx) → corregido a 16px como los h1 de ficha
 npx tsc --noEmit      → limpio
 npm run build         → correcto
+dev smoke             → GET / 200, compila 637 módulos sin errores
 API real Macro/Meso   → turnos conversacionales probados por HTTP; cierre SSE stop/[DONE]
 ```
 
@@ -177,7 +184,8 @@ La adición Macro/Meso **hereda** el mundo visual confirmado en [DESIGN.md](DESI
 - Al existir un documento: chat a la izquierda y ficha a la derecha, sin selectores visibles; el botón «+» del compositor concentra adjuntar PDF, nuevo documento y la lista de documentos, sin tercer riel.
 - Macro/Meso/Micro permiten varios documentos por proyecto: el menú «+» cambia el documento activo y «Nuevo documento» vuelve al inicio por chat, preservando lo anterior y sus hilos. Los PDF adjuntos viajan como evidencia citada por página; solo se integran PDFs de hasta 3 años.
 - **Modo oscuro** con toggle Oscuro/Claro en ambos modos: `darkMode: "class"` con tokens estructurales por variables CSS (el mismo marcado se adapta sin variantes `dark:`), preferencia en `designconia.tema` y respeto inicial a `prefers-color-scheme`; anti-parpadeo en el layout. El display usa **Georgia/Times** (serif formal; antes Palatino).
-- El encabezado concentra: tema, Catálogo, Clave IA, Nube, Respaldo/Restaurar JSON, exportaciones por nivel, expediente y plegar chat. Con un documento abierto aparece **«Diseñar documento»** (Fase 2).
+- El encabezado queda en cinco controles (contexto, estado IA, Diseñar documento, Proyecto, tema); copiar/exportar/respaldo/clave/nube viven en el espacio Proyecto. El punto de salud es botón solo cuando la clave falta o falla. «Conversación nueva» vive en el hub como «Empezar de cero», con su confirmación.
+- Cada ficha lleva **índice de secciones** (chips con estado ✓/•; la del foco IA con anillo Pebble) y **acordeón exclusivo** (una abierta a la vez; la IA la abre sola; la elección del docente se respeta hasta que cambia el foco). La trazabilidad Meso sigue siempre visible debajo.
 - **La interfaz no se ha inspeccionado visualmente en navegador**, incluidos el estudio de diseño y los paneles nuevos. Revisar al menos 375/768/1024/1280/1920 px, teclado/foco, arrastre alternativo con flechas, estados vacíos, guardado y scopes no compatibles.
 
 ## 7. Alcance que sigue fuera
@@ -225,6 +233,7 @@ npm run build
 14. Alta real de fuentes Macro pedidas por chat (deduplicadas; URL guardada como referencia sin verificar contenido) + check verde de Fuentes con conteo + colores explícitos de `option` en modo oscuro.
 15. Piloto unipersonal sin Vercel: clave IA propia por sesión (nunca en copias/logs), respaldo/restauración JSON validado, catálogo local con búsqueda insensible a tildes, duplicado con ids propios y marca de finalizado, y capa Supabase opcional (una fila por docente, RLS, enlace mágico) con guía en `docs/NUBE.md`. Sin variables Supabase, todo sigue local.
 16. Fase 2 de documento oficial: `lib/diseno.ts` (plantillas Carta/A4, kit de marca con validación y SVG sanitizado, bloques con ref al currículo, redacción local explícita, cuadrícula magnética por zona), estudio visual con vista previa paginada real, editor de propiedades e imágenes, y `lib/exportarDisenoPdf.ts` (PDF vectorial fiel: tamaños, negritas, colores, alineación, encabezado/pie con numeración, JPEG incrustado). Solo exportación PDF; expediente conjunto fuera del diseñador.
+17. Reordenación de la recolección en dos espacios: `page.tsx` conmuta `trabajo ↔ proyecto`; `components/Proyecto.tsx` reúne documento en trabajo, expediente, catálogo, respaldo/restaurar, nube, asistente/clave, apariencia y «Empezar de cero» (la destructiva «Conversación nueva» sale de los encabezados); `components/BotonTema.tsx` extraído para compartir; `ficha/Indice.tsx` genérico con estado por sección; acordeones controlados (`Seccion`/`SeccionMarco`/`SeccionMeso` reciben `abierta`/`onAlternar`) con apertura exclusiva y scroll a la sección elegida; las fichas preservan la elección del docente hasta que la IA cambia de foco. tsc + 324 pruebas + build verdes; detector con 1 advisory corregido; smoke dev GET 200.
 
 > Si cualquier sección histórica de este archivo o [PRODUCT.md](PRODUCT.md) aún describe un producto solo Micro, esta sección y el código reciente describen el estado actual; actualiza las discrepancias cuando corresponda.
 

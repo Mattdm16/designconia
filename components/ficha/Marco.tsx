@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Icono } from "@/components/Icono";
+import { IndiceSecciones } from "@/components/ficha/Indice";
 import { BotonMini, Campo, Rotulo } from "@/components/ficha/Campos";
 import { AfirmacionEditor } from "@/components/ficha/Citas";
 import {
@@ -44,19 +45,20 @@ function SeccionMarco({
   completa,
   activa,
   resumen,
+  abierta,
+  onAlternar,
   children
 }: {
   id: SeccionMacro;
   completa: boolean;
   activa: boolean;
   resumen: string;
+  /** true si esta sección es la abierta del acordeón. */
+  abierta: boolean;
+  /** Abre esta sección (o la cierra si ya era la abierta). */
+  onAlternar: () => void;
   children: React.ReactNode;
 }) {
-  const [abierta, setAbierta] = useState(activa);
-
-  useEffect(() => {
-    if (activa) setAbierta(true);
-  }, [activa]);
 
   return (
     <section
@@ -69,7 +71,7 @@ function SeccionMarco({
       <h2>
         <button
           type="button"
-          onClick={() => setAbierta((v) => !v)}
+          onClick={onAlternar}
           aria-expanded={abierta}
           className="flex w-full items-center gap-2.5 px-4 py-3 text-left"
         >
@@ -265,11 +267,28 @@ export function MarcoFicha({
   const enFoco =
     activa ?? (SECCIONES_PROGRESO.find((s) => !seccionMacroCompleta(marco, s)) as SeccionMacro | undefined) ?? null;
   const sinConfirmar = afirmacionesSinConfirmar(marco);
+  /* Acordeón exclusivo: una sola sección abierta. El asistente la cambia
+     cuando trabaja en otra; el docente elige desde el índice o el cabezal. */
+  const [abierta, setAbierta] = useState<SeccionMacro | null>(enFoco);
+  useEffect(() => {
+    if (activa !== null) setAbierta(activa);
+  }, [activa]);
+  function alternarSeccion(id: SeccionMacro) {
+    setAbierta((a) => (a === id ? null : id));
+  }
+  function elegirSeccion(id: SeccionMacro) {
+    setAbierta(id);
+    requestAnimationFrame(() => {
+      document.getElementById(`seccion-marco-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
 
   const conEstado = (id: SeccionMacro) => ({
     id,
     completa: seccionMacroCompleta(marco, id, fuentes.length),
     activa: enFoco === id,
+    abierta: abierta === id,
+    onAlternar: () => alternarSeccion(id),
     resumen: resumenSeccionMacro(marco, id, fuentes.length)
   });
 
@@ -316,6 +335,18 @@ export function MarcoFicha({
           </span>
         </div>
       </header>
+
+      {/* Índice de secciones: salta a cada parte sin recorrer el muro */}
+      <IndiceSecciones
+        titulo="Índice de secciones del marco"
+        entradas={ORDEN_DOCUMENTO.map((id) => ({
+          id,
+          etiqueta: ETIQUETA_SECCION_MACRO[id],
+          completa: seccionMacroCompleta(marco, id, fuentes.length),
+          enFoco: enFoco === id
+        }))}
+        onElegir={elegirSeccion}
+      />
 
       {sinConfirmar > 0 && (
         <div className="flex flex-wrap gap-2">

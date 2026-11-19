@@ -1,6 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import { Icono } from "@/components/Icono";
+import { IndiceSecciones } from "@/components/ficha/Indice";
 import { Seccion } from "@/components/ficha/Seccion";
 import {
   BibliografiaSeccion,
@@ -13,6 +16,7 @@ import {
   SecuenciaSeccion
 } from "@/components/ficha/Secciones";
 import {
+  ETIQUETA_SECCION,
   POR_DEFINIR,
   SECCIONES,
   actividadesSinInstrumento,
@@ -57,6 +61,21 @@ export function MicrocurriculoFicha({
 }) {
   const completas = seccionesCompletas(micro);
   const enFoco = activa ?? primeraIncompleta(micro);
+  /* Acordeón exclusivo: una sola sección abierta. El asistente la cambia
+     cuando trabaja en otra; el docente elige desde el índice o el cabezal. */
+  const [abierta, setAbierta] = useState<SeccionId | null>(enFoco);
+  useEffect(() => {
+    if (activa !== null) setAbierta(activa);
+  }, [activa]);
+  function alternarSeccion(id: SeccionId) {
+    setAbierta((a) => (a === id ? null : id));
+  }
+  function elegirSeccion(id: SeccionId) {
+    setAbierta(id);
+    requestAnimationFrame(() => {
+      document.getElementById(`seccion-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
   const total = totalPorcentaje(micro.evaluacion.cortes);
   const sinConfirmar = referenciasSinConfirmar(micro);
   const sinRa = unidadesSinResultados(micro);
@@ -69,6 +88,8 @@ export function MicrocurriculoFicha({
     id,
     completa: seccionCompleta(micro, id),
     activa: enFoco === id,
+    abierta: abierta === id,
+    onAlternar: () => alternarSeccion(id),
     resumen: resumenSeccion(micro, id)
   });
 
@@ -122,6 +143,18 @@ export function MicrocurriculoFicha({
           </span>
         </div>
       </header>
+
+      {/* Índice de secciones: salta a cada parte sin recorrer el muro */}
+      <IndiceSecciones
+        titulo="Índice de secciones del microcurrículo"
+        entradas={ORDEN_DOCUMENTO.map((id) => ({
+          id,
+          etiqueta: ETIQUETA_SECCION[id],
+          completa: seccionCompleta(micro, id),
+          enFoco: enFoco === id
+        }))}
+        onElegir={elegirSeccion}
+      />
 
       {/* Avisos globales: solo los que el docente necesita ver sin abrir nada */}
       {(micro.evaluacion.cortes.length > 0 && total !== 100) ||

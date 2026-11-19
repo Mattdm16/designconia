@@ -1,17 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
 import { Icono } from "@/components/Icono";
 import { DESCRIPCION_SECCION, ETIQUETA_SECCION, type SeccionId } from "@/lib/schema";
 
 /**
- * Contenedor de una sección del microcurrículo.
+ * Contenedor de una sección del microcurrículo. Es controlado: la ficha
+ * decide qué sección está abierta (acordeón exclusivo) y la abre sola cuando
+ * el asistente la está trabajando.
  *
  * El estado de la sección es visible sin abrirla: un check cuando está
  * cerrada y un punto cuando falta algo. La sección que el asistente está
- * trabajando queda abierta y con el trazo Sprout, que es la señal de «esto es
- * lo que está cambiando ahora».
+ * trabajando lleva el trazo Pebble, que es la señal de «esto es lo que está
+ * cambiando ahora».
  */
 export function Seccion({
   id,
@@ -19,6 +19,8 @@ export function Seccion({
   activa,
   resumen,
   extra,
+  abierta,
+  onAlternar,
   children
 }: {
   id: SeccionId;
@@ -27,14 +29,12 @@ export function Seccion({
   resumen: string;
   /** Contenido a la derecha de la cabecera (p. ej. la suma de porcentajes). */
   extra?: React.ReactNode;
+  /** true si esta sección es la abierta del acordeón. */
+  abierta: boolean;
+  /** Abre esta sección (o la cierra si ya era la abierta). */
+  onAlternar: () => void;
   children: React.ReactNode;
 }) {
-  const [abierta, setAbierta] = useState(activa);
-
-  // Si el asistente pasa a esta sección, se abre sola.
-  useEffect(() => {
-    if (activa) setAbierta(true);
-  }, [activa]);
 
   return (
     <section
@@ -47,7 +47,7 @@ export function Seccion({
       <h2>
         <button
           type="button"
-          onClick={() => setAbierta((v) => !v)}
+          onClick={onAlternar}
           aria-expanded={abierta}
           className="flex w-full items-center gap-2.5 px-4 py-3 text-left"
         >
