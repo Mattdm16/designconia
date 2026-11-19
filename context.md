@@ -164,10 +164,10 @@ docs/NUBE.md                     guía para activar la nube con cuenta propia
 
 ## 5. Verificación comprobada
 
-Último checkpoint: commit `5571e07` (espacios trabajo/proyecto + ficha compacta con índice) en la rama `feature/curricular-project-foundation`, **publicada en GitHub** (`Mattdm16/designconia`); el push llegó hasta ese commit y el árbol quedó limpio.
+Último checkpoint: commit `89001a1` (propuestas de diseño con IA y edición manual simplificada) en la rama `feature/curricular-project-foundation`, **publicada en GitHub** (`Mattdm16/designconia`); el push llegó hasta ese commit y el árbol quedó limpio.
 
 ```text
-npm test              → 324 pruebas (106 + 14 + 38 + 11 + 31 + 11 + 24 + 17 + 11 + 5 + 3 + 2 + 8 + 5 + 5 + 3 + 4 + 3 + 13 + 10)
+npm test              → 335 pruebas (106 + 14 + 38 + 11 + 31 + 11 + 24 + 17 + 11 + 5 + 3 + 2 + 8 + 5 + 5 + 3 + 4 + 3 + 13 + 10 + 11)
 impeccable detect     → 1 advisory (text-[17px] fuera de rampa en Proyecto.tsx) → corregido a 16px como los h1 de ficha
 npx tsc --noEmit      → limpio
 npm run build         → correcto
@@ -237,6 +237,7 @@ npm run build
 15. Piloto unipersonal sin Vercel: clave IA propia por sesión (nunca en copias/logs), respaldo/restauración JSON validado, catálogo local con búsqueda insensible a tildes, duplicado con ids propios y marca de finalizado, y capa Supabase opcional (una fila por docente, RLS, enlace mágico) con guía en `docs/NUBE.md`. Sin variables Supabase, todo sigue local.
 16. Fase 2 de documento oficial: `lib/diseno.ts` (plantillas Carta/A4, kit de marca con validación y SVG sanitizado, bloques con ref al currículo, redacción local explícita, cuadrícula magnética por zona), estudio visual con vista previa paginada real, editor de propiedades e imágenes, y `lib/exportarDisenoPdf.ts` (PDF vectorial fiel: tamaños, negritas, colores, alineación, encabezado/pie con numeración, JPEG incrustado). Solo exportación PDF; expediente conjunto fuera del diseñador.
 17. Reordenación de la recolección en dos espacios: `page.tsx` conmuta `trabajo ↔ proyecto`; `components/Proyecto.tsx` reúne documento en trabajo, expediente, catálogo, respaldo/restaurar, nube, asistente/clave, apariencia y «Empezar de cero» (la destructiva «Conversación nueva» sale de los encabezados); `components/BotonTema.tsx` extraído para compartir; `ficha/Indice.tsx` genérico con estado por sección; acordeones controlados (`Seccion`/`SeccionMarco`/`SeccionMeso` reciben `abierta`/`onAlternar`) con apertura exclusiva y scroll a la sección elegida; las fichas preservan la elección del docente hasta que la IA cambia de foco. tsc + 324 pruebas + build verdes; detector con 1 advisory corregido; smoke dev GET 200.
+18. Propuestas de diseño con IA + edición manual simplificada: `lib/propuestaDiseno.ts` (8 ops solo de apariencia/organización, parseo con reparación de JSON cortado, `aplicarPropuesta` pura con aplicados/rechazados y resumen legible; 11 pruebas), `lib/promptDiseno.ts` (system prompt con reglas duras, sin ciclos), `app/api/diseno/route.ts` (ruta separada del chat curricular, no-streaming, BYOK por cabecera, valida y nunca aplica: el cliente aplica). `Diseno.tsx`: entrada en dos caminos (proponer con IA o editar a mano), panel de propuesta con revisión Aplicar/Regenerar/Descartar, columna derecha reagrupada (Ajustes rápidos + Bloque + Avanzado con Documento y Marca). Verificado de extremo a extremo con clave real (ruta 200 + aplicar 0 rechazos) y ciclo completo en navegador headless (generar → revisar → descartar). tsc + 335 pruebas + build verdes; detector sin hallazgos nuevos.
 
 > Si cualquier sección histórica de este archivo o [PRODUCT.md](PRODUCT.md) aún describe un producto solo Micro, esta sección y el código reciente describen el estado actual; actualiza las discrepancias cuando corresponda.
 
