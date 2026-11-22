@@ -219,6 +219,13 @@ npm run build
 - No añadas secretos, fuentes institucionales inventadas ni nombres/códigos de programa inferidos.
 - Recuerda al docente que mensajes y extractos de PDF se procesan con su clave vía DeepSeek: sin datos personales de estudiantes durante las pruebas.
 
+### Subir a GitHub desde cualquier sesión
+
+- El remoto es `https://github.com/Mattdm16/designconia.git`, rama `feature/curricular-project-foundation`. La autenticación la pone Git Credential Manager con la credencial `git:https://github.com` del Administrador de credenciales de Windows: vive en la máquina, no en la sesión.
+- En esta misma máquina y con el mismo usuario de Windows no hay que configurar nada: `git push` sale solo. Verificar con `git ls-remote origin HEAD` (debe devolver un hash, sin mostrar secretos).
+- Si un push falla con 403 o pide credenciales, el token expiró o fue revocado: pedir al docente que genere un PAT con permiso `repo` (github.com → Settings → Developer settings → Personal access tokens) y lo actualice en Administrador de credenciales → Credenciales de Windows → `git:https://github.com` → Editar. Nunca pedir el token por chat ni guardarlo en el repo o en `.env`.
+- En otra máquina esa credencial no existe: ahí se crea un token nuevo (o `gh auth login`). Nada se copia de aquí para allá.
+
 ## 9. Historial resumido
 
 1. Se sustituyó el prototipo con IA simulada por el chat real con DeepSeek y streaming SSE.
