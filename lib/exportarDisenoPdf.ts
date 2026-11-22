@@ -19,7 +19,8 @@ import {
   type EstiloBloque,
   type FuenteDiseno,
   type PlantillaDiseno,
-  type TipoBloque
+  type TipoBloque,
+  type ZonaBloque
 } from "./diseno.ts";
 
 /* ------------------------------------------------------------------ */
@@ -113,12 +114,12 @@ function factorAncho(fuente: FuenteDiseno, negrita: boolean): number {
 /* ------------------------------------------------------------------ */
 
 export type ElementoPdf =
-  | { kind: "texto"; texto: string; estilo: EstiloResuelto }
-  | { kind: "lista"; items: { texto: string; estilo: EstiloResuelto }[] }
-  | { kind: "imagen"; imagenId: string; estilo: EstiloResuelto }
-  | { kind: "regla"; estilo: EstiloResuelto }
-  | { kind: "espacio"; altoPt: number }
-  | { kind: "salto" };
+  | { kind: "texto"; texto: string; estilo: EstiloResuelto; bloqueId: string | null; zona: ZonaBloque | null }
+  | { kind: "lista"; items: { texto: string; estilo: EstiloResuelto }[]; bloqueId: string | null; zona: ZonaBloque | null }
+  | { kind: "imagen"; imagenId: string; estilo: EstiloResuelto; bloqueId: string | null; zona: ZonaBloque | null }
+  | { kind: "regla"; estilo: EstiloResuelto; bloqueId: string | null; zona: ZonaBloque | null }
+  | { kind: "espacio"; altoPt: number; bloqueId: string | null; zona: ZonaBloque | null }
+  | { kind: "salto"; bloqueId: string | null; zona: ZonaBloque | null };
 
 /**
  * Convierte los bloques visibles en elementos de flujo con estilos
@@ -134,18 +135,19 @@ export function bloquesAElementos(
   for (const b of diseno.bloques) {
     if (!b.visible) continue;
     const estilo = resolverEstilo(b.tipo, plantilla, b.estilo);
+    const marca = { bloqueId: b.id, zona: b.zona } as const;
     switch (b.tipo) {
       case "salto":
-        salida.push({ kind: "salto" });
+        salida.push({ kind: "salto", ...marca });
         break;
       case "espacio":
-        salida.push({ kind: "espacio", altoPt: 12 });
+        salida.push({ kind: "espacio", altoPt: 12, ...marca });
         break;
       case "regla":
-        salida.push({ kind: "regla", estilo });
+        salida.push({ kind: "regla", estilo, ...marca });
         break;
       case "imagen":
-        if (b.activoId) salida.push({ kind: "imagen", imagenId: b.activoId, estilo });
+        if (b.activoId) salida.push({ kind: "imagen", imagenId: b.activoId, estilo, ...marca });
         break;
       case "lista":
       case "tabla": {
@@ -153,14 +155,15 @@ export function bloquesAElementos(
         if (lineas.length === 0) break;
         salida.push({
           kind: "lista",
-          items: lineas.map((texto) => ({ texto, estilo }))
+          items: lineas.map((texto) => ({ texto, estilo })),
+          ...marca
         });
         break;
       }
       default: {
         const lineas = resolverTextoBloque(b, datos);
         for (const texto of lineas) {
-          if (texto) salida.push({ kind: "texto", texto, estilo });
+          if (texto) salida.push({ kind: "texto", texto, estilo, ...marca });
         }
         break;
       }
@@ -247,11 +250,21 @@ export type LineaPaginada = {
   estilo: EstiloResuelto;
   esViñeta?: boolean;
   conservarConSiguiente?: boolean;
+  /** Bloque de origen (para resaltar la selección en la vista previa). */
+  bloqueId?: string | null;
+  zona?: ZonaBloque | null;
+};
+
+export type ImagenPaginada = {
+  imagenId: string;
+  altoPt: number;
+  bloqueId?: string | null;
+  zona?: ZonaBloque | null;
 };
 
 export type PaginaPaginada = {
   lineas: LineaPaginada[];
-  imagenes: { imagenId: string; altoPt: number }[];
+  imagenes: ImagenPaginada[];
 };
 
 export type ImagenLista = { bytes: Uint8Array; ancho: number; alto: number };
@@ -272,15 +285,15 @@ export function paginar(
   const altoUtil = geo.alto - geo.margenSup - geo.margenInf - reservaSupPt - reservaInfPt;
 
   type Unidad =
-    | { tipo: "lineas"; lineas: LineaPaginada[]; alto: number; pegajoso: boolean }
-    | { tipo: "imagen"; imagenId: string; alto: number }
-    | { tipo: "regla"; alto: number };
+    | { tipo: "lineas"; lineas: LineaPaginada[]; alto: number; pegajoso: boolean; bloqueId: string | null; zona: ZonaBloque | null }
+    | { tipo: "imagen"; imagenId: string; alto: number; bloqueId: string | null; zona: ZonaBloque | null }
+    | { tipo: "regla"; alto: number; bloqueId: string | null; zona: ZonaBloque | null };
 
   const unidades: Unidad[] = [];
   for (let i = 0; i < elementos.length; i++) {
     const el = elementos[i];
     if (el.kind === "salto") {
-      unidades.push({ tipo: "lineas", lineas: [], alto: 0, pegajoso: false });
+      unidades.push({ tipo: "lineas", lineas: [], alto: 0, pegajoso: false, bloqueId: el.bloqueId, zona: el.zona });
       // Marcador interno: altura 0 + bandera de salto mediante líneas vacías.
       (unidades[unidades.length - 1] as { salto?: boolean }).salto = true;
       continue;
@@ -288,14 +301,16 @@ export function paginar(
     if (el.kind === "espacio") {
       unidades.push({
         tipo: "lineas",
-        lineas: [{ texto: "", estilo: { ...ESTILO_BASE } }],
+        lineas: [{ texto: "", estilo: { ...ESTILO_BASE }, bloqueId: el.bloqueId, zona: el.zona }],
         alto: el.altoPt,
-        pegajoso: false
+        pegajoso: false,
+        bloqueId: el.bloqueId,
+        zona: el.zona
       });
       continue;
     }
     if (el.kind === "regla") {
-      unidades.push({ tipo: "regla", alto: 14 });
+      unidades.push({ tipo: "regla", alto: 14, bloqueId: el.bloqueId, zona: el.zona });
       continue;
     }
     if (el.kind === "imagen") {
@@ -304,7 +319,7 @@ export function paginar(
       if (info && info.ancho > 0 && info.alto > 0) {
         alto = Math.min((anchoUtil * info.alto) / info.ancho, altoUtil);
       }
-      unidades.push({ tipo: "imagen", imagenId: el.imagenId, alto });
+      unidades.push({ tipo: "imagen", imagenId: el.imagenId, alto, bloqueId: el.bloqueId, zona: el.zona });
       continue;
     }
     if (el.kind === "lista") {
@@ -317,7 +332,9 @@ export function paginar(
           lineas.push({
             texto: j === 0 ? texto : `  ${texto}`,
             estilo: e,
-            esViñeta: j === 0
+            esViñeta: j === 0,
+            bloqueId: el.bloqueId,
+            zona: el.zona
           })
         );
         void altoLinea;
@@ -325,7 +342,7 @@ export function paginar(
       // Altura real por línea (puede variar si hubiera estilos mixtos).
       let alto = 0;
       for (const l of lineas) alto += l.estilo.tamanoPt * l.estilo.interlineado;
-      unidades.push({ tipo: "lineas", lineas, alto, pegajoso: false });
+      unidades.push({ tipo: "lineas", lineas, alto, pegajoso: false, bloqueId: el.bloqueId, zona: el.zona });
       continue;
     }
     // kind === "texto"
@@ -334,9 +351,11 @@ export function paginar(
     const esTitulo = el.texto.length > 0;
     unidades.push({
       tipo: "lineas",
-      lineas: envueltas.map((texto) => ({ texto, estilo: el.estilo })),
+      lineas: envueltas.map((texto) => ({ texto, estilo: el.estilo, bloqueId: el.bloqueId, zona: el.zona })),
       alto: altoLinea * envueltas.length,
-      pegajoso: esTitulo
+      pegajoso: esTitulo,
+      bloqueId: el.bloqueId,
+      zona: el.zona
     });
   }
 
@@ -361,11 +380,13 @@ export function paginar(
       if (u.tipo === "regla") {
         actual.lineas.push({
           texto: "__REGLA__",
-          estilo: { ...ESTILO_BASE }
+          estilo: { ...ESTILO_BASE },
+          bloqueId: u.bloqueId,
+          zona: u.zona
         });
         restante -= u.alto;
       } else {
-        actual.imagenes.push({ imagenId: u.imagenId, altoPt: u.alto });
+        actual.imagenes.push({ imagenId: u.imagenId, altoPt: u.alto, bloqueId: u.bloqueId, zona: u.zona });
         restante -= u.alto;
       }
       continue;

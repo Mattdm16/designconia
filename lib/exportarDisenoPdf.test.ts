@@ -105,6 +105,22 @@ prueba("bloquesAElementos resuelve, ordena y salta invisibles", () => {
   assert(textos.some((t) => t.includes("Álgebra")), "título resuelto del currículo");
 });
 
+prueba("bloquesAElementos etiqueta cada elemento con su bloque y zona", () => {
+  const d = disenoPorDefecto("micro", "a1", "Álgebra");
+  const els = bloquesAElementos(d, PLANTILLA, microDatos());
+  assert(els.length > 0, "hay elementos");
+  for (const e of els) {
+    assert(typeof e.bloqueId === "string" && e.bloqueId.length > 0, "todo elemento trae bloqueId");
+    assert(e.zona === "portada" || e.zona === "encabezado" || e.zona === "cuerpo" || e.zona === "pie", "zona válida");
+  }
+  const fuente = d.bloques.find((b) => b.refContenido === "micro.justificacion")!;
+  const propios = els.filter((e) => e.bloqueId === fuente.id);
+  assert(propios.length > 0, "el bloque de justificación genera elementos propios");
+  const paginas = paginar(els, geometria(), 0, 0);
+  const lineas = paginas.flatMap((p) => p.lineas);
+  assert(lineas.some((l) => l.bloqueId === fuente.id && l.zona === fuente.zona), "la paginación conserva bloqueId y zona");
+});
+
 prueba("paginar conserva títulos con su contenido", () => {
   const geo = geometria();
   const estilo = resolverEstilo("parrafo", PLANTILLA, {});
@@ -112,10 +128,10 @@ prueba("paginar conserva títulos con su contenido", () => {
   const relleno: ElementoPdf[] = [];
   // Llena más de una página para forzar el corte junto al título.
   for (let i = 0; i < 60; i++) {
-    relleno.push({ kind: "texto", texto: `Línea de relleno número ${i} con contenido suficiente`, estilo });
+    relleno.push({ kind: "texto", texto: `Línea de relleno número ${i} con contenido suficiente`, estilo, bloqueId: null, zona: null });
   }
-  relleno.push({ kind: "texto", texto: "Título al borde", estilo: estiloTitulo });
-  relleno.push({ kind: "texto", texto: "Contenido del título que debe ir con él", estilo });
+  relleno.push({ kind: "texto", texto: "Título al borde", estilo: estiloTitulo, bloqueId: null, zona: null });
+  relleno.push({ kind: "texto", texto: "Contenido del título que debe ir con él", estilo, bloqueId: null, zona: null });
   const paginas = paginar(relleno, geo, 0, 0);
   assert(paginas.length >= 2, "hay más de una página");
   const ultima = paginas[paginas.length - 1];
@@ -131,10 +147,10 @@ prueba("paginar respeta saltos e imágenes", () => {
   const geo = geometria();
   const estilo = resolverEstilo("parrafo", PLANTILLA, {});
   const els: ElementoPdf[] = [
-    { kind: "texto", texto: "Arriba", estilo },
-    { kind: "salto" },
-    { kind: "texto", texto: "Abajo", estilo },
-    { kind: "imagen", imagenId: "logo", estilo }
+    { kind: "texto", texto: "Arriba", estilo, bloqueId: null, zona: null },
+    { kind: "salto", bloqueId: null, zona: null },
+    { kind: "texto", texto: "Abajo", estilo, bloqueId: null, zona: null },
+    { kind: "imagen", imagenId: "logo", estilo, bloqueId: null, zona: null }
   ];
   const imgs = new Map([["logo", { bytes: new Uint8Array([1, 2, 3]), ancho: 400, alto: 200 }]]);
   const paginas = paginar(els, geo, 0, 0, imgs);

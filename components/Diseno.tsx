@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { BotonMini } from "@/components/ficha/Campos";
 import { Icono } from "@/components/Icono";
@@ -13,6 +13,7 @@ import {
   disenoPorDefecto,
   esSvgSeguro,
   establecerTextoLocal,
+  ETIQUETA_ZONA,
   moverBloque,
   moverBloqueAZona,
   PLANTILLAS_BASE,
@@ -31,6 +32,7 @@ import {
   type FuenteDiseno,
   type NivelDiseno,
   type OrientacionPagina,
+  type PaginaDiseno,
   type TamanoPagina,
   type TipoActivo,
   type TipoBloque,
@@ -138,6 +140,9 @@ export function DisenoEstudio({
   const [kit, setKit] = useState<BrandKit>(() => proyecto.brandKits?.[0] ?? brandKitPorDefecto());
   const [kitId] = useState(() => kit.id);
   const [seleccionado, setSeleccionado] = useState<string | null>(null);
+  /* Overlay de zonas del papel sobre la vista previa (no sale en el PDF). */
+  const [verZonas, setVerZonas] = useState(false);
+  const vistaRefs = useRef(new Map<string, HTMLDivElement>());
   const [exportando, setExportando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const inputActivoRef = useRef<HTMLInputElement | null>(null);
@@ -253,6 +258,21 @@ export function DisenoEstudio({
     setAnterior(null);
     setMensajePropuesta(null);
     setResumenPropuesta(null);
+  }
+
+  /* -------- selección sincronizada estructura <-> vista previa -------- */
+  function desplazarA(id: string, mapa: Map<string, HTMLDivElement>) {
+    mapa.get(id)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function elegirEnEstructura(id: string) {
+    setSeleccionado(id);
+    desplazarA(id, vistaRefs.current);
+  }
+
+  function elegirEnVista(id: string) {
+    setSeleccionado(id);
+    document.getElementById(`estructura-${id}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
   function descartarPropuesta() {
@@ -423,7 +443,11 @@ export function DisenoEstudio({
         <EntradaEstudio
           nombreDoc={nombreDoc}
           plantillaElegida={plantillaElegida}
-          onPlantilla={setPlantillaElegida}
+          onElegirBase={(id) => {
+            if (id !== diseno.plantillaId) cambiarPlantilla(id);
+            setPlantillaElegida(id);
+            setEntrada("estudio");
+          }}
           instruccion={instruccion}
           onInstruccion={setInstruccion}
           generando={generando}
@@ -444,6 +468,8 @@ export function DisenoEstudio({
             setPanelIA(true);
             void generarPropuestaCon(base, kit);
           }}
+          continuar={existente !== null}
+          onContinuar={() => setEntrada("estudio")}
           onManual={() => setEntrada("estudio")}
           onVolver={onVolver}
         />
@@ -464,6 +490,7 @@ export function DisenoEstudio({
                 {zonas[zona].map((b, i, arr) => (
                   <li
                     key={b.id}
+                    id={`estructura-${b.id}`}
                     draggable
                     onDragStart={(e) => e.dataTransfer.setData("text/plain", b.id)}
                     onDragOver={(e) => e.preventDefault()}
@@ -489,7 +516,7 @@ export function DisenoEstudio({
                   >
                     <button
                       type="button"
-                      onClick={() => setSeleccionado(b.id)}
+                      onClick={() => elegirEnEstructura(b.id)}
                       className="min-w-0 flex-1 truncate text-left text-[12px]"
                       title="Editar propiedades"
                     >
@@ -535,6 +562,26 @@ export function DisenoEstudio({
 
         {/* Vista previa */}
         <section aria-label="Vista previa" className="min-h-0 overflow-y-auto rounded-[18px] border border-white/60 bg-black/[0.04] p-4">
+          <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <label className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-black/70">
+              <input
+                type="checkbox"
+                checked={verZonas}
+                onChange={(e) => setVerZonas(e.target.checked)}
+              />
+              Ver zonas del papel
+            </label>
+            {verZonas && (
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10.5px] text-black/55" aria-hidden="true">
+                {(Object.keys(COLOR_ZONA) as ZonaBloque[]).map((z) => (
+                  <span key={z} className="inline-flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: COLOR_ZONA[z] }} />
+                    {ETIQUETA_ZONA[z]}
+                  </span>
+                ))}
+              </span>
+            )}
+          </div>
           <div className="mx-auto flex w-fit flex-col items-center gap-4">
             {vistaPrevia.paginas.map((pagina, i) => (
               <PaginaPrevia
@@ -545,6 +592,14 @@ export function DisenoEstudio({
                 kit={kit}
                 numero={i + 1}
                 total={vistaPrevia.paginas.length}
+                bloques={diseno.bloques}
+                seleccionado={seleccionado}
+                verZonas={verZonas}
+                onSeleccionar={elegirEnVista}
+                registrarRef={(id, el) => {
+                  if (el) vistaRefs.current.set(id, el);
+                  else vistaRefs.current.delete(id);
+                }}
               />
             ))}
           </div>
@@ -695,18 +750,72 @@ function PaginaPrevia({
   diseno,
   kit,
   numero,
-  total
+  total,
+  bloques,
+  seleccionado,
+  verZonas,
+  onSeleccionar,
+  registrarRef
 }: {
-  pagina: { lineas: { texto: string; estilo: { fuente: FuenteDiseno; tamanoPt: number; negrita: boolean; cursiva: boolean; color: [number, number, number]; alineacion: AlineacionTexto; interlineado: number; espacioAntesPt: number; espacioDespuesPt: number } }[]; imagenes: { imagenId: string; altoPt: number }[] };
+  pagina: { lineas: { texto: string; estilo: { fuente: FuenteDiseno; tamanoPt: number; negrita: boolean; cursiva: boolean; color: [number, number, number]; alineacion: AlineacionTexto; interlineado: number; espacioAntesPt: number; espacioDespuesPt: number }; bloqueId?: string | null; zona?: ZonaBloque | null }[]; imagenes: { imagenId: string; altoPt: number; bloqueId?: string | null; zona?: ZonaBloque | null }[] };
   geo: { ancho: number; alto: number; margenIzq: number; margenDer: number; margenSup: number; margenInf: number };
   diseno: DisenoDocumento;
   kit: BrandKit;
   numero: number;
   total: number;
+  bloques: BloqueDiseno[];
+  seleccionado: string | null;
+  verZonas: boolean;
+  onSeleccionar: (id: string) => void;
+  registrarRef: (id: string, el: HTMLDivElement | null) => void;
 }) {
   const familia = (f: FuenteDiseno) =>
     f === "serif" ? "Georgia, 'Times New Roman', serif" : f === "mono" ? "ui-monospace, Menlo, monospace" : "system-ui, sans-serif";
   const rgb = (c: [number, number, number]) => `rgb(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)})`;
+  const porId = new Map(bloques.map((b) => [b.id, b]));
+  const etiquetaGrupo = (id: string | null | undefined) => {
+    if (!id) return null;
+    const b = porId.get(id);
+    if (!b) return null;
+    return `${ETIQUETA_ZONA[b.zona] ?? b.zona} · ${etiquetaBloque(b)}`;
+  };
+  // Agrupa líneas consecutivas del mismo bloque (un bloque puede partirse entre páginas).
+  const grupos: { bloqueId: string | null; zona: ZonaBloque | null; lineas: { idx: number }[] }[] = [];
+  pagina.lineas.forEach((l, idx) => {
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo && ultimo.bloqueId === (l.bloqueId ?? null)) ultimo.lineas.push({ idx });
+    else grupos.push({ bloqueId: l.bloqueId ?? null, zona: l.zona ?? null, lineas: [{ idx }] });
+  });
+  const estiloGrupo = (bloqueId: string | null, zona: ZonaBloque | null): CSSProperties => {
+    if (bloqueId && bloqueId === seleccionado) {
+      return { outline: "2px solid #7E7B62", outlineOffset: 1, borderRadius: 4, cursor: "pointer" };
+    }
+    if (verZonas && zona) {
+      return { borderLeft: `1px solid ${COLOR_ZONA[zona]}`, backgroundColor: `${COLOR_ZONA[zona]}14`, paddingLeft: 6, borderRadius: 2, cursor: "pointer" };
+    }
+    return { cursor: "pointer" };
+  };
+  const chipGrupo = (bloqueId: string | null) => {
+    if (!bloqueId) return null;
+    const etiqueta = etiquetaGrupo(bloqueId);
+    if (!etiqueta) return null;
+    const marcado = bloqueId === seleccionado;
+    if (!verZonas && !marcado) return null;
+    const b = porId.get(bloqueId);
+    return (
+      <span
+        className={`mb-0.5 inline-flex items-center gap-1 rounded-full px-1.5 py-px font-sans text-[10px] font-semibold uppercase tracking-wider leading-none ${
+          marcado ? "bg-sow text-papel" : "bg-black/[0.05] text-black/60"
+        }`}
+      >
+        <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: b ? COLOR_ZONA[b.zona] : undefined }} />
+        {etiqueta}
+      </span>
+    );
+  };
+  const activar = (bloqueId: string | null) => {
+    if (bloqueId) onSeleccionar(bloqueId);
+  };
   return (
     <div
       className="relative shrink-0 overflow-hidden bg-white shadow-tarjeta"
@@ -731,41 +840,84 @@ function PaginaPrevia({
           bottom: geo.margenInf + (diseno.pieTexto.trim() || diseno.mostrarNumeroPagina ? 26 : 0)
         }}
       >
-        {pagina.lineas.map((l, i) =>
-          l.texto === "__REGLA__" ? (
-            <hr key={i} className="my-1 border-black/20" />
-          ) : (
-            <div
-              key={i}
-              style={{
-                fontFamily: familia(l.estilo.fuente),
-                fontSize: l.estilo.tamanoPt,
-                fontWeight: l.estilo.negrita ? 700 : 400,
-                fontStyle: l.estilo.cursiva ? "italic" : "normal",
-                color: rgb(l.estilo.color),
-                textAlign:
-                  l.estilo.alineacion === "centrado"
-                    ? "center"
-                    : l.estilo.alineacion === "derecha"
-                      ? "right"
-                      : "left",
-                lineHeight: l.estilo.interlineado,
-                marginTop: l.estilo.espacioAntesPt,
-                marginBottom: l.estilo.espacioDespuesPt,
-                minHeight: l.texto ? undefined : l.estilo.tamanoPt * 0.6,
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word"
-              }}
-            >
-              {l.texto || "\u00a0"}
-            </div>
-          )
-        )}
+        {grupos.map((g, gi) => (
+          <div
+            key={gi}
+            ref={g.bloqueId ? (el) => registrarRef(g.bloqueId as string, el) : undefined}
+            onClick={() => activar(g.bloqueId)}
+            onKeyDown={(e) => {
+              if ((e.key === "Enter" || e.key === " ") && g.bloqueId) {
+                e.preventDefault();
+                activar(g.bloqueId);
+              }
+            }}
+            role={g.bloqueId ? "button" : undefined}
+            tabIndex={g.bloqueId ? 0 : undefined}
+            aria-label={g.bloqueId ? `Seleccionar bloque: ${etiquetaGrupo(g.bloqueId) ?? g.bloqueId}` : undefined}
+            title={g.bloqueId ? `Bloque: ${etiquetaGrupo(g.bloqueId) ?? g.bloqueId}` : undefined}
+            style={estiloGrupo(g.bloqueId, g.zona)}
+          >
+            {chipGrupo(g.bloqueId)}
+            {g.lineas.map(({ idx }) => {
+              const l = pagina.lineas[idx];
+              return l.texto === "__REGLA__" ? (
+                <hr key={idx} className="my-1 border-black/20" />
+              ) : (
+                <div
+                  key={idx}
+                  style={{
+                    fontFamily: familia(l.estilo.fuente),
+                    fontSize: l.estilo.tamanoPt,
+                    fontWeight: l.estilo.negrita ? 700 : 400,
+                    fontStyle: l.estilo.cursiva ? "italic" : "normal",
+                    color: rgb(l.estilo.color),
+                    textAlign:
+                      l.estilo.alineacion === "centrado"
+                        ? "center"
+                        : l.estilo.alineacion === "derecha"
+                          ? "right"
+                          : "left",
+                    lineHeight: l.estilo.interlineado,
+                    marginTop: l.estilo.espacioAntesPt,
+                    marginBottom: l.estilo.espacioDespuesPt,
+                    minHeight: l.texto ? undefined : l.estilo.tamanoPt * 0.6,
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word"
+                  }}
+                >
+                  {l.texto || "\u00a0"}
+                </div>
+              );
+            })}
+          </div>
+        ))}
         {pagina.imagenes.map((im) => {
           const activo = kit.activos.find((a) => a.id === im.imagenId);
           if (!activo) return null;
           return (
-            <div key={im.imagenId} style={{ textAlign: "center", margin: "6px 0" }}>
+            <div
+              key={im.imagenId}
+              ref={im.bloqueId ? (el) => registrarRef(im.bloqueId as string, el) : undefined}
+              onClick={() => activar(im.bloqueId ?? null)}
+              onKeyDown={(e) => {
+                if ((e.key === "Enter" || e.key === " ") && im.bloqueId) {
+                  e.preventDefault();
+                  activar(im.bloqueId);
+                }
+              }}
+              role={im.bloqueId ? "button" : undefined}
+              tabIndex={im.bloqueId ? 0 : undefined}
+              aria-label={im.bloqueId ? `Seleccionar bloque: ${etiquetaGrupo(im.bloqueId) ?? im.bloqueId}` : undefined}
+              title={im.bloqueId ? `Bloque: ${etiquetaGrupo(im.bloqueId) ?? im.bloqueId}` : undefined}
+              style={{
+                textAlign: "center",
+                margin: "6px 0",
+                ...(im.bloqueId
+                  ? estiloGrupo(im.bloqueId, im.zona ?? null)
+                  : { cursor: "default" as const })
+              }}
+            >
+              {chipGrupo(im.bloqueId ?? null)}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={activo.dataUrl}
@@ -1241,52 +1393,135 @@ function MarcaKit({
 /* Entrada al estudio: proponer con IA o editar a mano                 */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/* Esquema de zonas del papel (miniatura de plantilla)                   */
+/* ------------------------------------------------------------------ */
+
+const COLOR_ZONA: Record<ZonaBloque, string> = {
+  portada: "#B25D3E",
+  encabezado: "#6B4A6E",
+  cuerpo: "#728B83",
+  pie: "#7E7B62"
+};
+
+/** Miniatura del papel que muestra dónde cae cada zona: Portada, Encabezado, Cuerpo y Pie. */
+function EsquemaZonas({ pagina, alto }: { pagina: PaginaDiseno; alto?: number }) {
+  const horizontal = pagina.orientacion === "horizontal";
+  const bandas: { zona: ZonaBloque; peso: number }[] = [
+    { zona: "portada", peso: 3 },
+    { zona: "encabezado", peso: 1 },
+    { zona: "cuerpo", peso: 6 },
+    { zona: "pie", peso: 1 }
+  ];
+  return (
+    <div
+      aria-hidden="true"
+      className="flex overflow-hidden rounded-md border border-black/15 bg-white"
+      style={{ height: alto ?? 120, aspectRatio: horizontal ? "1.29" : "0.78" }}
+    >
+      <div className="flex w-full flex-col">
+        {bandas.map(({ zona, peso }) => (
+          <div
+            key={zona}
+            className="flex min-h-0 flex-1 items-center justify-center"
+            style={{ flexGrow: peso, backgroundColor: `${COLOR_ZONA[zona]}22`, borderTop: `1px solid ${COLOR_ZONA[zona]}55` }}
+          >
+            <span className="font-mono text-[10px] font-semibold uppercase leading-none tracking-wider" style={{ color: COLOR_ZONA[zona] }}>
+              {zona === "portada" ? "Portada" : zona === "encabezado" ? "Enc." : zona === "cuerpo" ? "Cuerpo" : "Pie"}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Entrada al estudio: galería, IA o continuar                         */
+/* ------------------------------------------------------------------ */
+
 function EntradaEstudio({
   nombreDoc,
   plantillaElegida,
-  onPlantilla,
+  onElegirBase,
   instruccion,
   onInstruccion,
   generando,
   onGenerar,
+  continuar,
+  onContinuar,
   onManual,
   onVolver
 }: {
   nombreDoc: string;
   plantillaElegida: string;
-  onPlantilla: (id: string) => void;
+  /** Elige la base (actualiza el borrador) y entra al editor. */
+  onElegirBase: (id: string) => void;
   instruccion: string;
   onInstruccion: (t: string) => void;
   generando: boolean;
   onGenerar: () => void;
+  /** true si ya hay un diseño guardado para continuar. */
+  continuar: boolean;
+  onContinuar: () => void;
   onManual: () => void;
   onVolver: () => void;
 }) {
   return (
-    <div className="mx-auto grid w-full max-w-[880px] flex-1 content-center gap-3 md:grid-cols-2">
+    <div className="mx-auto grid w-full max-w-[980px] flex-1 content-start gap-3 overflow-y-auto">
       <section
-        aria-label="Proponer diseño con IA"
+        aria-label="Plantillas listas"
         className="rounded-[18px] border border-white/60 bg-crema/95 p-4 shadow-tarjeta"
       >
-        <h2 className="font-display text-[15px] font-semibold tracking-tight">Proponer con IA</h2>
+        <h2 className="font-display text-[15px] font-semibold tracking-tight">Elige una plantilla</h2>
         <p className="mt-1 text-[12px] leading-relaxed text-black/60">
-          Elige una base y descríbelo en una frase. La IA propone cambios de apariencia y
-          organización; nada se aplica sin tu visto bueno.
+          Cada miniatura muestra qué zona del papel ocupa cada parte: Portada, Encabezado, Cuerpo y Pie.
+          Al elegirla verás el documento con esa base antes de editar.
         </p>
-        <label className="mt-2 block text-[11px] font-medium text-black/60">
-          Plantilla base
-          <select
-            value={plantillaElegida}
-            onChange={(e) => onPlantilla(e.target.value)}
-            className="mt-0.5 w-full rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[12px] focus:outline-none"
-          >
-            {PLANTILLAS_BASE.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nombre} — {p.descripcion}
-              </option>
-            ))}
-          </select>
-        </label>
+        <ul className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {PLANTILLAS_BASE.map((p) => {
+            const activa = p.id === plantillaElegida;
+            return (
+              <li
+                key={p.id}
+                className={`flex flex-col items-center gap-1.5 rounded-xl border bg-white p-2.5 text-center transition-colors ${
+                  activa ? "border-pebble/60 ring-1 ring-pebble/30" : "border-black/10"
+                }`}
+              >
+                <EsquemaZonas pagina={p.pagina} />
+                <span className="font-display text-[13px] font-semibold tracking-tight">{p.nombre}</span>
+                <span className="text-[11px] leading-snug text-black/55">{p.descripcion}</span>
+                <span className="font-mono text-[10px] uppercase tabular-nums text-black/40">
+                  {p.pagina.tamano} · {p.pagina.orientacion === "horizontal" ? "horizontal" : "vertical"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onElegirBase(p.id)}
+                  aria-pressed={activa}
+                  className={`mt-0.5 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium ${
+                    activa
+                      ? "bg-sow text-papel"
+                      : "border border-black/10 bg-white hover:border-black/25"
+                  }`}
+                >
+                  {activa ? "Base elegida · Entrar" : "Usar esta base"}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
+      <div className="grid gap-3 md:grid-cols-2">
+      <section
+        aria-label="Crear con IA"
+        className="rounded-[18px] border border-white/60 bg-crema/95 p-4 shadow-tarjeta"
+      >
+        <h2 className="font-display text-[15px] font-semibold tracking-tight">Crear con IA</h2>
+        <p className="mt-1 text-[12px] leading-relaxed text-black/60">
+          Parte de la base elegida y descríbelo en una frase. La IA propone cambios de apariencia
+          y organización; nada se aplica sin tu visto bueno.
+        </p>
         <label className="mt-2 block text-[11px] font-medium text-black/60">
           Cómo quieres el documento
           <textarea
@@ -1309,22 +1544,37 @@ function EntradaEstudio({
       </section>
 
       <section
-        aria-label="Editar a mano"
+        aria-label="Seguir editando"
         className="rounded-[18px] border border-white/60 bg-crema/95 p-4 shadow-tarjeta"
       >
-        <h2 className="font-display text-[15px] font-semibold tracking-tight">Editar a mano</h2>
+        <h2 className="font-display text-[15px] font-semibold tracking-tight">
+          {continuar ? "Continuar mi diseño" : "Editar a mano"}
+        </h2>
         <p className="mt-1 text-[12px] leading-relaxed text-black/60">
-          Ajusta lo esencial con controles sencillos: página, estilo, marca y orden. El
-          documento base de «{nombreDoc}» ya trae sus bloques listos.
+          {continuar
+            ? "Retoma el diseño guardado de «" + nombreDoc + "» tal como quedó, con sus bloques y ajustes."
+            : "Ajusta lo esencial con controles sencillos: página, estilo, marca y orden. El documento base de «" +
+              nombreDoc +
+              "» ya trae sus bloques listos."}
         </p>
         <div className="mt-3 flex flex-wrap gap-1.5">
-          <button
-            type="button"
-            onClick={onManual}
-            className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
-          >
-            Abrir el editor
-          </button>
+          {continuar ? (
+            <button
+              type="button"
+              onClick={onContinuar}
+              className="inline-flex items-center gap-1.5 rounded-full bg-sow px-3 py-1.5 text-xs font-medium text-papel hover:bg-black"
+            >
+              Continuar diseñando
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onManual}
+              className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-medium hover:border-black/25"
+            >
+              Abrir el editor
+            </button>
+          )}
           <button
             type="button"
             onClick={onVolver}
@@ -1334,6 +1584,7 @@ function EntradaEstudio({
           </button>
         </div>
       </section>
+      </div>
     </div>
   );
 }
@@ -1411,7 +1662,8 @@ function PanelDisenoIA({
         </div>
       ) : (
         <div>
-          {mensaje && <p className="text-[12.5px] leading-relaxed text-black/75">{mensaje}</p>}
+          <h3 className="font-display text-[13px] font-semibold tracking-tight">Esto entendí</h3>
+          {mensaje && <p className="mt-0.5 text-[12.5px] leading-relaxed text-black/75">{mensaje}</p>}
           {resumen && resumen.length > 0 && (
             <ul className="mt-1.5 space-y-1">
               {resumen.map((r, i) => (

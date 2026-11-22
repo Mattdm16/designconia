@@ -47,7 +47,7 @@
 | Respaldo del proyecto | **Implementado**: botones Respaldo/Restaurar; JSON validado con el mismo guard V3 (archivo corrupto o ajeno se rechaza sin tocar nada); restaurar pide confirmación. | Sin inspección visual en navegador. |
 | Nube opcional (Supabase) | **Implementado el código completo**: sesión por enlace mágico, subir/bajar proyecto (una fila por docente, RLS por propietario), migración SQL y guía en [docs/NUBE.md](docs/NUBE.md). | **Sin proyecto Supabase creado todavía**: requiere cuenta del usuario, ejecutar la migración y 2 variables de entorno. Sin env, todo sigue local. |
 | Espacios trabajo/proyecto + ficha compacta | **Implementado**: estado `trabajo ↔ proyecto` en `page.tsx`; el encabezado queda en 5 controles y la gestión (documento en trabajo, expediente, catálogo, respaldo, nube, clave, apariencia, empezar de cero) vive en `components/Proyecto.tsx`. Índice de secciones con estado + acordeón exclusivo en las 3 fichas (acordeones controlados). Abrir/duplicar devuelve al trabajo; el punto de salud es botón solo si la clave falla. | Sin inspección visual en navegador. |
-| Fase 2: documento oficial | **Implementada + propuestas con IA**: botón «Diseñar documento» abre el estudio con entrada en dos caminos (proponer con IA o editar a mano); la IA propone apariencia/organización contra el diseño actual y el docente revisa (Aplicar/Regenerar/Descartar); edición manual reagrupada (Ajustes, Estructura con arrastre, Avanzado). Contratos separados: `/api/diseno` no toca el chat curricular. Antes: estructura arrastrable, vista previa paginada, kit PNG/JPG/WebP/SVG hasta 3 MB, PDF vectorial fiel. Los bloques apuntan al currículo por `ref`; la redacción local es override explícito. | Probar plantillas, arrastre, logo y comparar PDF vs vista previa (parcialmente cubierto con capturas del estudio). 4 plantillas base fijas; sin plantillas propias guardadas. |
+| Fase 2: documento oficial | **Implementada + propuestas con IA + galería de plantillas**: botón «Diseñar documento» («Elegir plantilla» cuando la ficha está completa) abre la elección: galería de 4 plantillas con esquema de zonas del papel, crear con IA o continuar el diseño guardado. La IA propone apariencia/organización contra el diseño actual y el docente revisa («Esto entendí» + cambios + vista previa con overlay de zonas) antes de Aplicar/Regenerar/Descartar. Selección sincronizada estructura ↔ vista previa con resaltado y scroll. Edición manual reagrupada (Ajustes, Estructura con arrastre, Avanzado). Contratos separados: `/api/diseno` no toca el chat curricular. Antes: estructura arrastrable, vista previa paginada, kit PNG/JPG/WebP/SVG hasta 3 MB, PDF vectorial fiel. Los bloques apuntan al currículo por `ref`; la redacción local es override explícito. | Probar logo real y comparar PDF vs vista previa fina. 4 plantillas base fijas; plantillas creadas con IA viven en el documento actual (sin biblioteca reutilizable). |
 | Revisión visual | **Verificado con capturas automatizadas** (Chrome headless + semilla Micro V3): espacios trabajo/proyecto, índice + acordeón exclusivo, hub completo y 375/1280 en claro + 1280 en oscuro. | **Falta**: Meso profundo con datos reales, estudio de diseño con logo/arrastre, clave/borrador reales y catálogo con varios documentos. |
 
 ### Próximo orden recomendado
@@ -131,8 +131,8 @@ components/
   Catalogo.tsx                   catálogo: buscar/abrir/duplicar/finalizar
   ClaveIA.tsx                    panel BYOK (guardar/probar/olvidar)
   Nube.tsx                       panel Supabase (enlace mágico, subir/bajar)
-  Diseno.tsx                     Fase 2: estudio (entrada IA/manual, estructura, vista previa,
-                                 Ajustes, Avanzado, revisión de propuesta)
+  Diseno.tsx                     Fase 2: estudio (galería con esquema de zonas, IA, Ajustes,
+                                 Estructura con selección sincronizada, Avanzado, revisión)
   ficha/Indice.tsx               índice de secciones con estado (compartido, genérico)
   ficha/Microcurriculo.tsx       editor de la asignatura existente (índice + exclusiva)
   ficha/Marco.tsx                editor del marco institucional (índice + exclusiva)
@@ -146,7 +146,8 @@ lib/
   diseno.ts                      Fase 2: plantillas, kit de marca, bloques, refs (13 pruebas)
   propuestaDiseno.ts           contrato IA de diseño: parseo + aplicación pura (11 pruebas)
   promptDiseno.ts              system prompt + turno de diseño (sin ciclos con diseno.ts)
-  exportarDisenoPdf.ts           PDF vectorial fiel al diseño (10 pruebas)
+  exportarDisenoPdf.ts           PDF vectorial fiel al diseño (10 pruebas) + bloqueId/zona
+                                 para resaltar la selección en la vista previa
   catalogo.ts                    reutilización: buscar/duplicar/finalizar (5 pruebas)
   clave.ts                       BYOK: sesión + resolución de clave (3 pruebas)
   respaldo.ts                    respaldo JSON validado (4 pruebas)

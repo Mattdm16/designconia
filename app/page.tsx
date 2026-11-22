@@ -53,8 +53,8 @@ import {
   vistaMesoVacia,
   type VistaMesoPersistible
 } from "@/lib/estadoMeso";
-import { agregarFuentesProyecto, fusionarMarco, parsearRespuestaMacro, pideRegistrarFuente, validarMarco, type SeccionMacro } from "@/lib/macro";
-import { fusionarPrograma, parsearRespuestaMeso, validarPrograma, type SeccionMeso } from "@/lib/meso";
+import { agregarFuentesProyecto, fusionarMarco, parsearRespuestaMacro, pideRegistrarFuente, seccionMacroCompleta, validarMarco, type SeccionMacro } from "@/lib/macro";
+import { fusionarPrograma, parsearRespuestaMeso, seccionMesoCompleta, validarPrograma, type SeccionMeso } from "@/lib/meso";
 import { definirAlineacion, existeAlineacion, quitarAlineacion } from "@/lib/alineaciones";
 import { SUGERENCIAS_APERTURA_MACRO } from "@/lib/promptMacro";
 import { SUGERENCIAS_APERTURA_MESO } from "@/lib/promptMeso";
@@ -100,6 +100,7 @@ import {
   mergeMicrocurriculo,
   parsearRespuesta,
   rasDelMicro,
+  seccionesCompletas,
   validarMicrocurriculo,
   type ChatMensaje,
   type Intencion,
@@ -2848,6 +2849,25 @@ export default function Page() {
     seleccionEnVista.documentoId
       ? { nivel: seleccionEnVista.modulo, documentoId: seleccionEnVista.documentoId }
       : null;
+  /**
+   * Información lista: las partes requeridas de la ficha están completas
+   * (las fuentes Macro y el vínculo Meso no bloquean el diseño). Solo cambia
+   * la etiqueta del botón: entrar al diseño siempre es voluntario.
+   */
+  const fichaLista =
+    disenoScope?.nivel === "micro"
+      ? micro !== null && seccionesCompletas(micro) >= SECCIONES.length
+      : disenoScope?.nivel === "macro"
+        ? marco !== null &&
+          seccionMacroCompleta(marco, "identidad") &&
+          seccionMacroCompleta(marco, "principios") &&
+          seccionMacroCompleta(marco, "orientaciones")
+        : disenoScope?.nivel === "meso"
+          ? programa !== null &&
+            seccionMesoCompleta(programa, "identidad") &&
+            seccionMesoCompleta(programa, "perfiles") &&
+            seccionMesoCompleta(programa, "resultados")
+          : false;
   const marcosDisponibles = (proyectoEnVista?.marcos ?? []).map((m) => ({
     id: m.id,
     nombre: m.nombre,
@@ -3246,10 +3266,14 @@ export default function Page() {
               <button
                 type="button"
                 onClick={() => setModoDiseno(true)}
-                title="Diseñar el documento oficial de este documento (Fase 2)"
+                title={
+                  fichaLista
+                    ? "Información lista: elige la plantilla del documento oficial (Fase 2)"
+                    : "Diseñar el documento oficial de este documento (Fase 2)"
+                }
                 className="inline-flex items-center gap-1.5 rounded-full bg-sow px-3 py-1.5 text-xs font-medium text-papel hover:bg-black"
               >
-                <Icono nombre="libro" className="h-3.5 w-3.5" /> Diseñar documento
+                <Icono nombre="libro" className="h-3.5 w-3.5" /> {fichaLista ? "Elegir plantilla" : "Diseñar documento"}
               </button>
             )}
           </div>
