@@ -1,8 +1,8 @@
 # DesignConia — contexto y traspaso actualizado
 
-**Actualizado:** 19 de noviembre de 2026. Este documento refleja el estado comprobado de la rama de desarrollo. Si contradice una implementación posterior, manda el código y actualiza este handoff.
+**Actualizado:** 25 de noviembre de 2026. Este documento refleja el estado comprobado de la rama de primera entrega `feature/entrega-plantillas-fijas`, partida desde `feature/curricular-project-foundation`. Si contradice una implementación posterior, manda el código y actualiza este handoff.
 
-> **Resumen ejecutivo:** la base V3 tiene los tres niveles con trazabilidad de extremo a extremo, chat-first sin selectores, citas, PDFs como fuentes (tope 3 años), carga horaria verificable y exportaciones incluido el expediente. Encima está el **piloto unipersonal**: clave IA propia por sesión, respaldo/restauración JSON, catálogo con duplicado y finalizado, nube Supabase opcional (una fila por docente) y la **Fase 2** de documento oficial con estudio de diseño (4 plantillas Carta/A4, kit de marca con imágenes, bloques arrastrables por zonas y PDF fiel). La recolección se reordenó en **dos espacios** (trabajo: chat + ficha; proyecto: gestión) con **ficha compacta** (índice de secciones + acordeón exclusivo). Todo está **subido a GitHub**. Pendiente: inspección visual en navegador (incluido Meso profundo y el estudio), desplegar a Vercel con acceso protegido y, si hace falta multi-navegador, activar el proyecto Supabase.
+> **Resumen ejecutivo:** la base V3 tiene los tres niveles con trazabilidad de extremo a extremo, chat-first sin selectores, citas, PDFs como fuentes (tope 3 años), carga horaria verificable y exportaciones incluido el expediente. Encima está el **piloto unipersonal**: clave IA propia por sesión, respaldo/restauración JSON, catálogo con duplicado y finalizado, nube Supabase opcional (una fila por docente) y el **documento final de primera entrega**: una plantilla institucional fija por nivel (Carta vertical, numerada) con vista previa fiel y PDF, personalizable solo con logo y membrete en lugares fijos (el estudio editable con IA vive en `feature/curricular-project-foundation`). La recolección se reordenó en **dos espacios** (trabajo: chat + ficha; proyecto: gestión) con **ficha compacta** (índice de secciones + acordeón exclusivo). Todo está **subido a GitHub**. Pendiente: inspección visual en navegador (incluido Meso profundo y el estudio), desplegar a Vercel con acceso protegido y, si hace falta multi-navegador, activar el proyecto Supabase.
 
 ## 1. Producto y requisitos acordados
 
@@ -40,14 +40,14 @@
 | Adjuntar PDFs como fuentes (máx. 3 años) | **Implementado**: solo PDF con texto (sin OCR), validación de firma/tamaño/páginas, extracción local en navegador, año por metadatos o declarado, registro como fuente curricular con texto recortado. | Límite 10 MB por archivo, 3 por envío, 150 páginas; tope de texto para contexto y almacenamiento. Sin inspección visual en navegador. |
 | Trazabilidad pedagógica completa | **Implementada**: RA con ids estables y actividades con `mideIds` en el Micro; bordes principio→resultado→RA (RA→actividad vive en `mideIds`); matrices editables Macro→programa y programa→RA en la ficha Meso; insignias «Responde a» en el contenido Micro; poda de huérfanas al editar. | Falta matriz RA→actividad como alineación editable (hoy vive en `mideIds` de cada actividad). `mide` se conserva como nota libre heredada. Sin inspección visual en navegador. |
 | Citas de fuentes curriculares | **Implementada**: editor compartido de citas (fuente + localizador/página/sección) en cada afirmación Macro/Meso, con selectores de origen y estado; el cambio a documento/contrastada exige cita válida y la última cita respaldada no se puede quitar. | Sin inspección visual en navegador. |
-| Exportación | **Implementada en dos vías**: (1) PDF de texto plano y Markdown por nivel + expediente conjunto; (2) **Fase 2**: estudio de diseño → PDF vectorial fiel con plantillas Carta/A4, marca, imágenes y numeración. | Solo PDF en el diseñador (sin Word). El expediente conjunto no pasa por el diseñador. |
+| Exportación | **Implementada en dos vías**: (1) PDF de texto plano y Markdown por nivel + expediente conjunto; (2) **documento final**: plantilla institucional fija por nivel → PDF vectorial fiel con logo/membrete y numeración. | Solo PDF (sin Word). El expediente conjunto no pasa por el documento final. |
 | Carga horaria verificable | **Implementada**: comparación por minutos exactos con tolerancia de 30 min por tipo; aviso con delta («faltan 50 h I»); confirmación verde al cuadrar y estado neutral sin horas declaradas; trabajos independientes con esfuerzo propio (hasta 6000 min c/u) y `reemplazoSecuencia` para reequilibrios globales; la IA recibe minutos exactos y no declara TERMINADO con carga descuadrada. | Sin inspección visual en navegador. |
 | Reutilización de currículos | **Implementado**: catálogo con búsqueda por código/nombre (insensible a tildes), abrir, **duplicar como base** (ids y trazabilidad propios, `origenCopia` registrado, sin vínculos heredados) y marca **Finalizado** (señal del docente, no aprobación oficial). | La búsqueda solo cubre documentos del proyecto local/nube actual. Sin inspección visual en navegador. |
 | Clave IA propia (BYOK) | **Implementada**: panel «Clave IA» con guardar/probar/olvidar; vive solo en sessionStorage, viaja por cabecera `x-clave-ia`, nunca en copias, exportaciones ni logs; el servidor la usa de forma transitoria y distingue su origen en los errores. | Sin «recordar entre sesiones» (decisión de seguridad deliberada). Sin inspección visual en navegador. |
 | Respaldo del proyecto | **Implementado**: botones Respaldo/Restaurar; JSON validado con el mismo guard V3 (archivo corrupto o ajeno se rechaza sin tocar nada); restaurar pide confirmación. | Sin inspección visual en navegador. |
 | Nube opcional (Supabase) | **Implementado el código completo**: sesión por enlace mágico, subir/bajar proyecto (una fila por docente, RLS por propietario), migración SQL y guía en [docs/NUBE.md](docs/NUBE.md). | **Sin proyecto Supabase creado todavía**: requiere cuenta del usuario, ejecutar la migración y 2 variables de entorno. Sin env, todo sigue local. |
 | Espacios trabajo/proyecto + ficha compacta | **Implementado**: estado `trabajo ↔ proyecto` en `page.tsx`; el encabezado queda en 5 controles y la gestión (documento en trabajo, expediente, catálogo, respaldo, nube, clave, apariencia, empezar de cero) vive en `components/Proyecto.tsx`. Índice de secciones con estado + acordeón exclusivo en las 3 fichas (acordeones controlados). Abrir/duplicar devuelve al trabajo; el punto de salud es botón solo si la clave falla. | Sin inspección visual en navegador. |
-| Fase 2: documento oficial | **Implementada + propuestas con IA + galería de plantillas**: botón «Diseñar documento» («Elegir plantilla» cuando la ficha está completa) abre la elección: galería de 4 plantillas con esquema de zonas del papel, crear con IA o continuar el diseño guardado. La IA propone apariencia/organización contra el diseño actual y el docente revisa («Esto entendí» + cambios + vista previa con overlay de zonas) antes de Aplicar/Regenerar/Descartar. Selección sincronizada estructura ↔ vista previa con resaltado y scroll. Edición manual reagrupada (Ajustes, Estructura con arrastre, Avanzado). Contratos separados: `/api/diseno` no toca el chat curricular. Antes: estructura arrastrable, vista previa paginada, kit PNG/JPG/WebP/SVG hasta 3 MB, PDF vectorial fiel. Los bloques apuntan al currículo por `ref`; la redacción local es override explícito. | Probar logo real y comparar PDF vs vista previa fina. 4 plantillas base fijas; plantillas creadas con IA viven en el documento actual (sin biblioteca reutilizable). |
+| Documento final (primera entrega) | **Implementado**: botón «Ver documento final» abre la vista con la plantilla institucional fija del nivel (Carta vertical, 25 mm, numerada; `lib/documentoFinal.ts` + `components/DocumentoFinal.tsx`). Sin galería, sin IA de diseño, sin edición: la estructura es fija e incluye la secuencia didáctica del Micro (`micro.secuencia`). Solo logo (encabezado) y membrete (portada) con validación PNG/JPG/WebP/SVG hasta 1 MB (3 MB total); la marca se guarda en el proyecto. Los diseños editables antiguos se siguen aceptando al leer (compatibilidad), pero esta rama no crea ni edita `disenos`. | Probar logo/membrete reales y comparar PDF vs vista previa fina. |
 | Revisión visual | **Verificado con capturas automatizadas** (Chrome headless + semilla Micro V3): espacios trabajo/proyecto, índice + acordeón exclusivo, hub completo y 375/1280 en claro + 1280 en oscuro. | **Falta**: Meso profundo con datos reales, estudio de diseño con logo/arrastre, clave/borrador reales y catálogo con varios documentos. |
 
 ### Próximo orden recomendado
@@ -131,8 +131,8 @@ components/
   Catalogo.tsx                   catálogo: buscar/abrir/duplicar/finalizar
   ClaveIA.tsx                    panel BYOK (guardar/probar/olvidar)
   Nube.tsx                       panel Supabase (enlace mágico, subir/bajar)
-  Diseno.tsx                     Fase 2: estudio (galería con esquema de zonas, IA, Ajustes,
-                                 Estructura con selección sincronizada, Avanzado, revisión)
+  DocumentoFinal.tsx             entrega 1: plantilla fija por nivel, marca en lugares
+                                 fijos (logo/membrete) y vista previa fiel de solo lectura
   ficha/Indice.tsx               índice de secciones con estado (compartido, genérico)
   ficha/Microcurriculo.tsx       editor de la asignatura existente (índice + exclusiva)
   ficha/Marco.tsx                editor del marco institucional (índice + exclusiva)
@@ -143,11 +143,10 @@ components/
 lib/
   schema.ts                      contrato Micro + carga horaria/trabajos independientes (106 pruebas)
   proyecto.ts                    agregado V3 (con brandKits/disenos), guardas y migración
-  diseno.ts                      Fase 2: plantillas, kit de marca, bloques, refs (13 pruebas)
-  propuestaDiseno.ts           contrato IA de diseño: parseo + aplicación pura (11 pruebas)
-  promptDiseno.ts              system prompt + turno de diseño (sin ciclos con diseno.ts)
+  diseno.ts                      plantillas, kit de marca, bloques, refs + `micro.secuencia` (13 pruebas)
+  documentoFinal.ts              entrega 1: plantilla fija por nivel, bloques fijos y
+                                 marcas en lugares fijos (6 pruebas)
   exportarDisenoPdf.ts           PDF vectorial fiel al diseño (10 pruebas) + bloqueId/zona
-                                 para resaltar la selección en la vista previa
   catalogo.ts                    reutilización: buscar/duplicar/finalizar (5 pruebas)
   clave.ts                       BYOK: sesión + resolución de clave (3 pruebas)
   respaldo.ts                    respaldo JSON validado (4 pruebas)
@@ -165,16 +164,15 @@ docs/NUBE.md                     guía para activar la nube con cuenta propia
 
 ## 5. Verificación comprobada
 
-Último checkpoint: commit `95ab0ef` (galería de plantillas con zonas y selección sincronizada) en la rama `feature/curricular-project-foundation`, **publicada en GitHub** (`Mattdm16/designconia`); el push llegó hasta ese commit y el árbol quedó limpio.
+Último checkpoint: rama `feature/entrega-plantillas-fijas` (partida de `ff64e62`), **publicada en GitHub** (`Mattdm16/designconia`) con el árbol limpio.
 
 ```text
-npm test              → 336 pruebas (106 + 14 + 38 + 11 + 31 + 11 + 24 + 17 + 11 + 5 + 3 + 2 + 8 + 5 + 5 + 3 + 4 + 3 + 13 + 11 + 11)
-impeccable detect     → 1 advisory (text-[17px] fuera de rampa en Proyecto.tsx) → corregido a 16px como los h1 de ficha
+npm test              → 331 pruebas (106 + 14 + 38 + 11 + 31 + 11 + 24 + 17 + 11 + 5 + 3 + 2 + 8 + 5 + 5 + 3 + 4 + 3 + 13 + 11 + 6)
 npx tsc --noEmit      → limpio
-npm run build         → correcto
-dev smoke             → GET / 200, compila 637 módulos sin errores
+dev smoke             → GET / 200 con el servidor de desarrollo (compila la rama sin errores)
 API real Macro/Meso   → turnos conversacionales probados por HTTP; cierre SSE stop/[DONE]
 ```
+Sin `npm run build` en este checkpoint: el servidor de desarrollo queda corriendo de forma continua en esta máquina y no se compila producción contra el mismo `.next`.
 
 No hay pruebas automatizadas de UI/API de extremo a extremo. Los smoke tests de API fueron breves; no sustituyen probar una conversación completa en navegador.
 
@@ -198,8 +196,8 @@ La adición Macro/Meso **hereda** el mundo visual confirmado en [DESIGN.md](DESI
 - OCR de PDFs escaneados (solo se integran PDFs con texto seleccionable).
 - Roles, colaboración multiusuario, multi-institución y login con contraseña (la nube actual es una cuenta por docente con enlace mágico).
 - Cursos compartidos entre varios programas (relación N:M asignatura–programa).
-- Exportación Word (.docx); el expediente conjunto dentro del diseñador de la Fase 2.
-- Plantillas propias guardadas/reutilizables en el estudio (hoy hay 4 base fijas).
+- Exportación Word (.docx); el expediente conjunto dentro de un diseñador.
+- Edición de plantillas y propuestas de diseño con IA (vive en `feature/curricular-project-foundation`, no en esta rama).
 - Matriz RA→actividad como alineación editable (hoy vive en `mideIds` de cada actividad).
 
 ## 8. Cómo trabajar sin reintroducir fallos conocidos
@@ -240,6 +238,7 @@ npm run build
 17. Reordenación de la recolección en dos espacios: `page.tsx` conmuta `trabajo ↔ proyecto`; `components/Proyecto.tsx` reúne documento en trabajo, expediente, catálogo, respaldo/restaurar, nube, asistente/clave, apariencia y «Empezar de cero» (la destructiva «Conversación nueva» sale de los encabezados); `components/BotonTema.tsx` extraído para compartir; `ficha/Indice.tsx` genérico con estado por sección; acordeones controlados (`Seccion`/`SeccionMarco`/`SeccionMeso` reciben `abierta`/`onAlternar`) con apertura exclusiva y scroll a la sección elegida; las fichas preservan la elección del docente hasta que la IA cambia de foco. tsc + 324 pruebas + build verdes; detector con 1 advisory corregido; smoke dev GET 200.
 18. Propuestas de diseño con IA + edición manual simplificada: `lib/propuestaDiseno.ts` (8 ops solo de apariencia/organización, parseo con reparación de JSON cortado, `aplicarPropuesta` pura con aplicados/rechazados y resumen legible; 11 pruebas), `lib/promptDiseno.ts` (system prompt con reglas duras, sin ciclos), `app/api/diseno/route.ts` (ruta separada del chat curricular, no-streaming, BYOK por cabecera, valida y nunca aplica: el cliente aplica). `Diseno.tsx`: entrada en dos caminos (proponer con IA o editar a mano), panel de propuesta con revisión Aplicar/Regenerar/Descartar, columna derecha reagrupada (Ajustes rápidos + Bloque + Avanzado con Documento y Marca). Verificado de extremo a extremo con clave real (ruta 200 + aplicar 0 rechazos) y ciclo completo en navegador headless (generar → revisar → descartar). tsc + 335 pruebas + build verdes; detector sin hallazgos nuevos.
 19. Galería de plantillas con zonas y selección sincronizada: botón «Elegir plantilla» cuando la ficha está completa (no bloquea; entrar sigue siendo voluntario); pantalla de elección con galería de 4 plantillas (miniatura = esquema del papel con Portada/Encabezado/Cuerpo/Pie), crear con IA y continuar diseño guardado. «Esto entendí» en la revisión. Overlay «Ver zonas del papel» con leyenda (1px + tinta, fuera del PDF). Selección de ida y vuelta estructura ↔ vista previa con resaltado, etiqueta de zona y scroll. `bloqueId`/`zona` propagados por `bloquesAElementos → paginar → PaginaPaginada` (1 prueba nueva). Detector: 3 hallazgos nuevos corregidos (solo queda el 9px preexistente); capturas de galería y zonas verificadas.
+20. Partición en dos ramas + documento final de primera entrega (esta rama): `feature/entrega-plantillas-fijas` parte de `ff64e62` y conserva el recolector intacto. Botón «Ver documento final» → `components/DocumentoFinal.tsx` con plantilla institucional fija por nivel (`lib/documentoFinal.ts`: Carta vertical, 25 mm, numerada; incluye `micro.secuencia`); sin galería, sin IA de diseño, sin edición. Solo logo (encabezado) y membrete (portada), con validación y guardado del kit en el proyecto; los `disenos` heredados se siguen aceptando al leer pero no se crean ni editan. Eliminados en esta rama: `components/Diseno.tsx`, `app/api/diseno/route.ts`, `lib/promptDiseno.ts`, `lib/propuestaDiseno.ts` (+ prueba) y su entrada en `npm test` (entra `lib/documentoFinal.test.ts`).
 
 > Si cualquier sección histórica de este archivo o [PRODUCT.md](PRODUCT.md) aún describe un producto solo Micro, esta sección y el código reciente describen el estado actual; actualiza las discrepancias cuando corresponda.
 

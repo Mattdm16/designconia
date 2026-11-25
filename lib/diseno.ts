@@ -15,7 +15,7 @@ import type {
   MarcoEducativoInstitucional,
   ProgramaAcademico
 } from "./proyecto.ts";
-import { POR_DEFINIR, type Microcurriculo } from "./schema.ts";
+import { ETIQUETA_TIPO_SESION, POR_DEFINIR, type FilaSesion, type Microcurriculo } from "./schema.ts";
 
 /* ------------------------------------------------------------------ */
 /* Página y estilos                                                    */
@@ -311,6 +311,40 @@ export function resolverContenido(ref: string, datos: DatosDiseno): string[] {
     }
     case "micro.recursos":
       return [...(datos.micro?.bibliografia.recursos ?? [])].map((r) => r.trim()).filter(Boolean);
+    case "micro.secuencia": {
+      const m = datos.micro;
+      if (!m) return [];
+      const salida: string[] = [];
+      const sesiones = [...(m.secuencia?.sesiones ?? [])].sort((a, b) => a.numero - b.numero);
+      for (const s of sesiones) {
+        const titulo = real(s.tema) || "Sesión sin tema";
+        salida.push(
+          `Sesión ${s.numero} · Unidad ${s.unidad} · ${titulo.trim()} · ${ETIQUETA_TIPO_SESION[s.tipo] ?? s.tipo} · ${s.duracionMin} min`
+        );
+        const fases: [string, FilaSesion[]][] = [
+          ["Inicio", s.inicio],
+          ["Desarrollo", s.desarrollo],
+          ["Cierre", s.cierre]
+        ];
+        for (const [nombre, filas] of fases) {
+          for (const f of filas ?? []) {
+            const partes: string[] = [];
+            if (real(f.docente)) partes.push(`Docente: ${f.docente.trim()}`);
+            if (real(f.estudiante)) partes.push(`Estudiante: ${f.estudiante.trim()}`);
+            const recs = (f.recursos ?? []).map((r) => r.trim()).filter(Boolean);
+            if (recs.length) partes.push(`Recursos: ${recs.join(", ")}`);
+            if (partes.length) salida.push(`${nombre}: ${partes.join(" · ")}`);
+          }
+        }
+      }
+      for (const t of m.secuencia?.trabajosIndependientes ?? []) {
+        if (!real(t.titulo) && !real(t.descripcion)) continue;
+        salida.push(
+          `Trabajo independiente · Unidad ${t.unidad} · ${(t.titulo.trim() || "Sin título")} · ${t.esfuerzoMin} min${real(t.descripcion) ? ` — ${t.descripcion.trim()}` : ""}`
+        );
+      }
+      return salida;
+    }
     case "fuentes.lista":
       return fuentes.map((f) => f.titulo.trim()).filter(Boolean);
     default:

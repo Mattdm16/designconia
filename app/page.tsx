@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Chat, type AdjuntoChip, type DocMenuItem } from "@/components/Chat";
 import { BotonTema } from "@/components/BotonTema";
-import { DisenoEstudio } from "@/components/Diseno";
+import { DocumentoFinal } from "@/components/DocumentoFinal";
 import { ProyectoHub, type AccionDocumento } from "@/components/Proyecto";
 import { Icono } from "@/components/Icono";
 import { MarcoFicha } from "@/components/ficha/Marco";
@@ -23,7 +23,7 @@ import {
   subirProyecto
 } from "@/lib/nube";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { BrandKit, DisenoDocumento, NivelDiseno } from "@/lib/diseno";
+import type { BrandKit, NivelDiseno } from "@/lib/diseno";
 import {
   aplicarVistaMacroV3,
   leerVistaMacroV3,
@@ -172,7 +172,7 @@ export default function Page() {
   }
   /* Espacio visible: el trabajo (chat + ficha) o la gestión del proyecto. */
   const [espacio, setEspacio] = useState<"trabajo" | "proyecto">("trabajo");
-  /* Fase 2: estudio de diseño del documento activo (el chat queda en pausa). */
+  /* Entrega 1: documento final del documento activo (el chat queda en pausa). */
   const [modoDiseno, setModoDiseno] = useState(false);
   /* Nube opcional (Supabase). Sin configuración, la app sigue 100% local. */
   const [nubeEmail, setNubeEmail] = useState<string | null>(null);
@@ -1183,25 +1183,22 @@ export default function Page() {
     );
   }
 
-  /* -------- Fase 2: guardar diseño y kit en el proyecto -------- */
+  /* -------- Entrega 1: guardar la marca (logo/membrete) en el proyecto -------- */
   function clonarProyecto<T>(valor: T): T {
     return JSON.parse(JSON.stringify(valor)) as T;
   }
 
-  function guardarDiseno(diseno: DisenoDocumento, kit: BrandKit) {
+  function guardarMarca(kit: BrandKit) {
     const base = estadoV3Ref.current;
     if (!base) {
-      mostrarAviso("Todavía no hay proyecto donde guardar el diseño.");
+      mostrarAviso("Todavía no hay proyecto donde guardar la marca.");
       return;
     }
     const proyecto = clonarProyecto(base.proyecto);
     const ik = proyecto.brandKits.findIndex((k) => k.id === kit.id);
     if (ik === -1) proyecto.brandKits.push({ ...kit });
     else proyecto.brandKits[ik] = { ...kit };
-    const id = proyecto.disenos.findIndex((d) => d.id === diseno.id);
-    if (id === -1) proyecto.disenos.push({ ...diseno });
-    else proyecto.disenos[id] = { ...diseno };
-    persistirProyecto({ ...base, proyecto }, "Diseño guardado en el proyecto.");
+    persistirProyecto({ ...base, proyecto }, "Marca guardada en el proyecto.");
   }
 
   /**
@@ -3079,7 +3076,7 @@ export default function Page() {
   }
 
   /* ------------------------------------------------------------------ */
-  /* Modo diseño: estudio del documento (Fase 2). Sin chat ni ficha.      */
+  /* Documento final: plantilla fija por nivel. Sin chat ni ficha.        */
   /* ------------------------------------------------------------------ */
 
   if (modoDiseno && disenoScope && proyectoEnVista) {
@@ -3088,14 +3085,13 @@ export default function Page() {
       <div className="relative flex h-screen flex-col gap-3 overflow-hidden bg-seedling p-3 sm:p-4">
         <Ondas />
         <div className="relative z-10 flex min-h-0 flex-1 flex-col">
-          <DisenoEstudio
+          <DocumentoFinal
             key={`${scope.nivel}:${scope.documentoId}`}
             proyecto={proyectoEnVista}
             nivel={scope.nivel}
             documentoId={scope.documentoId}
             onVolver={() => setModoDiseno(false)}
-            onGuardar={guardarDiseno}
-            cabecerasIA={cabecerasIA}
+            onGuardarMarca={guardarMarca}
           />
         </div>
         {aviso && <Aviso texto={aviso} onCerrar={() => setAviso(null)} />}
@@ -3268,12 +3264,12 @@ export default function Page() {
                 onClick={() => setModoDiseno(true)}
                 title={
                   fichaLista
-                    ? "Información lista: elige la plantilla del documento oficial (Fase 2)"
-                    : "Diseñar el documento oficial de este documento (Fase 2)"
+                    ? "Información lista: ver el documento final con la plantilla institucional"
+                    : "Ver el documento final con la plantilla institucional (te faltan datos por completar)"
                 }
                 className="inline-flex items-center gap-1.5 rounded-full bg-sow px-3 py-1.5 text-xs font-medium text-papel hover:bg-black"
               >
-                <Icono nombre="libro" className="h-3.5 w-3.5" /> {fichaLista ? "Elegir plantilla" : "Diseñar documento"}
+                <Icono nombre="libro" className="h-3.5 w-3.5" /> Ver documento final
               </button>
             )}
           </div>

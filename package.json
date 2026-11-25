@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "postinstall": "node scripts/copy-pdf-worker.mjs",
-    "test": "node lib/schema.test.ts && node lib/proyecto.test.ts && node lib/persistencia.test.ts && node lib/estadoMicro.test.ts && node lib/macro.test.ts && node lib/estadoMacro.test.ts && node lib/meso.test.ts && node lib/estadoMeso.test.ts && node lib/trazabilidad.test.ts && node lib/exportarCurricular.test.ts && node lib/exportarExpediente.test.ts && node lib/flujos.test.ts && node lib/pdf.test.ts && node lib/inicio.test.ts && node lib/catalogo.test.ts && node lib/clave.test.ts && node lib/respaldo.test.ts && node lib/nube.test.ts && node lib/diseno.test.ts && node lib/exportarDisenoPdf.test.ts && node lib/propuestaDiseno.test.ts"
+    "test": "node lib/schema.test.ts && node lib/proyecto.test.ts && node lib/persistencia.test.ts && node lib/estadoMicro.test.ts && node lib/macro.test.ts && node lib/estadoMacro.test.ts && node lib/meso.test.ts && node lib/estadoMeso.test.ts && node lib/trazabilidad.test.ts && node lib/exportarCurricular.test.ts && node lib/exportarExpediente.test.ts && node lib/flujos.test.ts && node lib/pdf.test.ts && node lib/inicio.test.ts && node lib/catalogo.test.ts && node lib/clave.test.ts && node lib/respaldo.test.ts && node lib/nube.test.ts && node lib/diseno.test.ts && node lib/exportarDisenoPdf.test.ts && node lib/documentoFinal.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",
